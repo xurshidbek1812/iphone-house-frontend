@@ -296,8 +296,8 @@ const StaffList = () => {
                 </div>
 
                 <div className="flex gap-3 pt-6 mt-2">
-                    <button disabled={isLoading} onClick={() => setIsModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200">Bekor qilish</button>
-                    <button disabled={isLoading} onClick={handleSave} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-blue-700">
+                    <button type="button" disabled={isLoading} onClick={() => setIsModalOpen(false)} className="...">Bekor qilish</button>
+                    <button type="button" disabled={isLoading} onClick={handleSave} className="...">
                         {isLoading && <Loader2 className="animate-spin" size={18}/>}
                         {isEditing ? "Saqlash" : "Qo'shish"}
                     </button>
@@ -326,3 +326,4 @@ const StaffList = () => {
 };
 
 export default StaffList;
+
