@@ -13,6 +13,8 @@ const AddContract = () => {
   const [customers, setCustomers] = useState([]);
   const [staffList, setStaffList] = useState([]);
 
+  const token = localStorage.getItem('token');
+
   // Tanlangan ma'lumotlar
   const [contractData, setContractData] = useState({
     mainCustomer: null,     // Asosiy mijoz 
@@ -25,20 +27,27 @@ const AddContract = () => {
     const fetchData = async () => {
       try {
         const [custRes, staffRes] = await Promise.all([
-            fetch('https://iphone-house-api.onrender.com/api/customers'),
-            fetch('https://iphone-house-api.onrender.com/api/users')
+            fetch('https://iphone-house-api.onrender.com/api/customers', {
+                headers: { 'Authorization': `Bearer ${token}` } // <-- TOKEN
+            }),
+            fetch('https://iphone-house-api.onrender.com/api/users', {
+                headers: { 'Authorization': `Bearer ${token}` } // <-- TOKEN
+            })
         ]);
+        
+        if (!custRes.ok || !staffRes.ok) throw new Error("Server xatosi");
+
         const custData = await custRes.json();
         const staffData = await staffRes.json();
-        setCustomers(custData);
-        setStaffList(staffData);
+        
+        setCustomers(Array.isArray(custData) ? custData : []);
+        setStaffList(Array.isArray(staffData) ? staffData : []);
       } catch (err) {
-        console.error("Ma'lumot yuklashda xatolik");
+        console.error("Ma'lumot yuklashda xatolik", err);
       }
     };
     fetchData();
   }, []);
-
   // --- LOGIKA ---
   const selectMainCustomer = (customer) => {
     if (contractData.coBorrowers.some(c => c.id === customer.id)) {
@@ -191,4 +200,5 @@ const AddContract = () => {
     </div>
   );
 };
+
 export default AddContract;
