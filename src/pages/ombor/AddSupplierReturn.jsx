@@ -19,6 +19,7 @@ const AddSupplierReturn = () => {
   
   const [currencyRate, setCurrencyRate] = useState(localStorage.getItem('globalExchangeRate') || '12500');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const token = localStorage.getItem('token');
 
   // --- MA'LUMOTLARNI YUKLASH ---
   useEffect(() => {
@@ -30,9 +31,12 @@ const AddSupplierReturn = () => {
 
     const fetchProducts = async () => {
       try {
-        const res = await fetch('https://iphone-house-api.onrender.com/api/products');
+        const res = await fetch('https://iphone-house-api.onrender.com/api/products', {
+            headers: { 'Authorization': `Bearer ${token}` } // <--- TOKEN QO'SHILDI
+        });
+        if(!res.ok) throw new Error("Server xatosi");
+        
         const apiData = await res.json();
-
         let extractedBatches = [];
         
         apiData.forEach(prod => {
@@ -415,5 +419,6 @@ const executeSave = () => {
     </div>
   );
 };
+
 
 export default AddSupplierReturn;
