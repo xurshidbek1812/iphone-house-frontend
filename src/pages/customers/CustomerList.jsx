@@ -159,10 +159,14 @@ const CustomerList = () => {
                     {loading ? (
                         <tr><td colSpan="7" className="p-6 text-center text-gray-500">Yuklanmoqda...</td></tr>
                     ) : customers.length === 0 ? (
-                        <tr><td colSpan="7" className="p-10 text-center text-gray-500 flex flex-col items-center justify-center">
-                            <Search size={40} className="mb-2 opacity-20"/>
-                            Ma'lumot topilmadi
-                        </td></tr>
+                        <tr>
+                            <td colSpan="7" className="p-10">
+                                <div className="flex flex-col items-center justify-center text-gray-500 w-full py-10">
+                                    <Search size={40} className="mb-3 opacity-20"/>
+                                    <span className="text-lg font-medium">Ma'lumot topilmadi</span>
+                                </div>
+                            </td>
+                        </tr>
                     ) : (
                         customers.map((customer) => (
                             <tr key={customer.id} className="hover:bg-gray-50 transition-colors group">
@@ -301,3 +305,4 @@ const CustomerList = () => {
 
 
 export default CustomerList;
+
