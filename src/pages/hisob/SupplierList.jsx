@@ -5,6 +5,7 @@ const SupplierList = () => {
   // ROLNI ANIQLASH
   const userRole = localStorage.getItem('userRole');
   const isDirector = userRole === 'director'; 
+  const token = localStorage.getItem('token');
 
   const [suppliers, setSuppliers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,10 +29,17 @@ const SupplierList = () => {
 
   const fetchSuppliers = async () => {
     try {
-      const res = await fetch('https://iphone-house-api.onrender.com/api/suppliers'); 
+      const res = await fetch('https://iphone-house-api.onrender.com/api/suppliers', {
+          headers: { 'Authorization': `Bearer ${token}` } // <--- TOKEN QO'SHILDI
+      }); 
       const data = await res.json();
-      setSuppliers(data);
-      localStorage.setItem('suppliersList', JSON.stringify(data));
+      
+      if (res.ok) {
+          setSuppliers(data);
+          localStorage.setItem('suppliersList', JSON.stringify(data));
+      } else {
+          console.error("Server xatosi:", data);
+      }
     } catch (err) {
       console.error("Xatolik:", err);
       const saved = JSON.parse(localStorage.getItem('suppliersList') || "[]");
@@ -63,7 +71,8 @@ const SupplierList = () => {
     try {
         const res = await fetch('https://iphone-house-api.onrender.com/api/suppliers', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 
+                       'Authorization': `Bearer ${token}`},
             body: JSON.stringify({ customId: avtomatikId, name, phone, address })
         });
         
@@ -81,13 +90,17 @@ const SupplierList = () => {
   };
 
   // 3. O'CHIRISH (Oyna orqali tasdiqlash)
+  // 3. O'CHIRISH (Oyna orqali tasdiqlash)
   const handleDelete = async () => {
     try {
-        const res = await fetch(`https://iphone-house-api.onrender.com/api/suppliers/${deleteModal.id}`, { method: 'DELETE' });
+        const res = await fetch(`https://iphone-house-api.onrender.com/api/suppliers/${deleteModal.id}`, { 
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` } // <--- TOKEN QO'SHILDI
+        });
         if(res.ok) {
             fetchSuppliers();
-            setDeleteModal({ isOpen: false, id: null }); // O'chirish oynasini yopish
-            showSuccessModal("Ta'minotchi ro'yxatdan o'chirildi!"); // Muvaffaqiyat oynasi
+            setDeleteModal({ isOpen: false, id: null });
+            showSuccessModal("Ta'minotchi ro'yxatdan o'chirildi!");
         }
     } catch (err) {
         console.error(err);
@@ -249,5 +262,6 @@ const SupplierList = () => {
     </div>
   );
 };
+
 
 export default SupplierList;
