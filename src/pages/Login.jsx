@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, User, Eye, EyeOff } from 'lucide-react'; // <--- Eye va EyeOff qo'shildi
+import { Lock, User, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false); // <--- Parolni ko'rsatish/yashirish holati
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // <--- Yuklanish jarayoni uchun
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
 
     if (!username || !password) {
@@ -17,46 +18,45 @@ const Login = () => {
         return;
     }
 
-    // 1. MASTER DIREKTOR TEKSHIRUVI
-    const savedDirector = JSON.parse(localStorage.getItem('masterDirector') || "null");
-    
-    const dirLogin = savedDirector ? savedDirector.login : 'director';
-    const dirPass = savedDirector ? savedDirector.password : '777';
-    const dirName = savedDirector ? savedDirector.name : 'Bosh Direktor';
+    setIsLoading(true);
 
-    if (username === dirLogin && password === dirPass) {
-      localStorage.setItem('userRole', 'director');
-      localStorage.setItem('userName', dirName);
-      localStorage.setItem('currentUserLogin', dirLogin); 
-      
-      toast.success(`Xush kelibsiz, ${dirName}!`);
-      setTimeout(() => {
-          navigate('/');
-          window.location.reload();
-      }, 1000);
-      return;
-    }
+    try {
+        // 1. HAQIQIY SERVERGA SO'ROV YUBORAMIZ
+        const response = await fetch('https://iphone-house-api.onrender.com/api/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username, password })
+        });
 
-    // 2. XODIMLARNI TEKSHIRISH
-    const staffList = JSON.parse(localStorage.getItem('staffList') || "[]");
-    const foundUser = staffList.find(u => u.login === username && u.password === password);
+        const data = await response.json();
 
-    if (foundUser) {
-      const fullName = foundUser.firstName 
-            ? `${foundUser.firstName} ${foundUser.lastName || ''}`.trim() 
-            : foundUser.name;
-
-      localStorage.setItem('userRole', foundUser.role);
-      localStorage.setItem('userName', fullName); 
-      localStorage.setItem('currentUserLogin', foundUser.login); 
-      
-      toast.success(`Xush kelibsiz, ${fullName}!`);
-      setTimeout(() => {
-          navigate('/');
-          window.location.reload();
-      }, 1000);
-    } else {
-      toast.error("Login yoki parol noto'g'ri!");
+        // 2. JAVOBNI TEKSHIRAMIZ
+        if (response.ok && data.success) {
+            
+            // 3. TIZIMGA KIRISH: Token va ma'lumotlarni saqlaymiz
+            localStorage.setItem('token', data.token); // <--- ENG MUHIMI: Xavfsizlik pasporti
+            localStorage.setItem('userRole', data.user.role);
+            localStorage.setItem('userName', data.user.fullName);
+            localStorage.setItem('currentUserLogin', data.user.username); 
+            
+            toast.success(`Xush kelibsiz, ${data.user.fullName}!`);
+            
+            setTimeout(() => {
+                navigate('/');
+                window.location.reload();
+            }, 1000);
+            
+        } else {
+            // Parol xato bo'lsa yoki bunday user topilmasa
+            toast.error(data.message || "Login yoki parol noto'g'ri!");
+        }
+    } catch (error) {
+        console.error("Login xatosi:", error);
+        toast.error("Server bilan ulanishda xatolik! Tarmoqni tekshiring.");
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -79,6 +79,7 @@ const Login = () => {
                     value={username} 
                     onChange={e=>setUsername(e.target.value)} 
                     placeholder="Login kiriting..."
+                    disabled={isLoading}
                 />
             </div>
           </div>
@@ -87,13 +88,13 @@ const Login = () => {
             <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
                 <input 
-                    type={showPassword ? "text" : "password"} // <--- Holatga qarab o'zgaradi
+                    type={showPassword ? "text" : "password"} 
                     className="w-full pl-12 pr-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-blue-500 transition-all font-black tracking-widest text-slate-800" 
                     value={password} 
                     onChange={e=>setPassword(e.target.value)} 
                     placeholder="••••••"
+                    disabled={isLoading}
                 />
-                {/* --- KO'ZCHA TUGMASI --- */}
                 <button 
                     type="button" 
                     onClick={() => setShowPassword(!showPassword)}
@@ -103,8 +104,12 @@ const Login = () => {
                 </button>
             </div>
           </div>
-          <button type="submit" className="w-full py-4 mt-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all tracking-wide">
-              KIRISH
+          <button 
+            type="submit" 
+            disabled={isLoading}
+            className={`w-full py-4 mt-4 text-white rounded-2xl font-black shadow-xl shadow-blue-200 transition-all tracking-wide ${isLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 active:scale-95'}`}
+          >
+              {isLoading ? "TEKSHIRILMOQDA..." : "KIRISH"}
           </button>
         </form>
       </div>
