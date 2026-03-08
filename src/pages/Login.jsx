@@ -33,21 +33,19 @@ const Login = () => {
         const data = await response.json();
 
         // 2. JAVOBNI TEKSHIRAMIZ
+        // ... (oldingi kodlar)
         if (response.ok && data.success) {
-            
-            // 3. TIZIMGA KIRISH: Token va ma'lumotlarni saqlaymiz
-            localStorage.setItem('token', data.token); // <--- ENG MUHIMI: Xavfsizlik pasporti
+            // 1. Ma'lumotlarni saqlaymiz
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('user', JSON.stringify(data.user)); // <--- USERNI HAM SAQLAYMIZ
             localStorage.setItem('userRole', data.user.role);
             localStorage.setItem('userName', data.user.fullName);
             localStorage.setItem('currentUserLogin', data.user.username); 
-            
+        
             toast.success(`Xush kelibsiz, ${data.user.fullName}!`);
             
-            setTimeout(() => {
-                navigate('/');
-                window.location.reload();
-            }, 1000);
-            
+            // 2. navigate'dan keyin reload'ni olib tashlaymiz
+            navigate('/'); 
         } else {
             // Parol xato bo'lsa yoki bunday user topilmasa
             toast.error(data.message || "Login yoki parol noto'g'ri!");
@@ -118,3 +116,4 @@ const Login = () => {
 };
 
 export default Login;
+
