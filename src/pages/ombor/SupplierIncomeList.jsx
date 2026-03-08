@@ -11,6 +11,7 @@ const SupplierIncomeList = () => {
   const [viewInvoice, setViewInvoice] = useState(null);
   const userRole = localStorage.getItem('userRole') || 'admin';
   const currentUserName = localStorage.getItem('userName') || 'Bekchonov Azomat';
+  const token = localStorage.getItem('token');
 
   // --- ZAMONAVIY MODAL UCHUN STATE ---
   // type: 'approve' (tasdiqlash) yoki 'delete' (o'chirish) bo'lishi mumkin
@@ -30,20 +31,21 @@ const SupplierIncomeList = () => {
     if (!invoice) return toast.error("Faktura topilmadi!");
 
     try {
-        // --- ASOSIY O'ZGARISH SHU YERDA ---
-        // Backend adashib qolmasligi uchun jo'natilayotgan obyekt nomlarini standartlashtiramiz:
         const itemsToBackend = invoice.items.map(item => ({
             id: item.id,
             customId: item.customId,
-            quantity: Number(item.count || item.quantity || item.inputQty), // Soni
-            buyPrice: Number(item.price || item.inputPrice || item.buyPrice), // YANGI KIRIM NARXI
-            buyCurrency: item.currency || item.inputCurrency || 'UZS'         // Valyutasi
+            quantity: Number(item.count || item.quantity || item.inputQty), 
+            buyPrice: Number(item.price || item.inputPrice || item.buyPrice),
+            buyCurrency: item.currency || item.inputCurrency || 'UZS'         
         }));
 
         const response = await fetch('https://iphone-house-api.onrender.com/api/products/increase-stock', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(itemsToBackend) // To'g'rilangan ma'lumotni jo'natamiz
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` // <--- TOKEN QO'SHILDI
+            },
+            body: JSON.stringify(itemsToBackend) 
         });
 
         if (!response.ok) throw new Error("Ombor yangilanmadi!");
@@ -280,5 +282,6 @@ const SupplierIncomeList = () => {
     </div>
   );
 };
+
 
 export default SupplierIncomeList;
