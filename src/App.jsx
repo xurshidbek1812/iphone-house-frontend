@@ -174,6 +174,7 @@ const MainLayout = () => {
 
 function App() {
   return (
+    <>
     <Toaster position="top-right" reverseOrder={false} />
     <BrowserRouter>
       <Routes>
@@ -317,6 +318,7 @@ function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </>
   );
 }
 
