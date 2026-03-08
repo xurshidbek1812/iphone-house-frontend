@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, User, Lock, Shield, Edit, X, Search, Phone, Briefcase, AlertTriangle, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Lock, Shield, Edit, X, Search, Phone, Briefcase, AlertTriangle, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const StaffList = () => {
@@ -7,10 +7,11 @@ const StaffList = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isLoading, setIsLoading] = useState(false); // <--- Yuklanish holati
+  const [isLoading, setIsLoading] = useState(false);
   
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, userId: null });
 
+  // Forma holati
   const [formData, setFormData] = useState({ 
     id: null, 
     firstName: '', 
@@ -22,7 +23,7 @@ const StaffList = () => {
   });
 
   const API_URL = 'https://iphone-house-api.onrender.com/api/users';
-  const token = localStorage.getItem('token'); // <--- Avtorizatsiya uchun token
+  const token = localStorage.getItem('token');
 
   // --- 1. SERVERDAN YUKLASH ---
   const fetchStaff = async () => {
@@ -48,12 +49,22 @@ const StaffList = () => {
     fetchStaff();
   }, []);
 
-  // --- 2. MODALNI OCHISH ---
+  // --- 2. MODALNI OCHISH (Tahrirlash va Qo'shish uchun) ---
   const handleOpenModal = (user = null) => {
     if (user) {
+        // PRO FIX: Backenddan kelgan fullName ni ikkiga bo'lib formaga joylaymiz
+        const nameParts = (user.fullName || "").split(" ");
+        const fName = nameParts[0] || user.firstName || "";
+        const lName = nameParts.slice(1).join(" ") || user.lastName || "";
+
         setFormData({
-            ...user,
-            password: '' // Xavfsizlik uchun parolni ko'rsatmaymiz, faqat yangilashda yoziladi
+            id: user.id,
+            firstName: fName,
+            lastName: lName,
+            phone: user.phone || '+998',
+            login: user.username || user.login || '',
+            password: '', 
+            role: user.role || 'admin'
         }); 
         setIsEditing(true);
     } else {
@@ -71,7 +82,7 @@ const StaffList = () => {
     setIsModalOpen(true);
   };
 
-  // --- 3. SERVERGA SAQLASH (ADD / UPDATE) ---
+  // --- 3. SERVERGA SAQLASH (Eng muhim qism) ---
   const handleSave = async () => {
     if (!formData.firstName || !formData.lastName || !formData.phone || !formData.login || (!isEditing && !formData.password)) {
         return toast.error("Barcha maydonlarni to'ldiring!");
@@ -81,6 +92,15 @@ const StaffList = () => {
     const method = isEditing ? 'PUT' : 'POST';
     const url = isEditing ? `${API_URL}/${formData.id}` : API_URL;
 
+    // PRO FIX: Ma'lumotni aynan Prisma (Baza) kutayotgan qolipga keltiramiz
+    const payload = {
+        username: formData.login,
+        password: formData.password,
+        fullName: `${formData.firstName} ${formData.lastName}`.trim(),
+        phone: formData.phone,
+        role: formData.role
+    };
+
     try {
         const response = await fetch(url, {
             method: method,
@@ -88,7 +108,7 @@ const StaffList = () => {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify(formData)
+            body: JSON.stringify(payload)
         });
 
         const data = await response.json();
@@ -96,9 +116,10 @@ const StaffList = () => {
         if (response.ok) {
             toast.success(isEditing ? "Ma'lumotlar yangilandi!" : "Yangi xodim qo'shildi!");
             setIsModalOpen(false);
-            fetchStaff(); // Ro'yxatni yangilash
+            fetchStaff(); // O'zgarishni darhol ekranga chiqarish
         } else {
-            toast.error(data.message || "Xatolik yuz berdi");
+            // Agar bunday login bazada oldin bor bo'lsa server xato beradi
+            toast.error(data.message || data.error || "Xatolik! Balki bunday login mavjud.");
         }
     } catch (error) {
         toast.error("Serverga ulanib bo'lmadi");
@@ -130,10 +151,11 @@ const StaffList = () => {
       }
   };
 
-  const filteredStaff = staff.filter(s => 
-    s.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    s.lastName?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Qidiruv funksiyasi
+  const filteredStaff = staff.filter(s => {
+      const searchStr = `${s.fullName || ''} ${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
+      return searchStr.includes(searchTerm.toLowerCase());
+  });
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -177,9 +199,10 @@ const StaffList = () => {
                     <tr key={user.id} className="hover:bg-blue-50 transition-colors">
                         <td className="p-4 font-bold text-gray-700 flex items-center gap-3">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${user.role === 'director' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
-                                {user.firstName ? user.firstName.charAt(0).toUpperCase() : '?'}
+                                {/* PRO FIX: To'g'ri ism bosh harfini ko'rsatish */}
+                                {(user.fullName || user.firstName || '?').charAt(0).toUpperCase()}
                             </div>
-                            <div>{user.firstName} {user.lastName}</div>
+                            <div>{user.fullName || `${user.firstName} ${user.lastName}`}</div>
                         </td>
                         <td className="p-4 text-gray-600">{user.phone}</td>
                         <td className="p-4 text-blue-600 font-medium">@{user.username || user.login}</td>
@@ -210,7 +233,6 @@ const StaffList = () => {
         )}
       </div>
 
-      {/* --- MODAL QISMI (O'zgarishsiz qoldi, faqat yuklanish holati qo'shildi) --- */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
             <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 animate-in zoom-in-95 scale-100">
@@ -248,11 +270,11 @@ const StaffList = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">Login</label>
                             <div className="relative">
                                 <span className="absolute left-3 top-3 text-gray-400 font-bold">@</span>
-                                <input type="text" className="w-full pl-8 p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="login" value={formData.login || formData.username} onChange={e=>setFormData({...formData, login: e.target.value, username: e.target.value})}/>
+                                <input type="text" className="w-full pl-8 p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="login" value={formData.login} onChange={e=>setFormData({...formData, login: e.target.value})}/>
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Parol {isEditing && "(O'zgartirish uchun yozing)"}</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Parol {isEditing && "(O'zgartirish uchun)"}</label>
                             <div className="relative">
                                 <Lock className="absolute left-3 top-3 text-gray-400" size={18}/>
                                 <input type="text" className="w-full pl-10 p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="******" value={formData.password} onChange={e=>setFormData({...formData, password: e.target.value})}/>
@@ -274,8 +296,8 @@ const StaffList = () => {
                 </div>
 
                 <div className="flex gap-3 pt-6 mt-2">
-                    <button disabled={isLoading} onClick={() => setIsModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium">Bekor qilish</button>
-                    <button disabled={isLoading} onClick={handleSave} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium flex items-center justify-center gap-2">
+                    <button disabled={isLoading} onClick={() => setIsModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200">Bekor qilish</button>
+                    <button disabled={isLoading} onClick={handleSave} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-blue-700">
                         {isLoading && <Loader2 className="animate-spin" size={18}/>}
                         {isEditing ? "Saqlash" : "Qo'shish"}
                     </button>
@@ -284,7 +306,6 @@ const StaffList = () => {
         </div>
       )}
 
-      {/* --- O'CHIRISH MODALI --- */}
       {deleteModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[2000] p-4">
             <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-10 text-center animate-in zoom-in-95">
