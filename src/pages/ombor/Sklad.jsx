@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Trash2, X, Package, Printer, Calculator as CalcIcon, Filter, Info, AlertTriangle, Layers, EyeOff, CheckCircle } from 'lucide-react';
+import { Search, Plus, Trash2, X, Package, Printer, Calculator as CalcIcon, Filter, Info, AlertTriangle, Layers, EyeOff, CheckCircle, Save } from 'lucide-react';
 import ReactDOMServer from 'react-dom/server';
 import QRCode from "react-qr-code";
 import Calculator from '../../components/Calculator';
@@ -484,4 +484,5 @@ const Sklad = () => {
 
 
 export default Sklad;
+
 
