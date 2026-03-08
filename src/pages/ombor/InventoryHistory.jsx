@@ -8,11 +8,25 @@ const InventoryHistory = () => {
   const [selectedAct, setSelectedAct] = useState(null); 
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. SERVERDAN TARIXNI YUKLASH
+  // 1. TOKENNI OLAMIZ (Cho'ntakdan pasportni oldik)
+  const token = localStorage.getItem('token');
+
+  // 2. SERVERDAN TARIXNI YUKLASH
   useEffect(() => {
-    fetch('https://iphone-house-api.onrender.com/api/inventory/history')
+    fetch('https://iphone-house-api.onrender.com/api/inventory/history', {
+        headers: {
+            'Authorization': `Bearer ${token}` // <--- PASPORTNI KO'RSATDIK!
+        }
+    })
       .then(res => res.json())
-      .then(data => setHistory(data))
+      .then(data => {
+          // Xatolik bo'lsa ekran oqarib ketmasligi uchun tekshiramiz:
+          if (Array.isArray(data)) {
+              setHistory(data);
+          } else {
+              console.error("Serverdan kelgan xato:", data);
+          }
+      })
       .catch(err => console.error("Xatolik:", err));
   }, []);
 
@@ -194,5 +208,6 @@ const InventoryHistory = () => {
     </div>
   );
 };
+
 
 export default InventoryHistory;
