@@ -23,15 +23,24 @@ const PrintPriceTag = () => {
 
   // --- SOZLAMALAR ---
   const MARKUP_PERCENT = 44; // 12 oy uchun ustama
+  const token = localStorage.getItem('token');
 
   // --- 1. BAZADAN YUKLASH ---
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch('https://iphone-house-api.onrender.com/api/products');
+        const res = await fetch('https://iphone-house-api.onrender.com/api/products', {
+            headers: { 'Authorization': `Bearer ${token}` } // <--- TOKEN QO'SHILDI
+        });
+        
+        if (!res.ok) throw new Error("Server xatosi");
+        
         const data = await res.json();
         setAllProducts(data);
-      } catch (err) { console.error(err); }
+      } catch (err) { 
+        console.error(err); 
+        toast.error("Tovarlarni yuklashda xatolik yoki Token yo'q!");
+      }
     };
     fetchData();
 
@@ -497,5 +506,6 @@ const PrintPriceTag = () => {
     </div>
   );
 };
+
 
 export default PrintPriceTag;
