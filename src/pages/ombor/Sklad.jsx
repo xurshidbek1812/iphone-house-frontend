@@ -407,6 +407,76 @@ const Sklad = () => {
         </div>
       )}
 
+      {/* --- TOVAR QO'SHISH MODALI --- */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+            <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-6 animate-in zoom-in-95">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-black text-slate-800">Yangi tovar qo'shish</h2>
+                    <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tovar nomi *</label>
+                            <input type="text" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} placeholder="Masalan: iPhone 15 Pro" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Kategoriya *</label>
+                            <select required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={formData.category} onChange={e=>setFormData({...formData, category: e.target.value})}>
+                                <option value="">Tanlang...</option>
+                                {categories.map((c, i) => <option key={i} value={c.name}>{c.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                            <label className="block text-xs font-black text-amber-700 uppercase mb-2">Kirim Narxi va Valyuta</label>
+                            <div className="flex gap-2">
+                                <input type="number" className="w-full p-3 bg-white border border-amber-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-amber-900" value={formData.buyPrice} onChange={e=>setFormData({...formData, buyPrice: e.target.value})} placeholder="0" />
+                                <select className="w-24 p-3 bg-white border border-amber-200 rounded-xl font-bold text-amber-900 outline-none" value={formData.buyCurrency} onChange={e=>setFormData({...formData, buyCurrency: e.target.value})}>
+                                    <option value="USD">USD</option>
+                                    <option value="UZS">UZS</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                            <label className="block text-xs font-black text-emerald-700 uppercase mb-2">Sotuv Narxi va Valyuta</label>
+                            <div className="flex gap-2">
+                                <input type="number" className="w-full p-3 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-900" value={formData.salePrice} onChange={e=>setFormData({...formData, salePrice: e.target.value})} placeholder="0" />
+                                <select className="w-24 p-3 bg-white border border-emerald-200 rounded-xl font-bold text-emerald-900 outline-none" value={formData.saleCurrency} onChange={e=>setFormData({...formData, saleCurrency: e.target.value})}>
+                                    <option value="USD">USD</option>
+                                    <option value="UZS">UZS</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Boshlang'ich soni (Qoldiq)</label>
+                            <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={formData.quantity} onChange={e=>setFormData({...formData, quantity: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">O'lchov birligi</label>
+                            <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={formData.unit} onChange={e=>setFormData({...formData, unit: e.target.value})}>
+                                <option value="Dona">Dona</option>
+                                <option value="Kg">Kg</option>
+                                <option value="Metr">Metr</option>
+                                <option value="To'plam">To'plam</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" className="w-full py-4 mt-2 bg-blue-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200 flex justify-center items-center gap-2">
+                        <Save size={20} /> Tovarni Saqlash
+                    </button>
+                </form>
+            </div>
+        </div>
+      )}
+
       <Calculator isOpen={isCalcOpen} onClose={() => setIsCalcOpen(false)} initialTotal={calcInitialPrice} initialCurrency={calcInitialCurrency} />
     </div>
   );
@@ -414,3 +484,4 @@ const Sklad = () => {
 
 
 export default Sklad;
+
