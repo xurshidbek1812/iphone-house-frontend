@@ -23,6 +23,7 @@ const Sklad = () => {
   const [archiveModal, setArchiveModal] = useState({ isOpen: false, batchId: null }); // <--- YANGI ARXIVLASH MODALI UCHUN
   
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const token = localStorage.getItem('token');
 
   // QR Print uchun state-lar
   const [printProduct, setPrintProduct] = useState(null); 
@@ -42,7 +43,9 @@ const Sklad = () => {
   // API YUKLASH
   const fetchProducts = async () => {
     try {
-      const res = await fetch('https://iphone-house-api.onrender.com/api/products');
+      const res = await fetch('https://iphone-house-api.onrender.com/api/products', {
+          headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (!res.ok) throw new Error("Server xatosi");
       const data = await res.json();
       setProducts(data);
@@ -57,7 +60,7 @@ const Sklad = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.category) return;
+    if (!formData.name || !formData.category) return toast.error("Nomi va kategoriyasini kiriting!");
     const avtomatikId = Math.floor(10000 + Math.random() * 90000).toString();
     const newProduct = {
         id: Date.now().toString(), customId: avtomatikId, name: formData.name,
@@ -67,7 +70,12 @@ const Sklad = () => {
 
     try {
       const res = await fetch('https://iphone-house-api.onrender.com/api/products', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newProduct)
+        method: 'POST', 
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` 
+        }, 
+        body: JSON.stringify(newProduct)
       });
       if (res.ok) {
         setIsModalOpen(false); setIsSuccessOpen(true); fetchProducts(); 
@@ -75,29 +83,30 @@ const Sklad = () => {
           setIsSuccessOpen(false); 
           setFormData({ name: '', category: '', buyPrice: '', salePrice: '', quantity: '0', unit: 'Dona', buyCurrency: 'USD', saleCurrency: 'UZS' });
         }, 2500);
+      } else {
+        toast.error("Saqlashda xatolik yuz berdi");
       }
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); toast.error("Server bilan aloqa yo'q!"); }
   };
-
+  
   const executeDelete = async (id) => {
       try {
-          const res = await fetch(`https://iphone-house-api.onrender.com/api/products/${id}`, { method: 'DELETE' });
+          const res = await fetch(`https://iphone-house-api.onrender.com/api/products/${id}`, { 
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
           if (res.ok) { toast.success("Tovar o'chirildi!"); fetchProducts(); } 
           else { toast.error("O'chirib bo'lmaydi!"); }
       } catch (err) { toast.error("Xatolik!"); } 
       finally { setDeleteModal({ isOpen: false, productId: null }); }
   };
 
-  // --- PARTIYANI ARXIVLASH (YASHIRISH) FUNKSIYALARI ---
-  const promptArchiveBatch = (batchId) => {
-      setArchiveModal({ isOpen: true, batchId }); // Alert o'rniga modalni ochamiz
-  };
-
   const executeArchiveBatch = async () => {
       const batchId = archiveModal.batchId;
       try {
           const res = await fetch(`https://iphone-house-api.onrender.com/api/products/batches/${batchId}/archive`, {
-              method: 'PATCH'
+              method: 'PATCH',
+              headers: { 'Authorization': `Bearer ${token}` }
           });
           if (res.ok) {
               toast.success("Partiya muvaffaqiyatli yashirildi!");
@@ -402,5 +411,6 @@ const Sklad = () => {
     </div>
   );
 };
+
 
 export default Sklad;
