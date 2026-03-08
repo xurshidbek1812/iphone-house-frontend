@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import Calculator from './components/Calculator';
+import { Toaster } from 'react-hot-toast';
 
 // --- AVTOTO'LOV ---
 import AutoPaymentContracts from './pages/autopayment/AutoPaymentContracts';
@@ -173,6 +174,7 @@ const MainLayout = () => {
 
 function App() {
   return (
+    <Toaster position="top-right" reverseOrder={false} />
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
