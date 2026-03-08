@@ -9,6 +9,7 @@ const AddSupplierIncome = () => {
   // ROL VA ISMNI OLISH (YANGI)
   const userRole = localStorage.getItem('userRole') || 'admin';
   const currentUserName = localStorage.getItem('userName') || 'Bekchonov Azomat';
+  const token = localStorage.getItem('token');
   
   // 1. FAKTURA RAQAMI (Faqat sonlar: 100000 dan 999999 gacha)
   const generateInvoiceNumber = () => `${Math.floor(100000 + Math.random() * 900000)}`;
@@ -39,12 +40,17 @@ const AddSupplierIncome = () => {
 
   // --- 1. MA'LUMOTLARNI YUKLASH ---
   useEffect(() => {
-    fetch('https://iphone-house-api.onrender.com/api/products')
-      .then(res => res.json())
+    fetch('https://iphone-house-api.onrender.com/api/products', {
+        headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(async res => {
+          if (!res.ok) throw new Error("Server xatosi");
+          return res.json();
+      })
       .then(data => setProducts(data))
       .catch(err => {
           console.error("Xatolik:", err);
-          toast.error("Server bilan aloqa yo'q!");
+          toast.error("Server bilan aloqa yo'q yoki Token eskirgan!");
       });
 
     const savedSuppliers = JSON.parse(localStorage.getItem('suppliersList') || "[]");
@@ -476,5 +482,6 @@ const AddSupplierIncome = () => {
     </div>
   );
 };
+
 
 export default AddSupplierIncome;
