@@ -17,6 +17,7 @@ const InventoryCount = () => {
   const [selectedIds, setSelectedIds] = useState([]); 
 
   const inputRef = useRef(null);
+  const token = localStorage.getItem('token');
 
   // OVOZ EFFEKTI
   const playBeep = (type) => {
@@ -36,12 +37,22 @@ const InventoryCount = () => {
 
   // YUKLASH
   useEffect(() => {
-    fetch('https://iphone-house-api.onrender.com/api/products')
-      .then(res => res.json())
+    fetch('https://iphone-house-api.onrender.com/api/products', {
+        headers: {
+            'Authorization': `Bearer ${token}` // <--- QOROVULGA PASPORT KO'RSATILDI
+        }
+    })
+      .then(async res => {
+          if (!res.ok) {
+              const errData = await res.json();
+              throw new Error(errData.error || "Server xatosi");
+          }
+          return res.json();
+      })
       .then(data => setProducts(data))
       .catch(err => {
           console.error("Xatolik:", err);
-          toast.error("Server bilan aloqa yo'q!");
+          toast.error(err.message === "Token topilmadi! Tizimga kiring." ? "Tizimga qayta kiring!" : "Server bilan aloqa yo'q!");
       });
   }, []);
 
@@ -230,7 +241,10 @@ const InventoryCount = () => {
     try {
         const response = await fetch('https://iphone-house-api.onrender.com/api/inventory/finish', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` // <--- BU YERGA HAM PASPORT QO'SHILDI
+            },
             body: JSON.stringify({ 
                 items: tableData,
                 updateStock: updateStock 
@@ -509,5 +523,6 @@ const InventoryCount = () => {
     </div>
   );
 };
+
 
 export default InventoryCount;
