@@ -26,11 +26,11 @@ const ContractList = () => {
          <button className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"><Filter size={20}/> Filtr</button>
          <button className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"><LayoutList size={20}/> Ro'yxat</button>
          <button 
-    onClick={() => navigate('/shartnoma/qoshish')} // <-- MANZIL MUHIM!
-    className="..."
->
-    <Plus size={18} /> Qo'shish
-</button>
+            onClick={() => navigate('/shartnoma/qoshish')} 
+            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm shadow-blue-200"
+         >
+            <Plus size={18} /> Qo'shish
+         </button>
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
         <table className="w-full text-left whitespace-nowrap">
@@ -67,4 +67,5 @@ const ContractList = () => {
     </div>
   );
 };
+
 export default ContractList;
