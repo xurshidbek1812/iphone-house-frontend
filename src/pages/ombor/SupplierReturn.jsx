@@ -12,6 +12,7 @@ const SupplierReturn = () => {
   // 1. ROLNI OLAMIZ
   const userRole = localStorage.getItem('userRole') || 'admin'; // 'director' yoki 'admin'
   const currentUserName = localStorage.getItem('userName') || 'Bekchonov Azomat';
+  const token = localStorage.getItem('token');
 
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: null, id: null });
 
@@ -48,24 +49,23 @@ const SupplierReturn = () => {
   // DIREKTOR UCHUN TASDIQLASH
 // --- DIREKTOR UCHUN TASDIQLASH (VA QOLDIQNI KAMAYTIRISH) ---
   const executeApprove = async (id) => {
-    // 1. Qaytarish hujjatini topib olamiz
     const returnDoc = returns.find(r => r.id === id);
     if (!returnDoc) return toast.error("Hujjat topilmadi!");
 
     try {
-        // 2. SERVERGA YUBORISH (Tovarlarni ombordan ayirib tashlash uchun)
-        // Eslatma: Backend'ingizda xuddi increase-stock kabi decrease-stock API bo'lishi kerak.
         const response = await fetch('https://iphone-house-api.onrender.com/api/products/decrease-stock', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(returnDoc.items) // Qaytarilayotgan tovarlar ro'yxatini yuboramiz
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` // <--- TOKEN QO'SHILDI
+            },
+            body: JSON.stringify(returnDoc.items) 
         });
 
         if (!response.ok) {
             throw new Error("Server xatosi: Ombor qoldig'i yangilanmadi!");
         }
 
-        // 3. Agar serverda muvaffaqiyatli ayirilsa, frontendda hujjat holatini o'zgartiramiz
         const updatedReturns = returns.map(item => 
             item.id === id ? { ...item, status: 'Tasdiqlandi' } : item
         );
@@ -79,7 +79,7 @@ const SupplierReturn = () => {
         console.error("Tasdiqlashda xatolik:", err);
         toast.error("Xatolik: " + err.message);
     } finally {
-        setConfirmModal({ isOpen: false, type: null, id: null }); // Modalni yopamiz
+        setConfirmModal({ isOpen: false, type: null, id: null }); 
     }
   };
 
@@ -259,5 +259,6 @@ const SupplierReturn = () => {
     </div>
   );
 };
+
 
 export default SupplierReturn;
