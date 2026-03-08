@@ -84,15 +84,20 @@ const StaffList = () => {
 
   // --- 3. SERVERGA SAQLASH (Eng muhim qism) ---
   const handleSave = async () => {
+    // 1. Validatsiya
     if (!formData.firstName || !formData.lastName || !formData.phone || !formData.login || (!isEditing && !formData.password)) {
         return toast.error("Barcha maydonlarni to'ldiring!");
     }
     
     setIsLoading(true);
     const method = isEditing ? 'PUT' : 'POST';
-    const url = isEditing ? `${API_URL}/${formData.id}` : API_URL;
+    
+    // DIQQAT: API_URL manzilini to'g'ri ko'rsatish
+    const url = isEditing 
+        ? `https://iphone-house-api.onrender.com/api/users/${formData.id}` 
+        : 'https://iphone-house-api.onrender.com/api/users'; // <--- AYNI SHU MANZILGA BORISHI SHART!
 
-    // PRO FIX: Ma'lumotni aynan Prisma (Baza) kutayotgan qolipga keltiramiz
+    // Backend kutayotgan to'g'ri qolip (schema)
     const payload = {
         username: formData.login,
         password: formData.password,
@@ -116,10 +121,9 @@ const StaffList = () => {
         if (response.ok) {
             toast.success(isEditing ? "Ma'lumotlar yangilandi!" : "Yangi xodim qo'shildi!");
             setIsModalOpen(false);
-            fetchStaff(); // O'zgarishni darhol ekranga chiqarish
+            fetchStaff(); // Jadvalni yangilash
         } else {
-            // Agar bunday login bazada oldin bor bo'lsa server xato beradi
-            toast.error(data.message || data.error || "Xatolik! Balki bunday login mavjud.");
+            toast.error(data.message || data.error || "Xatolik yuz berdi");
         }
     } catch (error) {
         toast.error("Serverga ulanib bo'lmadi");
@@ -326,4 +330,5 @@ const StaffList = () => {
 };
 
 export default StaffList;
+
 
