@@ -27,6 +27,8 @@ const AddCustomer = () => {
   const [regionsData, setRegionsData] = useState([]);
   const [districts, setDistricts] = useState([]);
 
+  const token = localStorage.getItem('token');
+
   // --- ASOSIY STATE (Bo'sh holati) ---
   const [formData, setFormData] = useState({
     firstName: '', lastName: '', middleName: '', gender: 'ERKAK', dob: '', pinfl: '', note: '',
@@ -40,7 +42,9 @@ const AddCustomer = () => {
   useEffect(() => {
     const fetchRegions = async () => {
       try {
-        const res = await fetch('https://iphone-house-api.onrender.com/api/regions');
+        const res = await fetch('https://iphone-house-api.onrender.com/api/regions', {
+            headers: { 'Authorization': `Bearer ${token}` } // <--- TOKEN
+        });
         const data = await res.json();
         setRegionsData(data);
       } catch (err) { console.error(err); }
@@ -53,7 +57,9 @@ const AddCustomer = () => {
     if (isEditMode) {
         const fetchCustomerData = async () => {
             try {
-                const res = await fetch(`https://iphone-house-api.onrender.com/api/customers/${id}`);
+                const res = await fetch(`https://iphone-house-api.onrender.com/api/customers/${id}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
                 if (!res.ok) throw new Error("Mijoz topilmadi");
                 const data = await res.json();
 
@@ -177,7 +183,10 @@ const AddCustomer = () => {
 
       const response = await fetch(url, {
         method: method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` // <--- TOKEN
+        },
         body: JSON.stringify(formData)
       });
 
@@ -312,5 +321,6 @@ const AddCustomer = () => {
     </div>
   );
 };
+
 
 export default AddCustomer;
