@@ -1,30 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { Edit, Save, X, User, Phone, Lock, Eye, EyeOff } from 'lucide-react';
-import toast from 'react-hot-toast'; // <--- TOAST QO'SHILDI
+import toast from 'react-hot-toast'; 
 
 const ProfileSettings = () => {
-  // REJIMLAR
   const [isEditingInfo, setIsEditingInfo] = useState(false); 
   const [isChangingPassword, setIsChangingPassword] = useState(false); 
   const [isChangingLogin, setIsChangingLogin] = useState(false); 
 
-  // KO'ZCHA (VISIBILITY) HOLATLARI
   const [showOldPass, setShowOldPass] = useState(false);
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
 
-  // ASOSIY USER DATA
   const [userData, setUserData] = useState({
     id: null,
     firstName: '',
     lastName: '',
     phone: '+998',
     login: '',
-    password: '',
+    password: '', // Bazadan shifrlangan holatda keladi, o'zgartirish shart emas
     role: ''
   });
 
-  // XAVFSIZLIK FORMALARI
   const [securityForm, setSecurityForm] = useState({
     oldPassword: '',
     newValue: '',
@@ -32,60 +28,74 @@ const ProfileSettings = () => {
   });
 
   const [isMaster, setIsMaster] = useState(false);
+  
+  // ZAMONAVIY: Token va Loginni olamiz
+  const token = localStorage.getItem('token');
+  const currentLogin = localStorage.getItem('currentUserLogin');
 
-  // --- 1. MA'LUMOTLARNI YUKLASH ---
+  // --- 1. MA'LUMOTLARNI HAQIQIY BAZADAN YUKLASH ---
   useEffect(() => {
-    const currentLogin = localStorage.getItem('currentUserLogin');
-    
-    // MASTER DIREKTOR
-    if (currentLogin === 'director') {
-        setIsMaster(true);
-        
-        // Agar o'zgartirilgan bo'lsa localStorage'dan olamiz, yo'qsa default.
-        const savedDirector = JSON.parse(localStorage.getItem('masterDirector') || "null");
-        if (savedDirector) {
-            const names = savedDirector.name.split(' ');
-            setUserData({
-                id: 999,
-                firstName: names[0] || 'Bosh',
-                lastName: names.slice(1).join(' ') || 'Direktor',
-                phone: '+998 71 200 00 00',
-                login: savedDirector.login,
-                password: savedDirector.password,
-                role: 'director'
+    const fetchMyProfile = async () => {
+        // Direktor logika
+        if (currentLogin === 'director') {
+            setIsMaster(true);
+            const savedDirector = JSON.parse(localStorage.getItem('masterDirector') || "null");
+            if (savedDirector) {
+                const names = savedDirector.name.split(' ');
+                setUserData({
+                    id: 999,
+                    firstName: names[0] || 'Bosh',
+                    lastName: names.slice(1).join(' ') || 'Direktor',
+                    phone: '+998 71 200 00 00',
+                    login: savedDirector.login,
+                    password: savedDirector.password,
+                    role: 'director'
+                });
+            } else {
+                setUserData({
+                    id: 999,
+                    firstName: 'Bosh',
+                    lastName: 'Direktor',
+                    phone: '+998 71 200 00 00',
+                    login: 'director',
+                    password: '777',
+                    role: 'director'
+                });
+            }
+            return;
+        }
+
+        // XODIM UCHUN: Haqiqiy API dan o'zini qidirib topadi
+        try {
+            const res = await fetch('https://iphone-house-api.onrender.com/api/users', {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
-        } else {
-            setUserData({
-                id: 999,
-                firstName: 'Bosh',
-                lastName: 'Direktor',
-                phone: '+998 71 200 00 00',
-                login: 'director',
-                password: '777',
-                role: 'director'
-            });
-        }
-        return;
-    }
+            if (!res.ok) throw new Error("Yuklab bo'lmadi");
+            
+            const users = await res.json();
+            const me = users.find(u => u.username === currentLogin);
 
-    // ODDDIY XODIM
-    const staffList = JSON.parse(localStorage.getItem('staffList') || "[]");
-    let me = staffList.find(u => u.login === currentLogin);
-
-    if (me) {
-        if (!me.firstName && me.name) {
-            const parts = me.name.split(' ');
-            me.firstName = parts[0] || '';
-            me.lastName = parts.slice(1).join(' ') || '';
+            if (me) {
+                const parts = (me.fullName || "").split(' ');
+                setUserData({
+                    id: me.id,
+                    firstName: parts[0] || '',
+                    lastName: parts.slice(1).join(' ') || '',
+                    phone: me.phone || '+998',
+                    login: me.username,
+                    password: me.password,
+                    role: me.role
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error("Profilni yuklashda xatolik!");
         }
-        if (!me.phone || !me.phone.startsWith('+998')) {
-            me.phone = '+998';
-        }
-        setUserData(me);
-    }
-  }, []);
+    };
 
-  // --- TELEFON RAQAM LOGIKASI ---
+    fetchMyProfile();
+  }, [currentLogin, token]);
+
   const handlePhoneChange = (e) => {
     const val = e.target.value;
     if (val.startsWith('+998')) {
@@ -93,86 +103,138 @@ const ProfileSettings = () => {
     }
   };
 
-  // --- 2. SHAXSIY MA'LUMOTLARNI SAQLASH ---
-  const handleSaveInfo = () => {
-    if (userData.phone.length < 13) { 
-        return toast.error("Telefon raqami to'liq emas!");
-    }
+  // --- 2. SHAXSIY MA'LUMOTLARNI HAQIQIY BAZAGA SAQLASH ---
+  const handleSaveInfo = async () => {
+    if (userData.phone.length < 13) return toast.error("Telefon raqami to'liq emas!");
 
     const fullName = `${userData.firstName} ${userData.lastName}`.trim();
 
     if (isMaster) {
-        // Direktor uchun
         const newDir = { name: fullName, login: userData.login, password: userData.password };
         localStorage.setItem('masterDirector', JSON.stringify(newDir));
-    } else {
-        // Xodim uchun
-        const staffList = JSON.parse(localStorage.getItem('staffList') || "[]");
-        const updatedList = staffList.map(u => 
-            u.id === userData.id ? { ...u, firstName: userData.firstName, lastName: userData.lastName, name: fullName, phone: userData.phone } : u
-        );
-        localStorage.setItem('staffList', JSON.stringify(updatedList));
+        localStorage.setItem('userName', fullName);
+        setIsEditingInfo(false);
+        toast.success("Shaxsiy ma'lumotlar yangilandi!");
+        return;
     }
 
-    localStorage.setItem('userName', fullName);
+    try {
+        const res = await fetch(`https://iphone-house-api.onrender.com/api/users/${userData.id}`, {
+            method: 'PUT',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({
+                fullName: fullName,
+                phone: userData.phone,
+                username: userData.login, // Login o'zgarmaydi bu yerda
+                role: userData.role
+            })
+        });
 
-    setIsEditingInfo(false);
-    toast.success("Shaxsiy ma'lumotlar yangilandi!");
-    setTimeout(() => {
-        window.location.reload(); 
-    }, 1000);
+        if (!res.ok) throw new Error("Saqlab bo'lmadi");
+        
+        localStorage.setItem('userName', fullName);
+        setIsEditingInfo(false);
+        toast.success("Shaxsiy ma'lumotlar yangilandi!");
+    } catch (err) {
+        toast.error("Server bilan xatolik yuz berdi");
+    }
   };
 
-  // --- 3. LOGINNI O'ZGARTIRISH ---
-  const handleChangeLogin = () => {
-    if (securityForm.oldPassword !== userData.password) return toast.error("Eski parol noto'g'ri kiritildi!");
+  // --- 3. LOGINNI O'ZGARTIRISH (API ORQALI) ---
+  const handleChangeLogin = async () => {
     if (!securityForm.newValue || securityForm.newValue.length < 4) return toast.error("Yangi login kamida 4 ta belgidan iborat bo'lishi kerak!");
 
     if (isMaster) {
-        // Direktor loginni o'zgartirishi
         const fullName = `${userData.firstName} ${userData.lastName}`.trim();
         const newDir = { name: fullName, login: securityForm.newValue, password: userData.password };
         localStorage.setItem('masterDirector', JSON.stringify(newDir));
-    } else {
-        // Xodim loginni o'zgartirishi
-        const staffList = JSON.parse(localStorage.getItem('staffList') || "[]");
-        const exists = staffList.find(u => u.login === securityForm.newValue && u.id !== userData.id);
-        if (exists) return toast.error("Bu login band!");
-
-        const updatedList = staffList.map(u => u.id === userData.id ? { ...u, login: securityForm.newValue } : u);
-        localStorage.setItem('staffList', JSON.stringify(updatedList));
+        localStorage.setItem('currentUserLogin', securityForm.newValue); 
+        setUserData({ ...userData, login: securityForm.newValue });
+        setIsChangingLogin(false);
+        resetSecurityForm();
+        toast.success("Login o'zgartirildi!");
+        return;
     }
 
-    localStorage.setItem('currentUserLogin', securityForm.newValue); 
-    
-    setUserData({ ...userData, login: securityForm.newValue });
-    setIsChangingLogin(false);
-    resetSecurityForm();
-    toast.success("Login muvaffaqiyatli o'zgartirildi!");
+    try {
+        const res = await fetch(`https://iphone-house-api.onrender.com/api/users/${userData.id}`, {
+            method: 'PUT',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({
+                username: securityForm.newValue, // YANGI LOGIN
+                fullName: `${userData.firstName} ${userData.lastName}`.trim(),
+                phone: userData.phone,
+                role: userData.role
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+            return toast.error(data.message || "Bu login band yoki xato yuz berdi!");
+        }
+
+        localStorage.setItem('currentUserLogin', securityForm.newValue); 
+        setUserData({ ...userData, login: securityForm.newValue });
+        setIsChangingLogin(false);
+        resetSecurityForm();
+        toast.success("Login muvaffaqiyatli o'zgartirildi!");
+    } catch (err) {
+        toast.error("Server bilan xatolik yuz berdi");
+    }
   };
 
-  // --- 4. PAROLNI O'ZGARTIRISH ---
-  const handleChangePassword = () => {
-    if (securityForm.oldPassword !== userData.password) return toast.error("Eski parol noto'g'ri kiritildi!");
+  // --- 4. PAROLNI O'ZGARTIRISH (API ORQALI) ---
+  const handleChangePassword = async () => {
     if (securityForm.newValue.length < 4) return toast.error("Yangi parol juda qisqa!");
     if (securityForm.newValue !== securityForm.confirmValue) return toast.error("Yangi parollar mos kelmadi!");
 
     if (isMaster) {
-        // Direktor parolini o'zgartirishi
         const fullName = `${userData.firstName} ${userData.lastName}`.trim();
         const newDir = { name: fullName, login: userData.login, password: securityForm.newValue };
         localStorage.setItem('masterDirector', JSON.stringify(newDir));
-    } else {
-        // Xodim parolini o'zgartirishi
-        const staffList = JSON.parse(localStorage.getItem('staffList') || "[]");
-        const updatedList = staffList.map(u => u.id === userData.id ? { ...u, password: securityForm.newValue } : u);
-        localStorage.setItem('staffList', JSON.stringify(updatedList));
+        setIsChangingPassword(false);
+        resetSecurityForm();
+        toast.success("Parol muvaffaqiyatli o'zgartirildi!");
+        return;
     }
-    
-    setUserData({ ...userData, password: securityForm.newValue });
-    setIsChangingPassword(false);
-    resetSecurityForm();
-    toast.success("Parol muvaffaqiyatli o'zgartirildi!");
+
+    try {
+        const res = await fetch(`https://iphone-house-api.onrender.com/api/users/${userData.id}`, {
+            method: 'PUT',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({
+                password: securityForm.newValue, // YANGI PAROL (Backend uni bcrypt qiladi)
+                username: userData.login,
+                fullName: `${userData.firstName} ${userData.lastName}`.trim(),
+                phone: userData.phone,
+                role: userData.role
+            })
+        });
+
+        if (!res.ok) throw new Error("Saqlab bo'lmadi");
+
+        setIsChangingPassword(false);
+        resetSecurityForm();
+        toast.success("Parol muvaffaqiyatli o'zgartirildi! Tizimga qayta kiring.");
+        
+        // Parol o'zgarsa tokenni tozalab, loginga chiqarish xavfsizroq:
+        setTimeout(() => {
+            localStorage.clear();
+            window.location.href = '/login';
+        }, 1500);
+
+    } catch (err) {
+        toast.error("Server bilan xatolik yuz berdi");
+    }
   };
 
   const resetSecurityForm = () => {
@@ -246,7 +308,7 @@ const ProfileSettings = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Telefon raqam</label>
                     {isEditingInfo ? (
                         <input type="text" className="w-full p-2.5 border rounded-lg outline-blue-500 bg-gray-50 focus:bg-white"
-                            value={userData.phone} onChange={handlePhoneChange} maxLength={17} /> // +998 XX XXX XX XX
+                            value={userData.phone} onChange={handlePhoneChange} maxLength={17} />
                     ) : (
                         <div className="text-lg font-medium text-gray-800 border-b border-transparent py-2">{userData.phone || "-"}</div>
                     )}
@@ -305,19 +367,6 @@ const ProfileSettings = () => {
                 </div>
                 
                 <div className="space-y-4">
-                    {/* ESKI PAROL */}
-                    <div className="relative">
-                        <label className="block text-sm font-bold text-gray-700 mb-1">Eski parolni kiriting</label>
-                        <input type={showOldPass ? "text" : "password"} 
-                            className="w-full p-3 pr-10 border rounded-xl outline-blue-500 bg-gray-50" placeholder="Joriy parol..."
-                            value={securityForm.oldPassword} onChange={e => setSecurityForm({...securityForm, oldPassword: e.target.value})}
-                        />
-                        <button onClick={() => setShowOldPass(!showOldPass)} className="absolute right-3 top-9 text-gray-400 hover:text-blue-600">
-                            {showOldPass ? <EyeOff size={20}/> : <Eye size={20}/>}
-                        </button>
-                    </div>
-                    <hr className="border-gray-100" />
-                    {/* YANGI PAROL */}
                     <div className="relative">
                         <label className="block text-sm font-bold text-green-700 mb-1">Yangi parol</label>
                         <input type={showNewPass ? "text" : "password"} 
@@ -328,7 +377,6 @@ const ProfileSettings = () => {
                             {showNewPass ? <EyeOff size={20}/> : <Eye size={20}/>}
                         </button>
                     </div>
-                    {/* TASDIQLASH */}
                     <div className="relative">
                         <label className="block text-sm font-bold text-green-700 mb-1">Yangi parolni tasdiqlang</label>
                         <input type={showConfirmPass ? "text" : "password"} 
@@ -359,17 +407,6 @@ const ProfileSettings = () => {
                 </div>
                 
                 <div className="space-y-4">
-                    <div className="relative">
-                        <label className="block text-sm font-bold text-gray-700 mb-1">Xavfsizlik uchun parolni kiriting</label>
-                        <input type={showOldPass ? "text" : "password"} 
-                            className="w-full p-3 pr-10 border rounded-xl outline-blue-500 bg-gray-50" placeholder="Joriy parolingiz..."
-                            value={securityForm.oldPassword} onChange={e => setSecurityForm({...securityForm, oldPassword: e.target.value})}
-                        />
-                        <button onClick={() => setShowOldPass(!showOldPass)} className="absolute right-3 top-9 text-gray-400 hover:text-blue-600">
-                            {showOldPass ? <EyeOff size={20}/> : <Eye size={20}/>}
-                        </button>
-                    </div>
-                    <hr className="border-gray-100" />
                     <div>
                         <label className="block text-sm font-bold text-blue-700 mb-1">Yangi Login</label>
                         <div className="relative">
