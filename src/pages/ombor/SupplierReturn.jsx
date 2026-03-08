@@ -73,7 +73,7 @@ const SupplierReturn = () => {
         setReturns(updatedReturns);
         localStorage.setItem('supplierReturns', JSON.stringify(updatedReturns));
         
-        toast.success("✅ Muvaffaqiyatli! Tovarlar ombor qoldig'idan ayirib tashlandi.");
+        toast.success("Muvaffaqiyatli!");
 
     } catch (err) {
         console.error("Tasdiqlashda xatolik:", err);
@@ -262,3 +262,4 @@ const SupplierReturn = () => {
 
 
 export default SupplierReturn;
+
