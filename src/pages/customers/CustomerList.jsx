@@ -7,6 +7,8 @@ const CustomerList = () => {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const token = localStorage.getItem('token');
   
   // Qidiruv va Filtr State
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,7 +52,9 @@ const CustomerList = () => {
           params.append('phone', filters.phone);
       }
 
-      const res = await fetch(`https://iphone-house-api.onrender.com/api/customers?${params.toString()}`);
+      const res = await fetch(`https://iphone-house-api.onrender.com/api/customers?${params.toString()}`, {
+          headers: { 'Authorization': `Bearer ${token}` } // <--- TOKEN QO'SHILDI
+      });
       const data = await res.json();
       setCustomers(data);
     } catch (error) {
@@ -59,7 +63,6 @@ const CustomerList = () => {
       setLoading(false);
     }
   };
-
   // Search yozilganda yoki Filtr o'zgarganda yuklash
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -295,5 +298,6 @@ const CustomerList = () => {
     </div>
   );
 };
+
 
 export default CustomerList;
