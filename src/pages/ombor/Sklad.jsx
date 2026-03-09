@@ -54,9 +54,24 @@ const Sklad = () => {
 
   useEffect(() => { 
       fetchProducts(); 
-      const savedCats = JSON.parse(localStorage.getItem('categoryList') || "[]");
-      setCategories(savedCats);
-  }, []);
+      
+      const fetchCategories = async () => {
+          try {
+              const res = await fetch('https://iphone-house-api.onrender.com/api/categories', {
+                  headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (res.ok) {
+                  const data = await res.json();
+                  setCategories(data); // Eng yangi ro'yxatni Ekranga chiqaramiz
+                  localStorage.setItem('categoryList', JSON.stringify(data)); // Zaxira uchun xotiraga ham yozib qo'yamiz
+              }
+          } catch (err) {
+              console.error("Kategoriyalarni yuklashda xatolik:", err);
+          }
+      };
+      
+      fetchCategories();
+  }, [token]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -497,6 +512,7 @@ const Sklad = () => {
 
 
 export default Sklad;
+
 
 
 
