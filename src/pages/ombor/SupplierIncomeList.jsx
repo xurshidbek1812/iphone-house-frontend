@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, MoreVertical, Trash2, Edit, Send, CheckCircle, Eye, X, AlertTriangle, Printer, Package } from 'lucide-react';
+import { Search, Plus, MoreVertical, Trash2, Edit, Send, CheckCircle, Eye, X, AlertTriangle, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import ReactDOMServer from 'react-dom/server';
@@ -11,61 +11,79 @@ const SupplierIncomeList = () => {
   const [invoices, setInvoices] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewInvoice, setViewInvoice] = useState(null);
+  
   const userRole = localStorage.getItem('userRole') || 'admin';
-  const currentUserName = localStorage.getItem('userName') || 'Bekchonov Azomat';
+  const currentUserName = localStorage.getItem('userName');
   const token = localStorage.getItem('token');
 
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: null, invoiceId: null });
-  
-  // --- QR PRINT UCHUN STATE ---
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [invoiceToPrint, setInvoiceToPrint] = useState(null);
 
+  const fetchInvoices = async () => {
+      try {
+          const res = await fetch('https://iphone-house-api.onrender.com/api/invoices', {
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+              const data = await res.json();
+              setInvoices(data);
+          }
+      } catch (err) {
+          console.error(err);
+          toast.error("Fakturalarni yuklashda xato!");
+      }
+  };
+
   useEffect(() => {
-    const savedInvoices = localStorage.getItem('supplierInvoices');
-    if (savedInvoices) setInvoices(JSON.parse(savedInvoices));
+    fetchInvoices();
     document.addEventListener('click', (e) => !e.target.closest('.menu-container') && setActiveMenu(null));
   }, []);
 
   const toggleMenu = (e, id) => { e.stopPropagation(); setActiveMenu(activeMenu === id ? null : id); };
 
-  // --- TASDIQLASH (OMBORGA QO'SHISH) ---
+  const formatDate = (d) => {
+      if(!d) return "";
+      return new Date(d).toLocaleDateString('uz-UZ');
+  };
+
+  // --- TASDIQLASH (OMBORGA QO'SHISH VA STATUSNI O'ZGARTIRISH) ---
   const executeApprove = async (id) => {
     const invoice = invoices.find(inv => inv.id === id);
     if (!invoice) return toast.error("Faktura topilmadi!");
 
     try {
         const itemsToBackend = invoice.items.map(item => ({
-            id: item.id,
+            id: item.productId, // Tovar ID si
             customId: item.customId,
-            quantity: Number(item.count || item.quantity || item.inputQty), 
-            buyPrice: Number(item.price || item.inputPrice || item.buyPrice),
-            salePrice: Number(item.salePrice || item.inputSalePrice || 0), // SOTUV NARXI HAM KETDI
-            buyCurrency: item.currency || item.inputCurrency || 'UZS',
-            supplierName: invoice.supplier,         
+            quantity: Number(item.count), 
+            buyPrice: Number(item.price),
+            salePrice: Number(item.salePrice), 
+            buyCurrency: item.currency || 'UZS',
+            supplierName: invoice.supplierName,         
             invoiceNumber: invoice.invoiceNumber    
         }));
 
-        const response = await fetch('https://iphone-house-api.onrender.com/api/products/increase-stock', {
+        // 1. Ombordagi qoldiqni oshiramiz (Partiya yaratamiz)
+        const stockResponse = await fetch('https://iphone-house-api.onrender.com/api/products/increase-stock', {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` 
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify(itemsToBackend) 
         });
 
-        if (!response.ok) throw new Error("Ombor yangilanmadi!");
+        if (!stockResponse.ok) throw new Error("Ombor yangilanmadi!");
 
-        const updatedInvoices = invoices.map(inv => 
-            inv.id === id ? { ...inv, status: 'Tasdiqlandi' } : inv
-        );
+        // 2. Fakturaning statusini "Tasdiqlandi" qilib bazada o'zgartiramiz
+        await fetch(`https://iphone-house-api.onrender.com/api/invoices/${id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ status: 'Tasdiqlandi' })
+        });
         
-        setInvoices(updatedInvoices);
-        localStorage.setItem('supplierInvoices', JSON.stringify(updatedInvoices));
-        
-        toast.success("Muvaffaqiyatli! Tovar yangi narx bilan omborga tushdi.");
+        toast.success("Muvaffaqiyatli tasdiqlandi va omborga tushdi!");
+        fetchInvoices(); // Ro'yxatni yangilaymiz
         if(viewInvoice) setViewInvoice(null);
+
     } catch (err) {
         console.error(err);
         toast.error("Xatolik: " + err.message);
@@ -75,22 +93,40 @@ const SupplierIncomeList = () => {
   };
 
   // --- O'CHIRISH ---
-  const executeDelete = (id) => {
-    const upd = invoices.filter(i => i.id !== id);
-    setInvoices(upd);
-    localStorage.setItem('supplierInvoices', JSON.stringify(upd));
-    toast.success("Faktura o'chirildi!");
-    setConfirmModal({ isOpen: false, type: null, invoiceId: null }); 
+  const executeDelete = async (id) => {
+    try {
+        const res = await fetch(`https://iphone-house-api.onrender.com/api/invoices/${id}`, {
+             method: 'DELETE',
+             headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if(res.ok) {
+             toast.success("Faktura o'chirildi!");
+             fetchInvoices();
+        } else {
+             toast.error("O'chirishda xatolik!");
+        }
+    } catch(e) { toast.error("Server bilan aloqa yo'q!"); }
+    finally { setConfirmModal({ isOpen: false, type: null, invoiceId: null }); }
+  };
+
+  // --- YUBORISH (STATUS O'ZGARTIRISH) ---
+  const executeSend = async (id) => {
+      try {
+        const res = await fetch(`https://iphone-house-api.onrender.com/api/invoices/${id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ status: 'Yuborildi' })
+        });
+        if(res.ok) {
+             toast.success("Faktura yuborildi!");
+             fetchInvoices();
+        }
+      } catch(e) { toast.error("Server bilan aloqa yo'q!"); }
   };
 
   // --- QR CHOP ETISH ---
   const executePrintQR = (item, invoice) => {
-      // Agar tovar allaqachon tasdiqlangan (Partiyasi bor) bo'lsa, uni boshqa joydan chop etgan ma'qul.
-      // Lekin hozir biz tasdiqlanmagan faktura ichidagi tovarlar uchun chop etyapmiz.
-      // Format: ID:12345|INV:F-98765|NAME:Telefon
-      
       const printWindow = window.open('', '_blank');
-      // INV (Invoice ID) bilan belgilaymizki, bu tovar hali asosiy omborda emas, fakturada yotibdi.
       const qrValue = `ID:${item.customId}|INV:${invoice.id}|NAME:${item.name}`;
       
       const qrCodeSvg = ReactDOMServer.renderToString(<QRCode value={qrValue} size={80} level="H"/>);
@@ -116,56 +152,31 @@ const SupplierIncomeList = () => {
       printWindow.document.close();
   };
 
-  // --- MENYU AMALLARI ---
   const handleAction = (action, id) => {
     setActiveMenu(null);
-    
     if (action === 'view') {
-        const inv = invoices.find(i => i.id === id);
-        setViewInvoice(inv);
+        setViewInvoice(invoices.find(i => i.id === id));
     }
-    
-    // Tahrirlash (Edit) - Yozgan AddSupplierIncome sahifamizga o'xshash alohida Edit sahifaga o'tish kerak 
-    // Yoki vaqtinchalik ma'lumotlarni localStorage orqali uzatib, o'sha Add sahifani tahrirlash rejimida ochish mumkin.
-    // Hozircha uni Add sahifasiga uzatadigan qilamiz.
     if (action === 'edit') {
-        // Fakturani tahrirlash uchun id bilan yo'naltirish:
         navigate(`/ombor/taminotchi-kirim/tahrirlash/${id}`); 
-        // (Buning uchun App.js da marshrut qo'shish kerak bo'ladi, keyingi qadamda qilamiz)
     }
-
     if (action === 'print') {
-        const inv = invoices.find(i => i.id === id);
-        setInvoiceToPrint(inv);
+        setInvoiceToPrint(invoices.find(i => i.id === id));
         setPrintModalOpen(true);
     }
-
-    if (action === 'approve') {
-        setConfirmModal({ isOpen: true, type: 'approve', invoiceId: id });
-    }
-    
-    if (action === 'delete') {
-        setConfirmModal({ isOpen: true, type: 'delete', invoiceId: id });
-    }
-
-    if (action === 'send') {
-         const upd = invoices.map(i => i.id === id ? { ...i, status: 'Yuborildi' } : i);
-         setInvoices(upd);
-         localStorage.setItem('supplierInvoices', JSON.stringify(upd));
-         toast.success("Faktura yuborildi!");
-    }
+    if (action === 'approve') setConfirmModal({ isOpen: true, type: 'approve', invoiceId: id });
+    if (action === 'delete') setConfirmModal({ isOpen: true, type: 'delete', invoiceId: id });
+    if (action === 'send') executeSend(id);
   };
 
   const filteredInvoices = invoices.filter(inv => {
-      const matchesSearch = (inv.supplier && inv.supplier.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                            (inv.invoiceNumber && inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()));
-      
-      if (!matchesSearch) return false;
-
-      if (inv.status === 'Jarayonda') {
-          return inv.userName === currentUserName || userRole === 'director'; // Direktor baribir ko'rsin
+      const matchText = (inv.supplierName && inv.supplierName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                        (inv.invoiceNumber && inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+      if (!matchText) return false;
+      // Agar jarayonda bo'lsa faqat o'zi ko'rsin, qolgan hamma narsani hamma ko'raversin (Direktordan tashqari)
+      if (inv.status === 'Jarayonda' && userRole !== 'director' && inv.userName !== currentUserName) {
+          return false;
       }
-      
       return true;
   });
 
@@ -198,9 +209,9 @@ const SupplierIncomeList = () => {
             <tbody className="divide-y text-sm">
                 {filteredInvoices.map(inv => (
                     <tr key={inv.id} className="hover:bg-blue-50">
-                        <td className="p-4">{inv.date}</td>
+                        <td className="p-4">{formatDate(inv.date)}</td>
                         <td className="p-4 font-bold">{inv.invoiceNumber}</td>
-                        <td className="p-4">{inv.supplier}</td>
+                        <td className="p-4">{inv.supplierName}</td>
                         {userRole === 'director' && <td className="p-4 text-right font-bold text-amber-700">{Number(inv.totalSum).toLocaleString()}</td>}
                         <td className="p-4 text-center"><span className={`px-2 py-1 rounded text-xs font-bold ${inv.status === 'Tasdiqlandi' ? 'bg-emerald-100 text-emerald-700' : (inv.status === 'Yuborildi' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700')}`}>{inv.status}</span></td>
                         <td className="p-4 text-center relative menu-container">
@@ -209,12 +220,10 @@ const SupplierIncomeList = () => {
                                 <div className="absolute right-8 top-8 w-44 bg-white shadow-xl border rounded-lg z-50 overflow-hidden font-medium">
                                     <button onClick={() => handleAction('view', inv.id)} className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2"><Eye size={16}/> Ko'rish</button>
                                     
-                                    {/* QR Kod Chop etish (Faqat Tasdiqlanmaganlar uchun) */}
                                     {inv.status !== 'Tasdiqlandi' && (
                                         <button onClick={() => handleAction('print', inv.id)} className="w-full text-left px-4 py-2 hover:bg-gray-100 text-slate-700 flex items-center gap-2"><Printer size={16}/> QR Chop etish</button>
                                     )}
 
-                                    {/* Tahrirlash */}
                                     {inv.status !== 'Tasdiqlandi' && (
                                         <button onClick={() => handleAction('edit', inv.id)} className="w-full text-left px-4 py-2 hover:bg-gray-100 text-amber-600 flex items-center gap-2"><Edit size={16}/> Tahrirlash</button>
                                     )}
@@ -239,7 +248,7 @@ const SupplierIncomeList = () => {
         </table>
       </div>
 
-      {/* --- QR PRINT MODAL (Fakturadan tovar tanlab chiqarish) --- */}
+      {/* QR PRINT MODAL */}
       {printModalOpen && invoiceToPrint && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
             <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl p-6 animate-in zoom-in-95">
@@ -268,7 +277,7 @@ const SupplierIncomeList = () => {
                                 <tr key={i} className="hover:bg-gray-50">
                                     <td className="p-3 border font-mono text-blue-600 font-bold">{item.customId}</td>
                                     <td className="p-3 border font-medium">{item.name}</td>
-                                    <td className="p-3 border font-bold text-center">{item.count || item.quantity}</td>
+                                    <td className="p-3 border font-bold text-center">{item.count}</td>
                                     <td className="p-3 border text-center">
                                         <button 
                                             onClick={() => executePrintQR(item, invoiceToPrint)}
@@ -289,8 +298,7 @@ const SupplierIncomeList = () => {
         </div>
       )}
 
-
-      {/* --- KATTA FAKTURA KO'RISH MODALI --- */}
+      {/* KATTA FAKTURA KO'RISH MODALI */}
       {viewInvoice && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
             <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl p-6 animate-in zoom-in-95">
@@ -300,7 +308,7 @@ const SupplierIncomeList = () => {
                             Faktura: <span className="text-blue-600">№ {viewInvoice.invoiceNumber}</span>
                         </h2>
                         <div className="text-sm text-gray-500 font-medium flex gap-4">
-                            <span>Ta'minotchi: <span className="text-gray-800 font-bold">{viewInvoice.supplier}</span></span>
+                            <span>Ta'minotchi: <span className="text-gray-800 font-bold">{viewInvoice.supplierName}</span></span>
                             <span>•</span>
                             <span>Kiritdi: <span className="text-gray-800">{viewInvoice.userName || "Noma'lum"}</span></span>
                         </div>
@@ -324,10 +332,10 @@ const SupplierIncomeList = () => {
                                 <tr key={i} className="hover:bg-gray-50">
                                     <td className="p-3 border font-mono text-blue-600 font-bold">{item.customId}</td>
                                     <td className="p-3 border font-medium">{item.name}</td>
-                                    <td className="p-3 border font-bold text-center">{item.count || item.quantity}</td>
-                                    {userRole === 'director' && <td className="p-3 border text-amber-700 font-medium">{Number(item.price || item.buyPrice || 0).toLocaleString()}</td>}
+                                    <td className="p-3 border font-bold text-center">{item.count}</td>
+                                    {userRole === 'director' && <td className="p-3 border text-amber-700 font-medium">{Number(item.price || 0).toLocaleString()}</td>}
                                     <td className="p-3 border text-emerald-600 font-bold">{Number(item.salePrice || 0).toLocaleString()}</td>
-                                    {userRole === 'director' && <td className="p-3 border text-right font-bold">{(Number(item.count || item.quantity) * Number(item.price || item.buyPrice)).toLocaleString()}</td>}
+                                    {userRole === 'director' && <td className="p-3 border text-right font-bold">{(Number(item.count) * Number(item.price)).toLocaleString()}</td>}
                                 </tr>
                             ))}
                         </tbody>
@@ -345,7 +353,7 @@ const SupplierIncomeList = () => {
         </div>
       )}
 
-      {/* --- TASDIQLASH / O'CHIRISH MODALI --- */}
+      {/* TASDIQLASH / O'CHIRISH MODALI */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
             <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in zoom-in-95">
@@ -371,7 +379,6 @@ const SupplierIncomeList = () => {
             </div>
         </div>
       )}
-
     </div>
   );
 };
