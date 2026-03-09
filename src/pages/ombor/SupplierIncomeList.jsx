@@ -36,7 +36,9 @@ const SupplierIncomeList = () => {
             customId: item.customId,
             quantity: Number(item.count || item.quantity || item.inputQty), 
             buyPrice: Number(item.price || item.inputPrice || item.buyPrice),
-            buyCurrency: item.currency || item.inputCurrency || 'UZS'         
+            buyCurrency: item.currency || item.inputCurrency || 'UZS',
+            supplierName: invoice.supplier,         // Ta'minotchi nomi
+            invoiceNumber: invoice.invoiceNumber    // Faktura raqami
         }));
 
         const response = await fetch('https://iphone-house-api.onrender.com/api/products/increase-stock', {
@@ -285,3 +287,4 @@ const SupplierIncomeList = () => {
 
 
 export default SupplierIncomeList;
+
