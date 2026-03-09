@@ -253,7 +253,7 @@ function App() {
                 <Route path="/ombor/boshqa-kirim" element={<InternalIncome />} />
                 <Route path="/ombor/boshqa-chiqim" element={<InternalExpense />} />
                 <Route path="/ombor/taminotchi-kirim" element={<SupplierIncomeList />} />
-                <Route path="/ombor/taminotchi-kirim/qoshish" element={<AddSupplierIncome />} 
+                <Route path="/ombor/taminotchi-kirim/qoshish" element={<AddSupplierIncome />} />
                 <Route path="/ombor/taminotchi-kirim/tahrirlash/:id" element={<EditSupplierIncome />} />
                 <Route path="/ombor/taminotchi-qaytarish" element={<SupplierReturn />} />
                 <Route path="/ombor/yakunlanmagan" element={<UnfinishedSales />} />
