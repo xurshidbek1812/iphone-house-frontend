@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-// DIQQAT: Edit2 ni shu yerda import qildik
-import { Search, Filter, Plus, MoreVertical, X, Check, RefreshCw, Edit2 } from 'lucide-react';
+import { Search, Filter, Plus, X, RefreshCw, Edit2, Trash2, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 const CustomerList = () => {
   const navigate = useNavigate();
@@ -20,6 +20,9 @@ const CustomerList = () => {
     dob: '',
     phone: ''
   });
+
+  // O'chirish modali uchun State
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null, name: '' });
 
   // --- TELEFON FORMATLASH FUNKSIYASI ---
   const formatPhoneNumber = (value) => {
@@ -53,7 +56,7 @@ const CustomerList = () => {
       }
 
       const res = await fetch(`https://iphone-house-api.onrender.com/api/customers?${params.toString()}`, {
-          headers: { 'Authorization': `Bearer ${token}` } // <--- TOKEN QO'SHILDI
+          headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
       setCustomers(data);
@@ -63,7 +66,7 @@ const CustomerList = () => {
       setLoading(false);
     }
   };
-  // Search yozilganda yoki Filtr o'zgarganda yuklash
+
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       fetchCustomers();
@@ -82,6 +85,29 @@ const CustomerList = () => {
     });
     setSearchTerm('');
     setIsFilterOpen(false);
+  };
+
+  // --- MIJOZNI O'CHIRISH FUNKSIYASI ---
+  const executeDelete = async () => {
+      try {
+          const res = await fetch(`https://iphone-house-api.onrender.com/api/customers/${deleteModal.id}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          const result = await res.json();
+          
+          if (res.ok) {
+              toast.success("Mijoz tizimdan muvaffaqiyatli o'chirildi!");
+              fetchCustomers(); // Ro'yxatni yangilaymiz
+          } else {
+              toast.error(result.error || "O'chirishda xatolik yuz berdi");
+          }
+      } catch (err) {
+          toast.error("Server bilan aloqa yo'q!");
+      } finally {
+          setDeleteModal({ isOpen: false, id: null, name: '' });
+      }
   };
 
   return (
@@ -189,14 +215,22 @@ const CustomerList = () => {
                                     : '-'}
                                 </td>
                                 <td className="p-4 text-right">
-                                    {/* --- TAHRIRLASH TUGMASI --- */}
-                                    <button 
-                                        onClick={() => navigate(`/mijozlar/tahrirlash/${customer.id}`)}
-                                        className="p-2 hover:bg-blue-50 rounded-lg text-gray-400 hover:text-blue-600 transition-colors"
-                                        title="Tahrirlash"
-                                    >
-                                        <Edit2 size={18} />
-                                    </button>
+                                    <div className="flex items-center justify-end gap-1">
+                                        <button 
+                                            onClick={() => navigate(`/mijozlar/tahrirlash/${customer.id}`)}
+                                            className="p-2 hover:bg-blue-50 rounded-lg text-gray-400 hover:text-blue-600 transition-colors"
+                                            title="Tahrirlash"
+                                        >
+                                            <Edit2 size={18} />
+                                        </button>
+                                        <button 
+                                            onClick={() => setDeleteModal({ isOpen: true, id: customer.id, name: `${customer.lastName} ${customer.firstName}` })}
+                                            className="p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition-colors"
+                                            title="O'chirish"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         ))
@@ -299,10 +333,29 @@ const CustomerList = () => {
             </div>
         </div>
       )}
+
+      {/* --- O'CHIRISH TASDIQLASH MODALI --- */}
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+            <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in zoom-in-95">
+                <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600">
+                    <AlertTriangle size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-center text-gray-800 mb-2">Mijozni o'chirasizmi?</h3>
+                <p className="text-center text-gray-500 text-sm mb-6">
+                    <span className="font-bold text-gray-700 block mb-1">{deleteModal.name}</span>
+                    Bu mijozning pasport, manzil va boshqa barcha ma'lumotlari butunlay o'chib ketadi. Buni ortga qaytarib bo'lmaydi!
+                </p>
+                <div className="flex gap-3">
+                    <button onClick={() => setDeleteModal({ isOpen: false, id: null, name: '' })} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all">Orqaga</button>
+                    <button onClick={executeDelete} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-200 hover:bg-red-700 active:scale-95 transition-all">Ha, o'chirish</button>
+                </div>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 };
 
-
 export default CustomerList;
-
