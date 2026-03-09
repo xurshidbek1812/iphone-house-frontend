@@ -243,8 +243,8 @@ function App() {
                 <Route path="/mijozlar" element={<CustomerList />} />
                 <Route path="/mijozlar/qoshish" element={<AddCustomer />} />
                 <Route path="/mijozlar/tahrirlash/:id" element={<AddCustomer />} />
-                <Route path="/mijozlar/qora-royxat" element={<Blacklist />} />
-                <Route path="/mijozlar/qora-royxat-buyurtmalari" element={<BlacklistOrders />} />
+                <Route path="/mijozlar/qora" element={<Blacklist />} />
+                <Route path="/mijozlar/qora-buyurtma" element={<BlacklistOrders />} />
 
                 {/* --- HISOB-KITOBLAR --- */}
                 <Route path="/hisob/akt" element={<SupplierAct />} />
