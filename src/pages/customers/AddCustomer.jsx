@@ -115,7 +115,50 @@ const AddCustomer = () => {
 
   // --- HANDLERS ---
   const clearError = (field) => { if (errors[field]) setErrors(prev => ({ ...prev, [field]: null })); };
-  const handleChange = (e) => { const { name, value } = e.target; setFormData(prev => ({ ...prev, [name]: value })); clearError(name); };
+  
+  const handleChange = (e) => { 
+      const { name, value } = e.target; 
+      setFormData(prev => ({ ...prev, [name]: value })); 
+      clearError(name); 
+  };
+
+  // --- YANGI: JSHSHIR LOGIKASI ---
+  const handlePinflChange = (e) => {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 14); // Faqat 14 ta raqam
+    setFormData(prev => ({ ...prev, pinfl: val }));
+    clearError('pinfl');
+
+    // Agar 14 xona to'liq kiritilsa
+    if (val.length === 14) {
+        const sexCentury = parseInt(val[0]);
+        const day = val.substring(1, 3);
+        const month = val.substring(3, 5);
+        const yearPart = val.substring(5, 7);
+
+        let gender = 'ERKAK';
+        let yearPrefix = 1900;
+
+        // Jinsni aniqlash
+        if ([1, 3, 5].includes(sexCentury)) gender = 'ERKAK';
+        else if ([2, 4, 6].includes(sexCentury)) gender = 'AYOL';
+
+        // Asrni aniqlash
+        if ([1, 2].includes(sexCentury)) yearPrefix = 1800;
+        else if ([3, 4].includes(sexCentury)) yearPrefix = 1900;
+        else if ([5, 6].includes(sexCentury)) yearPrefix = 2000;
+
+        const fullYear = yearPrefix + parseInt(yearPart);
+        const dob = `${fullYear}-${month}-${day}`;
+
+        // Sanani to'g'riligini tekshirish
+        const dateObj = new Date(dob);
+        if (!isNaN(dateObj.getTime())) {
+            setFormData(prev => ({ ...prev, gender, dob }));
+            clearError('dob');
+        }
+    }
+  };
+
   const handleDocChange = (e) => { const { name, value } = e.target; setFormData(prev => ({ ...prev, document: { ...prev.document, [name]: value } })); clearError(name); };
   const handleDocumentDateChange = (e) => {
     const givenDateVal = e.target.value; handleDocChange(e);
@@ -125,11 +168,13 @@ const AddCustomer = () => {
       setFormData(prev => ({ ...prev, document: { ...prev.document, givenDate: givenDateVal, expiryDate: expiryString } })); clearError('expiryDate');
     }
   };
+  
   const handleRegionChange = (e) => {
     const regionId = Number(e.target.value); setFormData(prev => ({ ...prev, address: { ...prev.address, regionId, districtId: '', mfy: '' } }));
     const selectedRegion = regionsData.find(r => r.id === regionId); setDistricts(selectedRegion ? selectedRegion.districts : []); clearError('regionId');
   };
   const handleDistrictChange = (e) => { const districtId = Number(e.target.value); setFormData(prev => ({ ...prev, address: { ...prev.address, districtId, mfy: '' } })); clearError('districtId'); };
+  
   const handlePhoneChange = (index, field, value) => {
     const updatedPhones = [...formData.phones]; updatedPhones[index][field] = field === 'phone' ? formatPhoneNumber(value) : value;
     setFormData(prev => ({ ...prev, phones: updatedPhones })); clearError('phones');
@@ -193,7 +238,7 @@ const AddCustomer = () => {
     } catch (e) { alert("Server xatosi"); }
   };
 
-  // --- UI QISMLARI (IXCHAMLASHGAN) ---
+  // --- UI QISMLARI ---
   const ErrorMsg = ({ field }) => errors[field] && (<div className="flex items-center gap-1 text-red-500 text-[11px] mt-0.5"><AlertCircle size={10} /> {errors[field]}</div>);
   const getInputClass = (field) => `w-full p-2.5 border rounded-lg text-sm outline-none transition-all ${errors[field] ? 'border-red-500 bg-red-50 ring-1 ring-red-200' : 'focus:ring-2 focus:ring-blue-500 border-gray-200'}`;
 
@@ -201,8 +246,17 @@ const AddCustomer = () => {
   const renderStep1 = () => (
     <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
       <h3 className="font-bold text-gray-800 text-center mb-6">Shaxsiy ma'lumotlar</h3>
-      <div><label className="block text-xs font-medium text-gray-600 mb-1">Familiyasi</label><input name="lastName" value={formData.lastName} onChange={handleChange} className={`${getInputClass('lastName')} uppercase`} /><ErrorMsg field="lastName" /></div>
-      <div><label className="block text-xs font-medium text-gray-600 mb-1">Ismi</label><input name="firstName" value={formData.firstName} onChange={handleChange} className={`${getInputClass('firstName')} uppercase`} /><ErrorMsg field="firstName" /></div>
+      
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">JSHSHIR raqami</label>
+        <input name="pinfl" value={formData.pinfl} onChange={handlePinflChange} maxLength={14} className={`${getInputClass('pinfl')} font-mono`} placeholder="14 talik raqamni kiriting" />
+        <ErrorMsg field="pinfl" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div><label className="block text-xs font-medium text-gray-600 mb-1">Familiyasi</label><input name="lastName" value={formData.lastName} onChange={handleChange} className={`${getInputClass('lastName')} uppercase`} /><ErrorMsg field="lastName" /></div>
+        <div><label className="block text-xs font-medium text-gray-600 mb-1">Ismi</label><input name="firstName" value={formData.firstName} onChange={handleChange} className={`${getInputClass('firstName')} uppercase`} /><ErrorMsg field="firstName" /></div>
+      </div>
       <div><label className="block text-xs font-medium text-gray-600 mb-1">Otasining ismi</label><input name="middleName" value={formData.middleName} onChange={handleChange} className={`${getInputClass('middleName')} uppercase`} /><ErrorMsg field="middleName" /></div>
       
       <div className="flex gap-6 py-2">
@@ -210,10 +264,7 @@ const AddCustomer = () => {
           <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="radio" name="gender" value="AYOL" checked={formData.gender === 'AYOL'} onChange={handleChange} className="w-4 h-4 text-blue-600" /> Ayol</label>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-          <div><label className="block text-xs font-medium text-gray-600 mb-1">Tug'ilgan sanasi</label><input type="date" name="dob" value={formData.dob} onChange={handleChange} className={getInputClass('dob')} /><ErrorMsg field="dob" /></div>
-          <div><label className="block text-xs font-medium text-gray-600 mb-1">JSHSHIR raqami</label><input name="pinfl" value={formData.pinfl} onChange={handleChange} maxLength={14} className={`${getInputClass('pinfl')} font-mono`} /><ErrorMsg field="pinfl" /></div>
-      </div>
+      <div><label className="block text-xs font-medium text-gray-600 mb-1">Tug'ilgan sanasi</label><input type="date" name="dob" value={formData.dob} onChange={handleChange} className={getInputClass('dob')} /><ErrorMsg field="dob" /></div>
       
       <div><label className="block text-xs font-medium text-gray-600 mb-1">Izoh</label><textarea name="note" value={formData.note} onChange={handleChange} className="w-full p-2.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" rows={2} /></div>
     </div>
@@ -241,7 +292,32 @@ const AddCustomer = () => {
         <div className="grid grid-cols-2 gap-4">
             <div><label className="block text-xs font-medium text-gray-600 mb-1">Asosiy / viloyat</label><select value={formData.address.regionId} onChange={handleRegionChange} className={`${getInputClass('regionId')} bg-white`}><option value="">Tanlang...</option>{regionsData.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select><ErrorMsg field="regionId" /></div>
             <div><label className="block text-xs font-medium text-gray-600 mb-1">Asosiy / tuman</label><select value={formData.address.districtId} onChange={handleDistrictChange} disabled={!formData.address.regionId} className={`${getInputClass('districtId')} bg-white disabled:bg-gray-100`}><option value="">Tanlang...</option>{districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select><ErrorMsg field="districtId" /></div>
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Asosiy / MFY</label><input type="text" name="mfy" value={formData.address.mfy} onChange={(e) => {setFormData(prev => ({...prev, address: {...prev.address, mfy: e.target.value}})); clearError('mfy');}} disabled={!formData.address.districtId} className={`${getInputClass('mfy')} disabled:bg-gray-100`}/><ErrorMsg field="mfy" /></div>
+            
+            {/* MFY TANLASH YOYI YOZISH (DATALIST) */}
+            <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Asosiy / MFY</label>
+                <input 
+                    list="mfy-options"
+                    name="mfy" 
+                    value={formData.address.mfy} 
+                    onChange={(e) => {
+                        setFormData(prev => ({...prev, address: {...prev.address, mfy: e.target.value}})); 
+                        clearError('mfy');
+                    }} 
+                    disabled={!formData.address.districtId} 
+                    className={`${getInputClass('mfy')} disabled:bg-gray-100`}
+                    placeholder="Tanlang yoki yozing..."
+                />
+                <datalist id="mfy-options">
+                    <option value="Navro'z MFY" />
+                    <option value="Mustaqillik MFY" />
+                    <option value="Do'stlik MFY" />
+                    <option value="Tinchlik MFY" />
+                    <option value="Gulshan MFY" />
+                </datalist>
+                <ErrorMsg field="mfy" />
+            </div>
+
             <div><label className="block text-xs font-medium text-gray-600 mb-1">Asosiy / ko'cha nomi</label><input value={formData.address.street} onChange={(e) => {setFormData(prev => ({...prev, address: {...prev.address, street: e.target.value}})); clearError('street');}} className={getInputClass('street')} /><ErrorMsg field="street" /></div>
         </div>
         <div><label className="block text-xs font-medium text-gray-600 mb-1">Mo'ljal</label><textarea value={formData.address.landmark} onChange={(e) => setFormData(prev => ({...prev, address: {...prev.address, landmark: e.target.value}}))} className="w-full p-2.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" rows={2} /></div>
@@ -262,9 +338,9 @@ const AddCustomer = () => {
                     <input type="text" value={item.phone} onChange={(e) => handlePhoneChange(index, 'phone', e.target.value)} maxLength={19} className="w-full p-2.5 text-sm border border-gray-200 rounded-lg bg-white font-mono focus:ring-2 focus:ring-blue-500 outline-none" placeholder="+998"/>
                 </div>
                 {index === 0 ? (
-                    <button onClick={addPhone} className="p-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm" title="Qo'shish"><Plus size={20} /></button>
+                    <button type="button" onClick={addPhone} className="p-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm" title="Qo'shish"><Plus size={20} /></button>
                 ) : (
-                    <button onClick={() => removePhone(index)} className="p-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-sm" title="O'chirish"><Trash2 size={20} /></button>
+                    <button type="button" onClick={() => removePhone(index)} className="p-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-sm" title="O'chirish"><Trash2 size={20} /></button>
                 )}
             </div>
         ))}
@@ -296,7 +372,7 @@ const AddCustomer = () => {
   if (isLoadingData) return <div className="flex items-center justify-center h-screen text-gray-500">Ma'lumotlar yuklanmoqda...</div>;
 
   return (
-    <div className="max-w-2xl mx-auto pb-10"> {/* max-w-4xl dan 2xl ga o'zgartirildi (Kichraydi) */}
+    <div className="max-w-2xl mx-auto pb-10"> 
       <div className="flex items-center justify-between mb-8 mt-4">
         <div className="flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><ArrowLeft size={20} /></button>
@@ -305,7 +381,7 @@ const AddCustomer = () => {
         <button onClick={() => navigate(-1)} className="px-4 py-1.5 border border-gray-200 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">Bekor qilish</button>
       </div>
 
-      {/* Progress Bar (Kichraytirilgan) */}
+      {/* Progress Bar */}
       <div className="mb-8 px-4">
         <div className="flex justify-between items-center mb-2">
             {[1, 2, 3, 4, 5].map((s) => (
@@ -332,11 +408,19 @@ const AddCustomer = () => {
             
             <div className="flex gap-4 mt-8 pt-2">
                 {step > 1 && (
-                    <button onClick={() => setStep(step - 1)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200 transition-colors">
+                    <button 
+                        type="button" // <--- XATO SHU YERDA EDI (Tuzatildi!)
+                        onClick={() => setStep(step - 1)} 
+                        className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200 transition-colors"
+                    >
                         Ortga qaytish
                     </button>
                 )}
-                <button onClick={handleNext} className="flex-1 py-3 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-md shadow-blue-200">
+                <button 
+                    type="button" 
+                    onClick={handleNext} 
+                    className="flex-1 py-3 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-md shadow-blue-200"
+                >
                     {step === 5 ? (isEditMode ? 'Saqlash' : 'Davom etish (Saqlash)') : 'Davom etish'}
                 </button>
             </div>
