@@ -50,6 +50,8 @@ import PickupList from './pages/issue/PickupList';
 // --- MIJOZLAR ---
 import CustomerList from './pages/customers/CustomerList';
 import AddCustomer from './pages/customers/AddCustomer';
+import Blacklist from './pages/customers/Blacklist';
+import BlacklistOrders from './pages/customers/BlacklistOrders';
 
 // --- HISOB-KITOBLAR ---
 import SupplierAct from './pages/hisob/SupplierAct';
@@ -241,6 +243,8 @@ function App() {
                 <Route path="/mijozlar" element={<CustomerList />} />
                 <Route path="/mijozlar/qoshish" element={<AddCustomer />} />
                 <Route path="/mijozlar/tahrirlash/:id" element={<AddCustomer />} />
+                <Route path="/mijozlar/qora-royxat" element={<Blacklist />} />
+                <Route path="/mijozlar/qora-royxat-buyurtmalari" element={<BlacklistOrders />} />
 
                 {/* --- HISOB-KITOBLAR --- */}
                 <Route path="/hisob/akt" element={<SupplierAct />} />
