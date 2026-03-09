@@ -1,37 +1,83 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Layers, Save } from 'lucide-react';
+import { Plus, Trash2, Layers } from 'lucide-react';
+import toast from 'react-hot-toast'; // ZAMONAVIY XABARLAR UCHUN
 
 const CategorySettings = () => {
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState('');
+  const token = localStorage.getItem('token'); // XAVFSIZLIK KALITI
 
-  // --- YUKLASH ---
-  useEffect(() => {
-    const savedCats = JSON.parse(localStorage.getItem('categoryList') || "[]");
-    setCategories(savedCats);
-  }, []);
-
-  // --- QO'SHISH ---
-  const handleAdd = () => {
-    if (!newCategory.trim()) return alert("Kategoriya nomini yozing!");
-    
-    // Bir xil nomli kategoriya borligini tekshirish
-    if (categories.some(c => c.name.toLowerCase() === newCategory.toLowerCase())) {
-        return alert("Bu kategoriya allaqachon mavjud!");
+  // --- 1. BAZADAN YUKLASH ---
+  const fetchCategories = async () => {
+    try {
+        const res = await fetch('https://iphone-house-api.onrender.com/api/categories', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setCategories(data);
+            // Boshqa sahifalar tez ishlashi uchun xotiraga ham yangilab qo'yamiz
+            localStorage.setItem('categoryList', JSON.stringify(data)); 
+        }
+    } catch (err) {
+        console.error(err);
+        toast.error("Kategoriyalarni yuklashda xatolik yuz berdi!");
     }
-
-    const updatedList = [...categories, { id: Date.now(), name: newCategory }];
-    setCategories(updatedList);
-    localStorage.setItem('categoryList', JSON.stringify(updatedList));
-    setNewCategory('');
   };
 
-  // --- O'CHIRISH ---
-  const handleDelete = (id) => {
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  // --- 2. BAZAGA QO'SHISH ---
+  const handleAdd = async () => {
+    if (!newCategory.trim()) return toast.error("Kategoriya nomini yozing!");
+    
+    if (categories.some(c => c.name.toLowerCase() === newCategory.trim().toLowerCase())) {
+        return toast.error("Bu kategoriya allaqachon mavjud!");
+    }
+
+    try {
+        const res = await fetch('https://iphone-house-api.onrender.com/api/categories', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ name: newCategory.trim() })
+        });
+
+        if (res.ok) {
+            toast.success("Kategoriya muvaffaqiyatli qo'shildi!");
+            setNewCategory('');
+            fetchCategories(); // Jadvalni yangilash
+        } else {
+            toast.error("Qo'shishda xatolik yuz berdi.");
+        }
+    } catch (err) {
+        toast.error("Server bilan aloqa yo'q!");
+    }
+  };
+
+  // --- 3. BAZADAN O'CHIRISH ---
+  const handleDelete = async (id) => {
     if(window.confirm("Kategoriyani o'chirmoqchimisiz?")) {
-        const updatedList = categories.filter(c => c.id !== id);
-        setCategories(updatedList);
-        localStorage.setItem('categoryList', JSON.stringify(updatedList));
+        try {
+            const res = await fetch(`https://iphone-house-api.onrender.com/api/categories/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (res.ok) {
+                toast.success("Kategoriya o'chirildi!");
+                fetchCategories(); // Jadvalni yangilash
+            } else {
+                const errorData = await res.json();
+                toast.error(errorData.error || "O'chirib bo'lmaydi! (Balki bu kategoriyada tovarlar bordir)");
+            }
+        } catch (err) {
+            toast.error("Server bilan aloqa yo'q!");
+        }
     }
   };
 
@@ -56,9 +102,10 @@ const CategorySettings = () => {
                             placeholder="Masalan: Telefonlar"
                             value={newCategory}
                             onChange={(e) => setNewCategory(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAdd()} // Enter bosilganda ham saqlaydi
                         />
                     </div>
-                    <button onClick={handleAdd} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200">
+                    <button onClick={handleAdd} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition-all">
                         Qo'shish
                     </button>
                 </div>
@@ -68,19 +115,20 @@ const CategorySettings = () => {
         {/* O'NG: RO'YXAT */}
         <div className="col-span-8">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-4 border-b bg-gray-50 font-bold text-gray-600">
-                    Mavjud kategoriyalar ({categories.length})
+                <div className="p-4 border-b bg-gray-50 font-bold text-gray-600 flex justify-between">
+                    <span>Mavjud kategoriyalar ({categories.length})</span>
+                    <span className="text-xs font-normal text-gray-400">Barcha xodimlar uchun umumiy ro'yxat</span>
                 </div>
                 {categories.length === 0 ? (
                     <div className="p-8 text-center text-gray-400">Hozircha kategoriyalar yo'q</div>
                 ) : (
                     <ul className="divide-y">
                         {categories.map(cat => (
-                            <li key={cat.id} className="p-4 flex justify-between items-center hover:bg-gray-50">
+                            <li key={cat.id} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
                                 <span className="font-medium text-gray-800 flex items-center gap-2">
                                     <Layers size={18} className="text-blue-500"/> {cat.name}
                                 </span>
-                                <button onClick={() => handleDelete(cat.id)} className="p-2 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg">
+                                <button onClick={() => handleDelete(cat.id)} className="p-2 text-red-500 bg-red-50 hover:bg-red-500 hover:text-white rounded-lg transition-all" title="O'chirish">
                                     <Trash2 size={18}/>
                                 </button>
                             </li>
