@@ -172,11 +172,8 @@ const SupplierIncomeList = () => {
   const filteredInvoices = invoices.filter(inv => {
       const matchText = (inv.supplierName && inv.supplierName.toLowerCase().includes(searchTerm.toLowerCase())) ||
                         (inv.invoiceNumber && inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+      
       if (!matchText) return false;
-      // Agar jarayonda bo'lsa faqat o'zi ko'rsin, qolgan hamma narsani hamma ko'raversin (Direktordan tashqari)
-      if (inv.status === 'Jarayonda' && userRole !== 'director' && inv.userName !== currentUserName) {
-          return false;
-      }
       return true;
   });
 
@@ -384,3 +381,4 @@ const SupplierIncomeList = () => {
 };
 
 export default SupplierIncomeList;
+
