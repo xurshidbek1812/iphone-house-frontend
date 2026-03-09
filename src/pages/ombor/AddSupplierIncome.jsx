@@ -15,7 +15,7 @@ const AddSupplierIncome = () => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [supplier, setSupplier] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState(generateInvoiceNumber()); 
-  const [exchangeRate, setExchangeRate] = useState(''); 
+  const [exchangeRate, setExchangeRate] = useState(localStorage.getItem('globalExchangeRate') || '12500'); 
 
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false); 
@@ -24,13 +24,13 @@ const AddSupplierIncome = () => {
   const [products, setProducts] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
   
-  // --- YANGILANGAN INPUTLAR ---
+  // INPUTLAR
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [inputCount, setInputCount] = useState('');
-  const [inputPrice, setInputPrice] = useState(''); // Kirim narxi
-  const [inputMarkup, setInputMarkup] = useState(''); // Ustama foizi
-  const [inputSalePrice, setInputSalePrice] = useState(''); // Sotuv narxi
+  const [inputPrice, setInputPrice] = useState(''); 
+  const [inputMarkup, setInputMarkup] = useState(''); 
+  const [inputSalePrice, setInputSalePrice] = useState(''); 
   const [inputCurrency, setInputCurrency] = useState('UZS');
 
   useEffect(() => {
@@ -43,27 +43,36 @@ const AddSupplierIncome = () => {
       })
       .then(data => setProducts(data))
       .catch(err => {
-          toast.error("Server bilan aloqa yo'q!");
+          toast.error("Server bilan aloqa yo'q yoki Token eskirgan!");
       });
 
     const savedSuppliers = JSON.parse(localStorage.getItem('suppliersList') || "[]");
     setSuppliersList(savedSuppliers);
-  }, []);
+  }, [token]);
 
-  // --- MATEMATIKA: USTAMA VA SOTUV NARXINI SINXRONLASH ---
+  // ==========================================
+  // --- MATEMATIKA: DOLLARNI SO'MGA O'GIRISH ---
+  // ==========================================
+  const getCostInUZS = (price, currency, rate) => {
+      const numPrice = Number(price) || 0;
+      const numRate = Number(rate) || 12500;
+      return currency === 'USD' ? numPrice * numRate : numPrice;
+  };
+
   const handlePriceChange = (val) => {
       setInputPrice(val);
-      // Agar ustama kiritilgan bo'lsa, sotuv narxini yangilaymiz
+      const costUZS = getCostInUZS(val, inputCurrency, exchangeRate);
       if (inputMarkup && val) {
-          const sale = Number(val) + (Number(val) * (Number(inputMarkup) / 100));
+          const sale = costUZS + (costUZS * (Number(inputMarkup) / 100));
           setInputSalePrice(Math.round(sale));
       }
   };
 
   const handleMarkupChange = (val) => {
       setInputMarkup(val);
+      const costUZS = getCostInUZS(inputPrice, inputCurrency, exchangeRate);
       if (inputPrice && val) {
-          const sale = Number(inputPrice) + (Number(inputPrice) * (Number(val) / 100));
+          const sale = costUZS + (costUZS * (Number(val) / 100));
           setInputSalePrice(Math.round(sale));
       } else if (!val) {
           setInputSalePrice('');
@@ -72,11 +81,21 @@ const AddSupplierIncome = () => {
 
   const handleSalePriceChange = (val) => {
       setInputSalePrice(val);
-      if (inputPrice && val && Number(inputPrice) > 0) {
-          const markup = ((Number(val) - Number(inputPrice)) / Number(inputPrice)) * 100;
+      const costUZS = getCostInUZS(inputPrice, inputCurrency, exchangeRate);
+      if (inputPrice && val && costUZS > 0) {
+          const markup = ((Number(val) - costUZS) / costUZS) * 100;
           setInputMarkup(markup.toFixed(2));
       } else if (!val) {
           setInputMarkup('');
+      }
+  };
+
+  const handleCurrencyChange = (val) => {
+      setInputCurrency(val);
+      const costUZS = getCostInUZS(inputPrice, val, exchangeRate);
+      if (inputPrice && inputMarkup) {
+          const sale = costUZS + (costUZS * (Number(inputMarkup) / 100));
+          setInputSalePrice(Math.round(sale));
       }
   };
 
@@ -86,10 +105,11 @@ const AddSupplierIncome = () => {
     setInputPrice(prod.buyPrice || '');
     setInputCurrency(prod.buyCurrency || 'UZS'); 
     
-    // Eski sotuv narxidan kelib chiqib foizni hisoblab qo'yamiz
-    if (prod.buyPrice && prod.salePrice) {
+    const costUZS = getCostInUZS(prod.buyPrice, prod.buyCurrency || 'UZS', exchangeRate);
+
+    if (costUZS > 0 && prod.salePrice) {
         setInputSalePrice(prod.salePrice);
-        const markup = ((prod.salePrice - prod.buyPrice) / prod.buyPrice) * 100;
+        const markup = ((prod.salePrice - costUZS) / costUZS) * 100;
         setInputMarkup(markup.toFixed(2));
     } else {
         setInputSalePrice('');
@@ -115,7 +135,7 @@ const AddSupplierIncome = () => {
         count: Number(inputCount),
         price: Number(inputPrice),
         markup: Number(inputMarkup),
-        salePrice: Number(inputSalePrice), // Yangi!
+        salePrice: Number(inputSalePrice), 
         currency: inputCurrency,
         total: Number(inputCount) * Number(inputPrice)
     };
@@ -129,28 +149,32 @@ const AddSupplierIncome = () => {
     setInputSalePrice('');
   };
 
-  // Jadval ichida o'zgartirish funksiyasi (Bu yerda ham matematika ishlaydi)
   const updateItem = (id, field, value) => {
     setSelectedItems(selectedItems.map(item => {
       if (item.id === id) {
-        const updatedItem = { ...item, [field]: Number(value) || '' };
+        const updatedItem = { ...item, [field]: value };
         
-        if (field === 'price') {
-            updatedItem.total = updatedItem.count * updatedItem.price;
+        // Jadvolda ma'lumot o'zgarganda qayta hisoblash
+        const currentCurrency = field === 'currency' ? value : updatedItem.currency;
+        const currentPrice = field === 'price' ? Number(value) : Number(updatedItem.price);
+        const costUZS = getCostInUZS(currentPrice, currentCurrency, exchangeRate);
+
+        if (field === 'price' || field === 'currency') {
+            updatedItem.total = Number(updatedItem.count) * currentPrice;
             if (updatedItem.markup) {
-                updatedItem.salePrice = Math.round(updatedItem.price + (updatedItem.price * (updatedItem.markup / 100)));
+                updatedItem.salePrice = Math.round(costUZS + (costUZS * (Number(updatedItem.markup) / 100)));
             }
         }
         if (field === 'markup') {
-            updatedItem.salePrice = Math.round(updatedItem.price + (updatedItem.price * (updatedItem.markup / 100)));
+            updatedItem.salePrice = Math.round(costUZS + (costUZS * (Number(value) / 100)));
         }
         if (field === 'salePrice') {
-            if (updatedItem.price > 0) {
-                updatedItem.markup = Number((((updatedItem.salePrice - updatedItem.price) / updatedItem.price) * 100).toFixed(2));
+            if (costUZS > 0) {
+                updatedItem.markup = Number((((Number(value) - costUZS) / costUZS) * 100).toFixed(2));
             }
         }
         if (field === 'count') {
-            updatedItem.total = updatedItem.count * updatedItem.price;
+            updatedItem.total = Number(value) * Number(updatedItem.price);
         }
         return updatedItem;
       }
@@ -217,72 +241,79 @@ const AddSupplierIncome = () => {
 
         <div className="grid grid-cols-12 gap-6">
             <div className={`space-y-6 ${userRole === 'director' ? 'col-span-8' : 'col-span-12'}`}>
+                
+                {/* --- ASOSIY MA'LUMOTLAR --- */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Asosiy ma'lumotlar</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <input type="date" className="w-full p-3 border rounded-lg outline-blue-500" value={date} onChange={e=>setDate(e.target.value)}/>
-                        <input type="number" className="w-full p-3 border rounded-lg outline-blue-500 font-bold" placeholder="Faktura №" value={invoiceNumber} onChange={e=>setInvoiceNumber(e.target.value)} />
+                        <input type="number" className={`w-full p-3 border rounded-lg outline-blue-500 font-bold ${isSubmitted && !invoiceNumber ? 'border-red-500 bg-red-50' : ''}`} placeholder="Faktura №" value={invoiceNumber} onChange={e=>setInvoiceNumber(e.target.value)} />
                         <select className={`w-full p-3 border rounded-lg outline-blue-500 ${isSubmitted && !supplier ? 'border-red-500 bg-red-50' : 'bg-white'}`} value={supplier} onChange={(e) => setSupplier(e.target.value)}>
                             <option value="">Ta'minotchi tanlang...</option>
                             {suppliersList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                         </select>
-                        <input type="number" className="w-full p-3 border rounded-lg border-blue-300 bg-blue-50 outline-blue-500" placeholder="Kurs (12500)" value={exchangeRate} onChange={e=>setExchangeRate(e.target.value)}/>
+                        <input type="number" className="w-full p-3 border rounded-lg border-blue-300 bg-blue-50 outline-blue-500" placeholder="Kurs (Masalan: 12500)" value={exchangeRate} onChange={e=>setExchangeRate(e.target.value)}/>
                     </div>
                 </div>
 
+                {/* --- TOVAR TANLASH VA NARXLASH (YANGI KENGAYTIRILGAN DIZAYN) --- */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Tovarni tanlash va Narxlash</h3>
                     
-                    {/* YANAGI DIZAYN (INPUTLAR KO'PAYDI) */}
-                    <div className="grid grid-cols-12 gap-3 items-end">
-                        <div className="col-span-3 relative">
-                            <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Tovar nomi / Kod</label>
-                            <input type="text" className="w-full p-2.5 border rounded-lg outline-blue-500 font-bold text-sm" placeholder="Qidirish..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setSelectedProduct(null); }} />
-                            {searchTerm && !selectedProduct && filteredProducts.length > 0 && (
-                                <ul className="absolute z-10 w-full bg-white border rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto">
-                                    {filteredProducts.map(p => (
-                                        <li key={p.id} onClick={() => handleSelectProduct(p)} className="p-3 hover:bg-blue-50 cursor-pointer text-sm border-b">
-                                            <div className="font-bold text-gray-800">{p.name}</div>
-                                            <div className="text-blue-600 font-mono font-bold text-xs mt-1">ID: #{p.customId} | Narx: {p.buyPrice}</div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                        
-                        <div className="col-span-1">
-                            <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Soni</label>
-                            <input type="number" className="w-full p-2.5 border rounded-lg outline-blue-500 text-center font-bold text-sm" value={inputCount} onChange={e => setInputCount(e.target.value)} />
+                    <div className="flex flex-col gap-4">
+                        {/* 1-QATOR: Tovar, Soni, Valyuta, Kirim */}
+                        <div className="flex flex-wrap md:flex-nowrap gap-4 items-start">
+                            <div className="flex-1 relative min-w-[200px]">
+                                <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Tovar nomi / Kod</label>
+                                <input type="text" className="w-full p-3 border rounded-lg outline-blue-500 font-bold text-sm" placeholder="Qidirish..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setSelectedProduct(null); }} />
+                                {searchTerm && !selectedProduct && filteredProducts.length > 0 && (
+                                    <ul className="absolute z-50 w-full bg-white border rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto">
+                                        {filteredProducts.map(p => (
+                                            <li key={p.id} onClick={() => handleSelectProduct(p)} className="p-3 hover:bg-blue-50 cursor-pointer text-sm border-b">
+                                                <div className="font-bold text-gray-800">{p.name}</div>
+                                                <div className="text-blue-600 font-mono font-bold text-xs mt-1">ID: #{p.customId} | Narx: {p.buyPrice} {p.buyCurrency}</div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                            
+                            <div className="w-24">
+                                <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Soni</label>
+                                <input type="number" className="w-full p-3 border rounded-lg outline-blue-500 text-center font-bold text-sm" value={inputCount} onChange={e => setInputCount(e.target.value)} />
+                            </div>
+
+                            <div className="w-32">
+                                <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Valyuta</label>
+                                <select className="w-full p-3 border rounded-lg outline-blue-500 text-sm font-bold bg-white" value={inputCurrency} onChange={e=>handleCurrencyChange(e.target.value)}>
+                                    <option value="UZS">UZS</option>
+                                    <option value="USD">USD</option>
+                                </select>
+                            </div>
+
+                            <div className="w-40">
+                                <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Kirim Narx</label>
+                                <input type="number" className="w-full p-3 border rounded-lg outline-blue-500 font-bold text-sm" value={inputPrice} onChange={e => handlePriceChange(e.target.value)} />
+                            </div>
                         </div>
 
-                        <div className="col-span-2">
-                            <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Kirim Narx</label>
-                            <input type="number" className="w-full p-2.5 border rounded-lg outline-blue-500 font-bold text-sm" value={inputPrice} onChange={e => handlePriceChange(e.target.value)} />
-                        </div>
+                        {/* 2-QATOR: Ustama, Sotuv narxi, Qo'shish tugmasi */}
+                        <div className="flex flex-wrap md:flex-nowrap gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-100 mt-2">
+                            <div className="w-32">
+                                <label className="text-[11px] font-bold text-amber-600 uppercase mb-1 block">Ustama (%)</label>
+                                <input type="number" className="w-full p-3 border border-amber-200 bg-amber-50 rounded-lg outline-amber-500 font-bold text-amber-700 text-sm text-center" placeholder="Misol: 10" value={inputMarkup} onChange={e => handleMarkupChange(e.target.value)} />
+                            </div>
 
-                        {/* YANGI INPUTLAR */}
-                        <div className="col-span-2">
-                            <label className="text-[11px] font-bold text-amber-600 uppercase mb-1 block">Ustama (%)</label>
-                            <input type="number" className="w-full p-2.5 border border-amber-200 bg-amber-50 rounded-lg outline-amber-500 font-bold text-amber-700 text-sm text-center" placeholder="Masalan: 10" value={inputMarkup} onChange={e => handleMarkupChange(e.target.value)} />
-                        </div>
+                            <div className="flex-1">
+                                <label className="text-[11px] font-bold text-emerald-600 uppercase mb-1 block">Sotuv Narx <span className="text-gray-400 font-normal">(Har doim So'mda)</span></label>
+                                <input type="number" className="w-full p-3 border border-emerald-200 bg-emerald-50 rounded-lg outline-emerald-500 font-bold text-emerald-700 text-sm" placeholder="Avtomat hisoblanadi" value={inputSalePrice} onChange={e => handleSalePriceChange(e.target.value)} />
+                            </div>
 
-                        <div className="col-span-2">
-                            <label className="text-[11px] font-bold text-emerald-600 uppercase mb-1 block">Sotuv Narx</label>
-                            <input type="number" className="w-full p-2.5 border border-emerald-200 bg-emerald-50 rounded-lg outline-emerald-500 font-bold text-emerald-700 text-sm" value={inputSalePrice} onChange={e => handleSalePriceChange(e.target.value)} />
-                        </div>
-
-                        <div className="col-span-1">
-                            <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Valyuta</label>
-                            <select className="w-full p-2.5 border rounded-lg outline-blue-500 text-sm font-bold bg-white" value={inputCurrency} onChange={e=>setInputCurrency(e.target.value)}>
-                                <option value="UZS">UZS</option>
-                                <option value="USD">USD</option>
-                            </select>
-                        </div>
-                        
-                        <div className="col-span-1">
-                            <button onClick={handleAddItem} className="w-full h-[42px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-95 transition-all flex justify-center items-center shadow-md">
-                                <Plus size={20}/>
-                            </button>
+                            <div className="w-40">
+                                <button onClick={handleAddItem} className="w-full h-[46px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-95 transition-all flex justify-center items-center shadow-md font-bold gap-2">
+                                    <Plus size={20}/> Qo'shish
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -302,9 +333,12 @@ const AddSupplierIncome = () => {
             )}
         </div>
 
+        {/* --- PASTKI JADVAL QISMI --- */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mt-6 min-h-[400px] flex flex-col">
             <div className="flex border-b">
-                <button onClick={() => setActiveTab('products')} className={`px-8 py-4 font-bold text-sm transition-all ${activeTab === 'products' ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'}`}>Qidiruv (Katalog)</button>
+                <button onClick={() => setActiveTab('products')} className={`px-8 py-4 font-bold text-sm transition-all ${activeTab === 'products' ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'}`}>
+                    Qidiruv (Katalog)
+                </button>
                 <button onClick={() => setActiveTab('invoice')} className={`px-8 py-4 font-bold text-sm transition-all relative ${activeTab === 'invoice' ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'}`}>
                     Faktura tovarlari 
                     {selectedItems.length > 0 && <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{selectedItems.length}</span>}
@@ -313,7 +347,6 @@ const AddSupplierIncome = () => {
 
             {activeTab === 'products' && (
                 <div className="p-6 flex flex-col h-full">
-                    {/* ... (Qidiruv jadvali o'zgarishsiz qoldi) ... */}
                     <div className="overflow-auto border rounded-xl">
                         <table className="w-full text-left">
                             <thead className="bg-gray-50 text-gray-500 text-xs uppercase sticky top-0">
@@ -342,18 +375,19 @@ const AddSupplierIncome = () => {
             {activeTab === 'invoice' && (
                 <div className="p-6 flex flex-col h-full animate-in fade-in">
                     {selectedItems.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-gray-400">Faktura bo'sh. Mahsulot tanlang.</div>
+                        <div className="flex flex-col items-center justify-center h-64 text-gray-400">Faktura bo'sh. Yuqoridan mahsulot tanlang.</div>
                     ) : (
                         <div className="overflow-auto border rounded-xl">
                             <table className="w-full text-left">
                                 <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-black tracking-wider sticky top-0">
                                     <tr>
                                         <th className="p-3">Kod</th>
-                                        <th className="p-3">Nomi</th>
-                                        <th className="p-3 w-24 text-center">Soni</th>
+                                        <th className="p-3 min-w-[150px]">Nomi</th>
+                                        <th className="p-3 w-20 text-center">Soni</th>
                                         <th className="p-3 w-32">Kirim Narx</th>
+                                        <th className="p-3 w-24">Valyuta</th>
                                         <th className="p-3 w-24 text-center text-amber-600">Ustama %</th>
-                                        <th className="p-3 w-32 text-emerald-600">Sotuv Narx</th>
+                                        <th className="p-3 w-36 text-emerald-600">Sotuv (UZS)</th>
                                         {userRole === 'director' && <th className="p-3 w-32 text-right">Jami Kirim</th>}
                                         <th className="p-3 w-12 text-center">X</th>
                                     </tr>
@@ -361,18 +395,24 @@ const AddSupplierIncome = () => {
                                 <tbody className="divide-y text-sm font-bold">
                                     {selectedItems.map((item, index) => (
                                         <tr key={index} className="hover:bg-blue-50 transition-colors">
-                                            <td className="p-3 font-mono text-blue-600">{item.customId}</td>
+                                            <td className="p-3 font-mono text-blue-600">#{item.customId}</td>
                                             <td className="p-3 text-gray-800">{item.name}</td>
-                                            <td className="p-3">
+                                            <td className="p-2">
                                                 <input type="number" className="w-full p-2 border rounded-lg text-center outline-blue-500" value={item.count} onChange={(e) => updateItem(item.id, 'count', e.target.value)} />
                                             </td>
-                                            <td className="p-3">
+                                            <td className="p-2">
                                                 <input type="number" className="w-full p-2 border rounded-lg outline-blue-500" value={item.price} onChange={(e) => updateItem(item.id, 'price', e.target.value)} />
                                             </td>
-                                            <td className="p-3">
+                                            <td className="p-2">
+                                                <select className="w-full p-2 border rounded-lg bg-white outline-blue-500 text-xs" value={item.currency} onChange={(e) => updateItem(item.id, 'currency', e.target.value)}>
+                                                    <option value="UZS">UZS</option>
+                                                    <option value="USD">USD</option>
+                                                </select>
+                                            </td>
+                                            <td className="p-2">
                                                 <input type="number" className="w-full p-2 border border-amber-200 bg-amber-50 rounded-lg text-center outline-amber-500 text-amber-700" value={item.markup} onChange={(e) => updateItem(item.id, 'markup', e.target.value)} />
                                             </td>
-                                            <td className="p-3">
+                                            <td className="p-2">
                                                 <input type="number" className="w-full p-2 border border-emerald-200 bg-emerald-50 rounded-lg outline-emerald-500 text-emerald-700" value={item.salePrice} onChange={(e) => updateItem(item.id, 'salePrice', e.target.value)} />
                                             </td>
                                             {userRole === 'director' && <td className="p-3 text-right text-gray-800">{item.total.toLocaleString()}</td>}
@@ -388,6 +428,25 @@ const AddSupplierIncome = () => {
                 </div>
             )}
         </div>
+
+        {/* TASDIQLASH MODALI (O'zgarishsiz) */}
+        {showConfirmModal && (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+                <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in zoom-in-95">
+                    <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600">
+                        <CheckCircle size={32} />
+                    </div>
+                    <h3 className="text-xl font-bold text-center text-gray-800 mb-2">Fakturani saqlaysizmi?</h3>
+                    <p className="text-center text-gray-500 text-sm mb-6">
+                        Barcha kiritilgan ma'lumotlar to'g'riligiga ishonch hosil qiling.
+                    </p>
+                    <div className="flex gap-3">
+                        <button onClick={() => setShowConfirmModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all">Orqaga</button>
+                        <button onClick={handleSaveInvoice} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all">Tasdiqlash</button>
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 };
