@@ -62,7 +62,7 @@ import WarehouseOperations from './pages/ombor/WarehouseOperations';
 import InternalIncome from './pages/ombor/InternalIncome';
 import InternalExpense from './pages/ombor/InternalExpense';
 import SupplierIncomeList from './pages/ombor/SupplierIncomeList';
-import EditSupplierIncome from './pages/Warehouse/EditSupplierIncome';
+import EditSupplierIncome from './pages/ombor/EditSupplierIncome';
 import AddSupplierIncome from './pages/ombor/AddSupplierIncome'; 
 import SupplierReturn from './pages/ombor/SupplierReturn';
 import UnfinishedSales from './pages/ombor/UnfinishedSales';
