@@ -95,6 +95,7 @@ import AddContract from './pages/shartnoma/AddContract';
 
 // --- NAQD SAVDO ---
 import CashSales from './pages/sales/CashSales';
+import AddCashSale from './pages/sales/AddCashSale';
 import SalesReturns from './pages/sales/Returns';
 import SalesDiscounts from './pages/sales/Discounts';
 
@@ -291,6 +292,7 @@ function App() {
 
                 {/* NAQD SAVDO */}
                 <Route path="/savdo" element={<CashSales />} />
+                <Route path="/naqd-savdo/qoshish" element={<AddCashSales />} />
                 <Route path="/savdo/qaytarish" element={<SalesReturns />} />
                 <Route path="/savdo/chegirmalar" element={<SalesDiscounts />} />
 
