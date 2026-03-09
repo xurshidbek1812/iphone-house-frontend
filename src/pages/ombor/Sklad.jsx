@@ -213,6 +213,8 @@ const Sklad = () => {
                 <tr>
                     <th className="p-5">ID (Kod)</th>
                     <th className="p-5">Nomi</th>
+                    {/* YANGI QO'SHILDI: Kategoriya ustuni */}
+                    <th className="p-5 text-center">Kategoriya</th>
                     <th className="p-5 text-center">Birlik</th>
                     {isDirector && <th className="p-5 text-right bg-amber-50/50 text-amber-700">Kirim Narxi</th>}
                     <th className="p-5 text-right text-emerald-700">Sotuv Narxi</th>
@@ -226,11 +228,23 @@ const Sklad = () => {
                         <tr key={p.id} className="hover:bg-blue-50/30 transition-colors group">
                             <td className="p-5 font-mono text-blue-600">#{p.customId}</td>
                             <td className="p-5 text-slate-800">{p.name}</td>
+                            
+                            {/* YANGI QO'SHILDI: Kategoriya ma'lumoti */}
+                            <td className="p-5 text-center text-slate-500 font-medium">
+                                <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-[11px] uppercase tracking-wider">
+                                    {p.category || 'Kategoriyasiz'}
+                                </span>
+                            </td>
+                            
                             <td className="p-5 text-center text-slate-400">{p.unit}</td>
                             {isDirector && (
-                                <td className="p-5 text-right text-slate-600 bg-amber-50/20">{Number(p.buyPrice).toLocaleString()} <span className="text-[10px] text-slate-400">{p.buyCurrency}</span></td>
+                                <td className="p-5 text-right text-slate-600 bg-amber-50/20">
+                                    {Number(p.buyPrice).toLocaleString()} <span className="text-[10px] text-slate-400">{p.buyCurrency}</span>
+                                </td>
                             )}
-                            <td className="p-5 text-right text-emerald-600">{Number(p.salePrice).toLocaleString()} <span className="text-[10px] text-emerald-400">{p.saleCurrency}</span></td>
+                            <td className="p-5 text-right text-emerald-600">
+                                {Number(p.salePrice).toLocaleString()} <span className="text-[10px] text-emerald-400">{p.saleCurrency}</span>
+                            </td>
                             <td className={`p-5 text-center ${p.quantity === 0 ? 'text-rose-500' : 'text-slate-700'}`}>
                                 <span className={`px-3 py-1 rounded-lg ${p.quantity === 0 ? 'bg-rose-50' : 'bg-slate-100'}`}>{p.quantity}</span>
                             </td>
@@ -245,7 +259,7 @@ const Sklad = () => {
                         </tr>
                     ))
                 ) : (
-                    <tr><td colSpan="8" className="p-20 text-center text-slate-300 font-bold">Mahsulot topilmadi</td></tr>
+                    <tr><td colSpan={isDirector ? "8" : "7"} className="p-20 text-center text-slate-300 font-bold">Mahsulot topilmadi</td></tr>
                 )}
             </tbody>
         </table>
@@ -512,6 +526,7 @@ const Sklad = () => {
 
 
 export default Sklad;
+
 
 
 
