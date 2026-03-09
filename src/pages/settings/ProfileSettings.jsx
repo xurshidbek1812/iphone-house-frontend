@@ -163,12 +163,7 @@ const ProfileSettings = () => {
         setIsChangingPassword(false);
         resetSecurityForm();
         toast.success("Parol muvaffaqiyatli o'zgartirildi! Xavfsizlik uchun qayta kiring.");
-        
-        // Parol o'zgargani uchun tizimdan chiqarib yuboramiz
-        setTimeout(() => {
-            localStorage.clear();
-            window.location.href = '/login';
-        }, 2000);
+      
 
     } catch (err) {
         toast.error("Server bilan xatolik yuz berdi");
@@ -367,3 +362,4 @@ const ProfileSettings = () => {
 };
 
 export default ProfileSettings;
+
