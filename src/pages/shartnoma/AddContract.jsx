@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+// XATO SHU YERDA EDI: Ikonkalar to'liq chaqirilmabdi! Endi hammasi joyida:
 import { 
   ArrowLeft, Check, ChevronRight, Search, User, 
-  X, Briefcase, Users, ShoppingCart, Calendar, Save
+  X, Briefcase, Users, ShoppingCart, Calendar, Save, 
+  CheckCircle, Plus, Trash2 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// QIDIRUV KOMPONENTI (Oq oyna xatosi oldini olish uchun tashqariga chiqarildi)
+// QIDIRUV KOMPONENTI
 const SearchableSelect = ({ placeholder, onSelect, excludeIds = [], customers = [] }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -188,21 +190,6 @@ const AddContract = () => {
       p.customId.toString().includes(productSearch)
   );
 
-  const CustomerCard = ({ customer, onRemove, title }) => (
-    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm relative flex flex-col md:flex-row gap-4 items-center">
-        <div className="bg-blue-100 p-3 rounded-full text-blue-600"><User size={24} /></div>
-        <div className="flex-1">
-            <div className="text-xs text-gray-500 mb-1">{title} (ID: {customer.id})</div>
-            <h3 className="text-lg font-bold text-gray-900 uppercase">{customer.lastName} {customer.firstName}</h3>
-            <div className="flex gap-4 mt-2 text-sm text-gray-600">
-                <span className="font-medium">Pass: {customer.document?.series} {customer.document?.number}</span>
-                <span className="font-medium">JSHSHIR: {customer.pinfl}</span>
-            </div>
-        </div>
-        <button onClick={onRemove} className="absolute top-4 right-4 text-gray-400 hover:text-red-500"><X size={20} /></button>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
@@ -315,12 +302,12 @@ const AddContract = () => {
                             <SearchableSelect placeholder="Qo'shimcha javobgarlarni qo'shish..." onSelect={addCoBorrower} excludeIds={[contractData.mainCustomer?.id, ...contractData.coBorrowers.map(c => c.id)].filter(Boolean)} customers={customers} />
                         </div>
                         <div className="pt-6 border-t border-gray-100">
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">3. Sotuvchini tanlang *</label>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">3. Jalb qilgan xodim (Sotuvchi) *</label>
                             <div className="relative">
                                 <Briefcase className="absolute left-4 top-3.5 text-gray-400" size={20}/>
-                                <select className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl outline-none font-medium bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500" value={contractData.staffId} onChange={(e) => setContractData(prev => ({...prev, staffId: e.target.value}))}>
+                                <select className={`w-full pl-12 pr-4 py-3 border rounded-xl outline-none font-medium appearance-none transition-colors ${contractData.staffId ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 bg-gray-50 text-gray-700 focus:bg-white focus:border-blue-500'}`} value={contractData.staffId} onChange={(e) => setContractData(prev => ({...prev, staffId: e.target.value}))}>
                                     <option value="">Ro'yxatdan xodimni tanlang...</option>
-                                    {staffList.map(user => (<option key={user.id} value={user.id}>{user.fullName}</option>))}
+                                    {staffList.map(user => (<option key={user.id} value={user.id}>{user.fullName} ({user.role})</option>))}
                                 </select>
                             </div>
                         </div>
@@ -356,7 +343,7 @@ const AddContract = () => {
                                                     <td className="p-3 font-mono text-gray-500 text-xs">#{p.customId}</td>
                                                     <td className="p-3 font-medium">{p.name}</td>
                                                     <td className="p-3 text-center font-bold text-blue-600">{p.quantity}</td>
-                                                    <td className="p-3 text-right font-bold">{p.salePrice?.toLocaleString()}</td>
+                                                    <td className="p-3 text-right font-bold">{Number(p.salePrice).toLocaleString()}</td>
                                                     <td className="p-3 text-center">
                                                         <button disabled={isAdded || p.quantity <= 0} onClick={() => addProductToCart(p)} className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white disabled:bg-gray-100 disabled:text-gray-300">
                                                             {isAdded ? <Check size={16}/> : <Plus size={16}/>}
@@ -386,8 +373,8 @@ const AddContract = () => {
                                                 <tr key={item.id}>
                                                     <td className="p-3 font-bold">{item.name}</td>
                                                     <td className="p-3 text-center"><input type="number" min="1" max={item.quantity} value={item.qty} onChange={(e) => updateItemQty(item.id, Number(e.target.value))} className="w-full p-2 border rounded-lg text-center outline-blue-500 font-bold bg-gray-50"/></td>
-                                                    <td className="p-3 text-right text-gray-600">{item.salePrice?.toLocaleString()}</td>
-                                                    <td className="p-3 text-right font-black text-blue-600">{(item.salePrice * item.qty).toLocaleString()}</td>
+                                                    <td className="p-3 text-right text-gray-600">{Number(item.salePrice).toLocaleString()}</td>
+                                                    <td className="p-3 text-right font-black text-blue-600">{(Number(item.salePrice) * item.qty).toLocaleString()}</td>
                                                     <td className="p-3 text-center"><button onClick={() => removeItem(item.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></td>
                                                 </tr>
                                             ))}
