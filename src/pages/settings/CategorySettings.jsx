@@ -144,3 +144,4 @@ const CategorySettings = () => {
 };
 
 export default CategorySettings;
+
