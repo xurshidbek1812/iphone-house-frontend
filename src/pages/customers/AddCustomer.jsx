@@ -23,9 +23,9 @@ const AddCustomer = () => {
   const [step, setStep] = useState(1);
   const [errors, setErrors] = useState({});
   const [isLoadingData, setIsLoadingData] = useState(isEditMode); 
-  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false); // <--- CHIROYLI OYNA UCHUN STATE
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false); 
 
-  const [regionsData, setRegionsData] = useState([]);
+  const [regionsData, setRegionsData] = useState([]); // API dan keladi
   const [districts, setDistricts] = useState([]);
 
   const token = localStorage.getItem('token');
@@ -39,7 +39,7 @@ const AddCustomer = () => {
     job: { type: 'ISHCHI', companyName: '', position: '', source: '' }
   });
 
-  // --- API: HUDUDLAR ---
+  // --- API: HUDUDLARNI BAZADAN YUKLASH ---
   useEffect(() => {
     const fetchRegions = async () => {
       try {
@@ -55,7 +55,7 @@ const AddCustomer = () => {
 
   // --- API: MIJOZ MA'LUMOTI (TAHRIRLASH) ---
   useEffect(() => {
-    if (isEditMode) {
+    if (isEditMode && regionsData.length > 0) {
         const fetchCustomerData = async () => {
             try {
                 const res = await fetch(`https://iphone-house-api.onrender.com/api/customers/${id}`, {
@@ -96,6 +96,9 @@ const AddCustomer = () => {
                     }
                 });
 
+                const selectedRegion = regionsData.find(r => r.id === data.address.regionId);
+                if (selectedRegion) setDistricts(selectedRegion.districts);
+
             } catch (error) {
                 toast.error("Xatolik: " + error.message);
                 navigate('/mijozlar');
@@ -105,15 +108,7 @@ const AddCustomer = () => {
         };
         fetchCustomerData();
     }
-  }, [isEditMode, id, navigate, token]);
-
-  // Hududlar yuklanganda tumanlarni moslashtirish (Tahrirlashda)
-  useEffect(() => {
-      if (regionsData.length > 0 && formData.address.regionId) {
-          const selectedRegion = regionsData.find(r => r.id === formData.address.regionId);
-          if (selectedRegion) setDistricts(selectedRegion.districts);
-      }
-  }, [regionsData, formData.address.regionId]);
+  }, [isEditMode, id, navigate, token, regionsData]);
 
   // --- HANDLERS ---
   const clearError = (field) => { if (errors[field]) setErrors(prev => ({ ...prev, [field]: null })); };
@@ -124,37 +119,39 @@ const AddCustomer = () => {
       clearError(name); 
   };
 
-  // --- JSHSHIR LOGIKASI ---
+  // --- YANGI JSHSHIR LOGIKASI (SOLISHTIRISH) ---
   const handlePinflChange = (e) => {
-    const val = e.target.value.replace(/\D/g, '').slice(0, 14); // Faqat 14 ta raqam
+    const val = e.target.value.replace(/\D/g, '').slice(0, 14); 
     setFormData(prev => ({ ...prev, pinfl: val }));
     clearError('pinfl');
 
-    // 14 xona to'liq kiritilganda sana va jinsni topish
     if (val.length === 14) {
         const sexCentury = parseInt(val[0]);
         const day = val.substring(1, 3);
         const month = val.substring(3, 5);
         const yearPart = val.substring(5, 7);
 
-        let gender = 'ERKAK';
+        let expectedGender = 'ERKAK';
         let yearPrefix = 1900;
 
-        if ([1, 3, 5].includes(sexCentury)) gender = 'ERKAK';
-        else if ([2, 4, 6].includes(sexCentury)) gender = 'AYOL';
+        if ([1, 3, 5].includes(sexCentury)) expectedGender = 'ERKAK';
+        else if ([2, 4, 6].includes(sexCentury)) expectedGender = 'AYOL';
 
         if ([1, 2].includes(sexCentury)) yearPrefix = 1800;
         else if ([3, 4].includes(sexCentury)) yearPrefix = 1900;
         else if ([5, 6].includes(sexCentury)) yearPrefix = 2000;
 
         const fullYear = yearPrefix + parseInt(yearPart);
-        const dob = `${fullYear}-${month}-${day}`;
+        // Format: YYYY-MM-DD
+        const expectedDob = `${fullYear}-${month}-${day}`;
 
-        const dateObj = new Date(dob);
-        if (!isNaN(dateObj.getTime())) {
-            setFormData(prev => ({ ...prev, gender, dob }));
-            clearError('dob');
-            toast.success("Tug'ilgan sana va jins avtomat aniqlandi!");
+        // Tekshirish: 1-bosqichda kiritilgan ma'lumotlar bilan mos tushadimi?
+        if (formData.gender !== expectedGender) {
+            setErrors(prev => ({ ...prev, pinfl: `Xato! JSHSHIR bo'yicha mijoz ${expectedGender} bo'lishi kerak.` }));
+        } else if (formData.dob !== expectedDob) {
+            setErrors(prev => ({ ...prev, pinfl: `Xato! JSHSHIR bo'yicha tug'ilgan sana ${expectedDob} bo'lishi kerak.` }));
+        } else {
+            toast.success("JSHSHIR tasdiqlandi!");
         }
     }
   };
@@ -204,16 +201,18 @@ const AddCustomer = () => {
             const b = new Date(formData.dob); 
             const t = new Date(); 
             const m = new Date(t.getFullYear() - 16, t.getMonth(), t.getDate()); 
-            if (b > m) setError('dob', "16 yoshdan kichik!"); 
+            if (b > m) setError('dob', "Mijoz 16 yoshdan kichik!"); 
         }
         break;
       case 2:
-        if (!formData.pinfl) setError('pinfl', "JSHSHIR shart"); 
-        else if (formData.pinfl.length !== 14) setError('pinfl', "14 xona bo'lishi kerak");
-        
         if (!formData.document.series || formData.document.series.length !== 2) setError('series', "2 harf");
         if (!formData.document.number || formData.document.number.length !== 7) setError('number', "7 xona");
         if (!formData.document.givenDate) setError('givenDate', "Sana yo'q");
+        
+        // JSHSHIR tekshiruvi (uzunligi va mosligi)
+        if (!formData.pinfl) setError('pinfl', "JSHSHIR shart"); 
+        else if (formData.pinfl.length !== 14) setError('pinfl', "14 xona bo'lishi kerak");
+        else if (errors.pinfl) isValid = false; // Agar solishtirishda xato chiqqan bo'lsa o'tkazmaydi
         break;
       case 3: 
         if (!formData.address.regionId) setError('regionId', "Viloyat yo'q"); 
@@ -233,7 +232,7 @@ const AddCustomer = () => {
 
   const handleNext = () => { if (validateStep()) step < 5 ? setStep(step + 1) : handleSubmit(); };
 
-  // --- SAQLASH FUNKSIYASI VA CHIROYLI MODAL ---
+  // --- SAQLASH FUNKSIYASI ---
   const handleSubmit = async () => {
     try {
       const url = isEditMode 
@@ -254,10 +253,7 @@ const AddCustomer = () => {
       const result = await response.json();
 
       if (response.ok) {
-        // MUvaffaqiyatli saqlanganda chiroyli oyna (Modal) ochiladi
         setIsSuccessModalOpen(true);
-        
-        // 2 soniyadan keyin avtomatik ro'yxatga qaytadi
         setTimeout(() => {
             setIsSuccessModalOpen(false);
             navigate('/mijozlar');
@@ -272,7 +268,6 @@ const AddCustomer = () => {
   const ErrorMsg = ({ field }) => errors[field] && (<div className="flex items-center gap-1 text-red-500 text-[11px] mt-0.5"><AlertCircle size={10} /> {errors[field]}</div>);
   const getInputClass = (field) => `w-full p-2.5 border rounded-lg text-sm outline-none transition-all ${errors[field] ? 'border-red-500 bg-red-50 ring-1 ring-red-200' : 'focus:ring-2 focus:ring-blue-500 border-gray-200'}`;
 
-  // 1-BOSQICH: SHAXSIY MA'LUMOTLAR
   const renderStep1 = () => (
     <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
       <h3 className="font-bold text-gray-800 text-center mb-6">Shaxsiy ma'lumotlar</h3>
@@ -291,7 +286,6 @@ const AddCustomer = () => {
       <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Tug'ilgan sanasi</label>
           <input type="date" name="dob" value={formData.dob} onChange={handleChange} className={getInputClass('dob')} />
-          <div className="text-[10px] text-gray-400 mt-1">Agar 2-bosqichda JSHSHIR kiritilsa, sana avtomat to'ldiriladi.</div>
           <ErrorMsg field="dob" />
       </div>
       
@@ -299,17 +293,9 @@ const AddCustomer = () => {
     </div>
   );
 
-  // 2-BOSQICH: HUJJAT VA JSHSHIR (Ko'chirildi!)
   const renderStep2 = () => (
     <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
       <h3 className="font-bold text-gray-800 text-center mb-6">Shaxsni tasdiqlovchi hujjat</h3>
-      
-      {/* JSHSHIR Shu yerga ko'chdi */}
-      <div>
-        <label className="block text-xs font-bold text-blue-600 mb-1">JSHSHIR raqami</label>
-        <input name="pinfl" value={formData.pinfl} onChange={handlePinflChange} maxLength={14} className={`${getInputClass('pinfl')} font-mono bg-blue-50/30 border-blue-200`} placeholder="14 talik raqamni kiriting" />
-        <ErrorMsg field="pinfl" />
-      </div>
 
       <div><label className="block text-xs font-medium text-gray-600 mb-1">Turi</label><select name="type" value={formData.document.type} onChange={handleDocChange} className="w-full p-2.5 text-sm border border-gray-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"><option value="Passport">Passport</option><option value="ID Card">ID Card</option><option value="Guvohnoma">Haydovchilik guvohnomasi</option></select></div>
       <div className="grid grid-cols-2 gap-4">
@@ -321,6 +307,13 @@ const AddCustomer = () => {
           <div><label className="block text-xs font-medium text-gray-600 mb-1">Amal qilish sanasi</label><input type="date" name="expiryDate" value={formData.document.expiryDate} onChange={(e) => setFormData(prev => ({...prev, document: {...prev.document, expiryDate: e.target.value}}))} className={getInputClass('expiryDate')} /><ErrorMsg field="expiryDate" /></div>
       </div>
       <div><label className="block text-xs font-medium text-gray-600 mb-1">Berilgan joyi</label><input name="givenBy" value={formData.document.givenBy} onChange={handleDocChange} className={`${getInputClass('givenBy')} uppercase`} /><ErrorMsg field="givenBy" /></div>
+      
+      {/* JSHSHIR ENG OXIRIGA TUSHDI */}
+      <div className="mt-4 pt-4 border-t border-gray-100">
+        <label className="block text-xs font-bold text-blue-600 mb-1">JSHSHIR raqami</label>
+        <input name="pinfl" value={formData.pinfl} onChange={handlePinflChange} maxLength={14} className={`${getInputClass('pinfl')} font-mono bg-blue-50/30 border-blue-200`} placeholder="14 talik raqamni kiriting" />
+        <ErrorMsg field="pinfl" />
+      </div>
     </div>
   );
 
@@ -331,11 +324,10 @@ const AddCustomer = () => {
             <div><label className="block text-xs font-medium text-gray-600 mb-1">Asosiy / viloyat</label><select value={formData.address.regionId} onChange={handleRegionChange} className={`${getInputClass('regionId')} bg-white`}><option value="">Tanlang...</option>{regionsData.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select><ErrorMsg field="regionId" /></div>
             <div><label className="block text-xs font-medium text-gray-600 mb-1">Asosiy / tuman</label><select value={formData.address.districtId} onChange={handleDistrictChange} disabled={!formData.address.regionId} className={`${getInputClass('districtId')} bg-white disabled:bg-gray-100`}><option value="">Tanlang...</option>{districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select><ErrorMsg field="districtId" /></div>
             
-            {/* MFY TANLASH YOKI YOZISH (DATALIST) */}
             <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Asosiy / MFY</label>
                 <input 
-                    list="mfy-options"
+                    type="text"
                     name="mfy" 
                     value={formData.address.mfy} 
                     onChange={(e) => {
@@ -344,17 +336,8 @@ const AddCustomer = () => {
                     }} 
                     disabled={!formData.address.districtId} 
                     className={`${getInputClass('mfy')} disabled:bg-gray-100`}
-                    placeholder="Tanlang yoki yozing..."
+                    placeholder="Masalan: Navro'z MFY"
                 />
-                <datalist id="mfy-options">
-                    <option value="Navro'z MFY" />
-                    <option value="Mustaqillik MFY" />
-                    <option value="Do'stlik MFY" />
-                    <option value="Tinchlik MFY" />
-                    <option value="Gulshan MFY" />
-                    <option value="Yoshlik MFY" />
-                    <option value="Istiqlol MFY" />
-                </datalist>
                 <ErrorMsg field="mfy" />
             </div>
 
@@ -414,7 +397,6 @@ const AddCustomer = () => {
   return (
     <div className="max-w-2xl mx-auto pb-10 relative"> 
       
-      {/* YANGI: CHIROYLI MUZLATUVCHI MODAL */}
       {isSuccessModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[2000] p-4 text-center animate-in zoom-in-95 duration-300">
             <div className="bg-white w-full max-w-sm rounded-[40px] shadow-2xl p-12 border border-slate-100">
