@@ -5,16 +5,16 @@ import toast from 'react-hot-toast';
 
 const EditSupplierIncome = () => {
   const navigate = useNavigate();
-  const { id } = useParams(); // URL dan faktura ID sini olamiz
+  const { id } = useParams(); 
   
   const userRole = localStorage.getItem('userRole') || 'admin';
-  const currentUserName = localStorage.getItem('userName') || 'Bekchonov Azomat';
   const token = localStorage.getItem('token');
   
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState('');
   const [supplier, setSupplier] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState(''); 
-  const [exchangeRate, setExchangeRate] = useState(localStorage.getItem('globalExchangeRate') || '12500'); 
+  const [exchangeRate, setExchangeRate] = useState('12500'); 
+  const [status, setStatus] = useState('Jarayonda');
 
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false); 
@@ -32,49 +32,46 @@ const EditSupplierIncome = () => {
   const [inputSalePrice, setInputSalePrice] = useState(''); 
   const [inputCurrency, setInputCurrency] = useState('UZS');
 
-  // Fakturani localStorage'dan topish va to'ldirish
   useEffect(() => {
-    const savedInvoices = JSON.parse(localStorage.getItem('supplierInvoices') || "[]");
-    const invoiceToEdit = savedInvoices.find(inv => inv.id === Number(id));
-
-    if (invoiceToEdit) {
-        setDate(invoiceToEdit.date);
-        setSupplier(invoiceToEdit.supplier);
-        setInvoiceNumber(invoiceToEdit.invoiceNumber);
-        setExchangeRate(invoiceToEdit.exchangeRate || '12500');
-        // Itemlarni moslashtirib statega joylash
-        const formattedItems = invoiceToEdit.items.map(item => ({
-            ...item,
-            count: Number(item.count || item.quantity),
-            price: Number(item.price || item.buyPrice),
-            salePrice: Number(item.salePrice || 0)
-        }));
-        setSelectedItems(formattedItems);
-    } else {
-        toast.error("Faktura topilmadi!");
-        navigate(-1);
-    }
-
-    // Tovar va Taminotchilarni yuklash
-    fetch('https://iphone-house-api.onrender.com/api/products', {
-        headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(async res => {
-          if (!res.ok) throw new Error("Server xatosi");
-          return res.json();
-      })
-      .then(data => setProducts(data))
-      .catch(err => {
-          toast.error("Server bilan aloqa yo'q!");
-      });
+    // 1. Tovar va Taminotchilarni yuklash
+    fetch('https://iphone-house-api.onrender.com/api/products', { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(res => res.json()).then(data => setProducts(data)).catch(err => console.error(err));
 
     const savedSuppliers = JSON.parse(localStorage.getItem('suppliersList') || "[]");
     setSuppliersList(savedSuppliers);
+
+    // 2. Tahrirlanayotgan fakturani bazadan chaqirish
+    fetch('https://iphone-house-api.onrender.com/api/invoices', { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => {
+          const invoiceToEdit = data.find(inv => inv.id === Number(id));
+          if (invoiceToEdit) {
+              setDate(new Date(invoiceToEdit.date).toISOString().split('T')[0]);
+              setSupplier(invoiceToEdit.supplierName);
+              setInvoiceNumber(invoiceToEdit.invoiceNumber);
+              setExchangeRate(invoiceToEdit.exchangeRate || '12500');
+              setStatus(invoiceToEdit.status);
+
+              const formattedItems = invoiceToEdit.items.map(item => ({
+                  id: item.productId, // Asosiy Tovar ID si
+                  customId: item.customId,
+                  name: item.name,
+                  count: Number(item.count),
+                  price: Number(item.price),
+                  salePrice: Number(item.salePrice),
+                  currency: item.currency,
+                  markup: Number(item.markup || 0),
+                  total: Number(item.total)
+              }));
+              setSelectedItems(formattedItems);
+          } else {
+              toast.error("Faktura topilmadi!");
+              navigate(-1);
+          }
+      })
+      .catch(err => toast.error("Server xatosi"));
   }, [id, token, navigate]);
 
-  // ==========================================
-  // --- MATEMATIKA: DOLLARNI SO'MGA O'GIRISH ---
-  // ==========================================
   const getCostInUZS = (price, currency, rate) => {
       const numPrice = Number(price) || 0;
       const numRate = Number(rate) || 12500;
@@ -153,7 +150,6 @@ const EditSupplierIncome = () => {
         id: productToAdd.id,
         customId: productToAdd.customId,
         name: productToAdd.name,
-        category: productToAdd.category || '-',
         count: Number(inputCount),
         price: Number(inputPrice),
         markup: Number(inputMarkup),
@@ -175,7 +171,6 @@ const EditSupplierIncome = () => {
     setSelectedItems(selectedItems.map(item => {
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
-        
         const currentCurrency = field === 'currency' ? value : updatedItem.currency;
         const currentPrice = field === 'price' ? Number(value) : Number(updatedItem.price);
         const costUZS = getCostInUZS(currentPrice, currentCurrency, exchangeRate);
@@ -234,33 +229,42 @@ const EditSupplierIncome = () => {
     setShowConfirmModal(true);
   };
 
-  const handleSaveInvoice = () => {
-    const savedInvoices = JSON.parse(localStorage.getItem('supplierInvoices') || "[]");
-    
-    const updatedInvoices = savedInvoices.map(inv => {
-        if (inv.id === Number(id)) {
-            return {
-                ...inv,
-                date, 
-                supplier, 
-                invoiceNumber, 
-                items: selectedItems,
-                totalSum: grandTotalUZS, 
-                exchangeRate, 
-                userName: currentUserName
-                // status o'zgarmay qoladi (Jarayonda bo'lsa Jarayonda)
-            };
-        }
-        return inv;
-    });
+  // --- BAZAGA YUBORISH (PUT SO'ROVI) ---
+  const handleSaveInvoice = async () => {
+    try {
+        const payload = {
+            date, 
+            supplier, 
+            invoiceNumber, 
+            exchangeRate,
+            totalSum: grandTotalUZS, 
+            status: status, // Eskisi qanday bo'lsa shunday qoladi
+            items: selectedItems
+        };
 
-    localStorage.setItem('supplierInvoices', JSON.stringify(updatedInvoices));
-    setShowConfirmModal(false); 
-    toast.success("Faktura muvaffaqiyatli saqlandi!");
-    navigate('/ombor/taminotchi-kirim');
+        const res = await fetch(`https://iphone-house-api.onrender.com/api/invoices/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            toast.success("Faktura muvaffaqiyatli yangilandi!");
+            navigate('/ombor/taminotchi-kirim');
+        } else {
+            toast.error("Yangilashda xatolik yuz berdi");
+        }
+    } catch (err) {
+        toast.error("Server bilan aloqa yo'q!");
+    } finally {
+        setShowConfirmModal(false); 
+    }
   };
 
-  const [activeTab, setActiveTab] = useState('invoice'); // Tahrirlashda asosan pastdagi jadval kerak
+  const [activeTab, setActiveTab] = useState('invoice');
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -277,7 +281,7 @@ const EditSupplierIncome = () => {
         <div className="grid grid-cols-12 gap-6">
             <div className={`space-y-6 ${userRole === 'director' ? 'col-span-8' : 'col-span-12'}`}>
                 
-                {/* --- ASOSIY MA'LUMOTLAR --- */}
+                {/* ASOSIY MA'LUMOTLAR */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Asosiy ma'lumotlar</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -287,14 +291,13 @@ const EditSupplierIncome = () => {
                             <option value="">Ta'minotchi tanlang...</option>
                             {suppliersList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                         </select>
-                        <input type="number" className="w-full p-3 border rounded-lg border-amber-300 bg-amber-50 outline-amber-500" placeholder="Kurs (Masalan: 12500)" value={exchangeRate} onChange={e=>setExchangeRate(e.target.value)}/>
+                        <input type="number" className="w-full p-3 border rounded-lg border-amber-300 bg-amber-50 outline-amber-500" placeholder="Kurs" value={exchangeRate} onChange={e=>setExchangeRate(e.target.value)}/>
                     </div>
                 </div>
 
-                {/* --- TOVAR TANLASH VA NARXLASH --- */}
+                {/* TOVAR TANLASH VA NARXLASH */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Tovarni tanlash va Narxlash</h3>
-                    
                     <div className="flex flex-col gap-4">
                         <div className="flex flex-wrap md:flex-nowrap gap-4 items-start">
                             <div className="flex-1 relative min-w-[200px]">
@@ -366,7 +369,7 @@ const EditSupplierIncome = () => {
             )}
         </div>
 
-        {/* --- PASTKI JADVAL QISMI --- */}
+        {/* JADVAL QISMI */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mt-6 min-h-[400px] flex flex-col">
             <div className="flex border-b">
                 <button onClick={() => setActiveTab('invoice')} className={`px-8 py-4 font-bold text-sm transition-all relative ${activeTab === 'invoice' ? 'border-b-2 border-amber-600 text-amber-600 bg-amber-50' : 'text-gray-500 hover:bg-gray-50'}`}>
