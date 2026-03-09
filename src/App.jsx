@@ -292,7 +292,7 @@ function App() {
 
                 {/* NAQD SAVDO */}
                 <Route path="/savdo" element={<CashSales />} />
-                <Route path="/naqd-savdo/qoshish" element={<AddCashSales />} />
+                <Route path="/naqd-savdo/qoshish" element={<AddCashSale />} />
                 <Route path="/savdo/qaytarish" element={<SalesReturns />} />
                 <Route path="/savdo/chegirmalar" element={<SalesDiscounts />} />
 
