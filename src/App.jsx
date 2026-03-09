@@ -61,12 +61,12 @@ import SupplierList from './pages/hisob/SupplierList';
 import WarehouseOperations from './pages/ombor/WarehouseOperations';
 import InternalIncome from './pages/ombor/InternalIncome';
 import InternalExpense from './pages/ombor/InternalExpense';
-import SupplierIncomeList from './pages/ombor/SupplierIncomeList'; 
+import SupplierIncomeList from './pages/ombor/SupplierIncomeList';
+import EditSupplierIncome from './pages/Warehouse/EditSupplierIncome';
 import AddSupplierIncome from './pages/ombor/AddSupplierIncome'; 
 import SupplierReturn from './pages/ombor/SupplierReturn';
 import UnfinishedSales from './pages/ombor/UnfinishedSales';
 import CustomerIncome from './pages/ombor/CustomerIncome';
-// import CountingActs from './pages/ombor/CountingActs'; <--- BU KERAK EMAS (O'CHIRILDI)
 import Sklad from './pages/ombor/Sklad';
 import AddSupplierReturn from './pages/ombor/AddSupplierReturn';
 import InventoryCount from './pages/ombor/InventoryCount'; 
@@ -253,7 +253,8 @@ function App() {
                 <Route path="/ombor/boshqa-kirim" element={<InternalIncome />} />
                 <Route path="/ombor/boshqa-chiqim" element={<InternalExpense />} />
                 <Route path="/ombor/taminotchi-kirim" element={<SupplierIncomeList />} />
-                <Route path="/ombor/taminotchi-kirim/qoshish" element={<AddSupplierIncome />} />
+                <Route path="/ombor/taminotchi-kirim/qoshish" element={<AddSupplierIncome />} 
+                <Route path="/ombor/taminotchi-kirim/tahrirlash/:id" element={<EditSupplierIncome />} />
                 <Route path="/ombor/taminotchi-qaytarish" element={<SupplierReturn />} />
                 <Route path="/ombor/yakunlanmagan" element={<UnfinishedSales />} />
                 <Route path="/ombor/mijoz-kirim" element={<CustomerIncome />} />
