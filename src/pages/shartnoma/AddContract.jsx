@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-// XATO SHU YERDA EDI: Ikonkalar to'liq chaqirilmabdi! Endi hammasi joyida:
 import { 
   ArrowLeft, Check, ChevronRight, Search, User, 
   X, Briefcase, Users, ShoppingCart, Calendar, Save, 
-  CheckCircle, Plus, Trash2 
+  CheckCircle, Plus, Trash2, ScanLine
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -63,6 +62,9 @@ const AddContract = () => {
   const [products, setProducts] = useState([]);
 
   const token = localStorage.getItem('token');
+  
+  // Skaner uchun Reference
+  const barcodeInputRef = useRef(null);
 
   const [contractData, setContractData] = useState({
     mainCustomer: null,     
@@ -127,11 +129,37 @@ const AddContract = () => {
   const addCoBorrower = (customer) => setContractData(prev => ({ ...prev, coBorrowers: [...prev.coBorrowers, customer] }));
   const removeCoBorrower = (id) => setContractData(prev => ({ ...prev, coBorrowers: prev.coBorrowers.filter(c => c.id !== id) }));
 
+  // --- YANGI: SHTRIX KODNI O'QISH ---
+  const handleBarcodeScan = (e) => {
+      if (e.key === 'Enter' && e.target.value.trim() !== '') {
+          const code = e.target.value.trim();
+          const foundProduct = products.find(p => p.customId.toString() === code || p.id.toString() === code);
+          
+          if (foundProduct) {
+              addProductToCart(foundProduct);
+          } else {
+              toast.error(`Kod [${code}] bo'yicha tovar topilmadi!`);
+          }
+          e.target.value = '';
+          barcodeInputRef.current?.focus();
+      }
+  };
+
   const addProductToCart = (product) => {
       if (product.quantity <= 0) return toast.error("Bazada qoldiq yo'q!");
-      if (contractData.items.find(i => i.id === product.id)) return toast.error("Bu tovar savatda bor!");
-      setContractData(prev => ({ ...prev, items: [...prev.items, { ...product, qty: 1 }] }));
-      toast.success("Tovarga qo'shildi");
+      
+      const existingItem = contractData.items.find(i => i.id === product.id);
+      if (existingItem) {
+          if (existingItem.qty + 1 > product.quantity) return toast.error("Ombordagi qoldiqdan oshib ketdi!");
+          setContractData(prev => ({
+              ...prev, 
+              items: prev.items.map(item => item.id === product.id ? { ...item, qty: item.qty + 1 } : item)
+          }));
+          toast.success(`${product.name} soni oshirildi`);
+      } else {
+          setContractData(prev => ({ ...prev, items: [...prev.items, { ...product, qty: 1 }] }));
+          toast.success(`${product.name} savatga qo'shildi`);
+      }
   };
 
   const updateItemQty = (id, newQty) => {
@@ -148,8 +176,13 @@ const AddContract = () => {
       if (step === 2 && contractData.items.length === 0) return toast.error("Kamida 1 ta tovar tanlang!");
       if (step === 3 && (contractData.prepayment > grandTotal)) return toast.error("Oldindan to'lov umumiy summadan ko'p bo'lolmaydi!");
       
-      if (step < 4) setStep(step + 1);
-      else submitContract();
+      if (step < 4) {
+          setStep(step + 1);
+          // Skanerga avtomat fokus qaratish
+          if (step === 1) setTimeout(() => barcodeInputRef.current?.focus(), 100);
+      } else {
+          submitContract();
+      }
   };
 
   // --- HAQIQIY BAZAGA YUBORISH ---
@@ -316,37 +349,54 @@ const AddContract = () => {
             )}
 
             {step === 2 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[600px] animate-in slide-in-from-right-8">
-                    <div className="flex border-b border-gray-100 bg-gray-50">
-                        <button onClick={() => setProductTab('catalog')} className={`flex-1 py-4 text-sm font-bold transition-colors ${productTab === 'catalog' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>Katalog (Baza)</button>
-                        <button onClick={() => setProductTab('cart')} className={`flex-1 py-4 text-sm font-bold transition-colors relative ${productTab === 'cart' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[650px] animate-in slide-in-from-right-8">
+                    
+                    {/* YAngilangan Skaner inputi (Eng tepadagi asosiy joyda) */}
+                    <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
+                        <div className="relative max-w-lg mx-auto">
+                            <ScanLine className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500" size={24}/>
+                            <input 
+                                ref={barcodeInputRef}
+                                type="text" 
+                                placeholder="Shtrix kodni skanerlang yoki yozing..." 
+                                onKeyDown={handleBarcodeScan}
+                                className="w-full pl-12 pr-4 py-4 bg-white border-2 border-blue-300 focus:border-blue-600 rounded-xl outline-none shadow-sm font-mono text-lg transition-colors"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex border-b border-gray-100 bg-white">
+                        <button onClick={() => setProductTab('catalog')} className={`flex-1 py-3 text-sm font-bold transition-colors ${productTab === 'catalog' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700 bg-gray-50'}`}>Katalog (Qidiruv)</button>
+                        <button onClick={() => setProductTab('cart')} className={`flex-1 py-3 text-sm font-bold transition-colors relative ${productTab === 'cart' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700 bg-gray-50'}`}>
                             Savat <span className="ml-2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{contractData.items.length}</span>
                         </button>
                     </div>
 
                     {productTab === 'catalog' && (
-                        <div className="p-6 flex flex-col flex-1 overflow-hidden">
+                        <div className="p-4 flex flex-col flex-1 overflow-hidden bg-white">
                             <div className="relative mb-4">
                                 <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
-                                <input type="text" placeholder="Qidirish..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm"/>
+                                <input type="text" placeholder="Nomi bo'yicha tezkor qidiruv..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm"/>
                             </div>
                             <div className="flex-1 overflow-y-auto custom-scrollbar border border-gray-100 rounded-xl">
                                 <table className="w-full text-left text-sm">
-                                    <thead className="bg-gray-50 sticky top-0 text-xs text-gray-500 uppercase">
-                                        <tr><th className="p-3">Kod</th><th className="p-3">Nomi</th><th className="p-3 text-center">Qoldiq</th><th className="p-3 text-right">Narxi</th><th className="p-3 text-center"></th></tr>
+                                    <thead className="bg-gray-50 sticky top-0 text-[11px] text-gray-500 uppercase">
+                                        <tr><th className="p-3">Nomi va Kod</th><th className="p-3 text-center">Qoldiq</th><th className="p-3 text-right">Narxi (UZS)</th><th className="p-3 text-center"></th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
                                         {filteredProducts.map(p => {
                                             const isAdded = contractData.items.some(i => i.id === p.id);
                                             return (
-                                                <tr key={p.id} className="hover:bg-blue-50">
-                                                    <td className="p-3 font-mono text-gray-500 text-xs">#{p.customId}</td>
-                                                    <td className="p-3 font-medium">{p.name}</td>
+                                                <tr key={p.id} className={`hover:bg-blue-50 transition-colors ${isAdded ? 'bg-blue-50/30' : ''}`}>
+                                                    <td className="p-3">
+                                                        <div className="font-bold text-gray-800">{p.name}</div>
+                                                        <div className="text-[10px] font-mono text-gray-500 mt-0.5">#{p.customId}</div>
+                                                    </td>
                                                     <td className="p-3 text-center font-bold text-blue-600">{p.quantity}</td>
-                                                    <td className="p-3 text-right font-bold">{Number(p.salePrice).toLocaleString()}</td>
+                                                    <td className="p-3 text-right font-bold text-gray-800">{Number(p.salePrice).toLocaleString()}</td>
                                                     <td className="p-3 text-center">
-                                                        <button disabled={isAdded || p.quantity <= 0} onClick={() => addProductToCart(p)} className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white disabled:bg-gray-100 disabled:text-gray-300">
-                                                            {isAdded ? <Check size={16}/> : <Plus size={16}/>}
+                                                        <button disabled={p.quantity <= 0} onClick={() => addProductToCart(p)} className={`p-2 rounded-lg transition-colors ${isAdded ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white' : 'bg-gray-100 text-gray-600 hover:bg-blue-600 hover:text-white'} disabled:opacity-30 disabled:cursor-not-allowed`}>
+                                                            {isAdded ? <Check size={18}/> : <Plus size={18}/>}
                                                         </button>
                                                     </td>
                                                 </tr>
@@ -359,21 +409,26 @@ const AddContract = () => {
                     )}
 
                     {productTab === 'cart' && (
-                        <div className="p-6 flex flex-col flex-1 overflow-hidden bg-gray-50/50">
+                        <div className="p-4 flex flex-col flex-1 overflow-hidden bg-gray-50/50">
                             {contractData.items.length === 0 ? (
-                                <div className="flex-1 flex flex-col items-center justify-center text-gray-400"><ShoppingCart size={48} className="mb-4 opacity-20"/><p>Savat bo'sh</p></div>
+                                <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+                                    <ShoppingCart size={48} className="mb-4 opacity-20"/>
+                                    <p className="font-medium text-lg">Savat bo'sh. Shtrix kod ishlating yoki katalogdan tanlang.</p>
+                                </div>
                             ) : (
                                 <div className="flex-1 overflow-y-auto custom-scrollbar border bg-white border-gray-100 rounded-xl shadow-sm">
                                     <table className="w-full text-left text-sm">
                                         <thead className="bg-gray-50 sticky top-0 text-[10px] text-gray-500 uppercase">
-                                            <tr><th className="p-3">Nomi</th><th className="p-3 w-24 text-center">Soni</th><th className="p-3 text-right">Narxi</th><th className="p-3 text-right">Jami</th><th className="p-3 text-center"></th></tr>
+                                            <tr><th className="p-3">Nomi</th><th className="p-3 w-28 text-center">Soni</th><th className="p-3 text-right">Dona Narxi</th><th className="p-3 text-right">Jami (UZS)</th><th className="p-3 text-center"></th></tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
                                             {contractData.items.map(item => (
                                                 <tr key={item.id}>
-                                                    <td className="p-3 font-bold">{item.name}</td>
-                                                    <td className="p-3 text-center"><input type="number" min="1" max={item.quantity} value={item.qty} onChange={(e) => updateItemQty(item.id, Number(e.target.value))} className="w-full p-2 border rounded-lg text-center outline-blue-500 font-bold bg-gray-50"/></td>
-                                                    <td className="p-3 text-right text-gray-600">{Number(item.salePrice).toLocaleString()}</td>
+                                                    <td className="p-3 font-bold text-gray-800">{item.name}</td>
+                                                    <td className="p-3 text-center">
+                                                        <input type="number" min="1" max={item.quantity} value={item.qty} onChange={(e) => updateItemQty(item.id, Number(e.target.value))} className="w-full p-2 border border-gray-200 rounded-lg text-center outline-blue-500 font-bold bg-gray-50 focus:bg-white"/>
+                                                    </td>
+                                                    <td className="p-3 text-right text-gray-600 font-medium">{Number(item.salePrice).toLocaleString()}</td>
                                                     <td className="p-3 text-right font-black text-blue-600">{(Number(item.salePrice) * item.qty).toLocaleString()}</td>
                                                     <td className="p-3 text-center"><button onClick={() => removeItem(item.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></td>
                                                 </tr>
