@@ -55,6 +55,7 @@ const Sklad = () => {
   useEffect(() => { 
       fetchProducts(); 
       
+      // Sklad.jsx ichidagi o'zgartiriladigan qism
       const fetchCategories = async () => {
           try {
               const res = await fetch('https://iphone-house-api.onrender.com/api/categories', {
@@ -62,8 +63,10 @@ const Sklad = () => {
               });
               if (res.ok) {
                   const data = await res.json();
-                  setCategories(data); // Eng yangi ro'yxatni Ekranga chiqaramiz
-                  localStorage.setItem('categoryList', JSON.stringify(data)); // Zaxira uchun xotiraga ham yozib qo'yamiz
+                  // XAVFSIZLIK: data array ekanligiga ishonch hosil qilish
+                  const safeData = Array.isArray(data) ? data : []; 
+                  setCategories(safeData); 
+                  localStorage.setItem('categoryList', JSON.stringify(safeData)); 
               }
           } catch (err) {
               console.error("Kategoriyalarni yuklashda xatolik:", err);
@@ -467,7 +470,9 @@ const Sklad = () => {
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Kategoriya *</label>
                             <select required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={formData.category} onChange={e=>setFormData({...formData, category: e.target.value})}>
                                 <option value="">Tanlang...</option>
-                                {categories.map((c, i) => <option key={i} value={c.name}>{c.name}</option>)}
+                                {Array.isArray(categories) && categories.map((c, i) => (
+                                    <option key={c.id || i} value={c.name}>{c.name}</option>
+                                ))}
                             </select>
                         </div>
                     </div>
@@ -526,6 +531,7 @@ const Sklad = () => {
 
 
 export default Sklad;
+
 
 
 
