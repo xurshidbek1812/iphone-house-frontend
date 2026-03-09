@@ -257,6 +257,8 @@ const Sklad = () => {
                                     <th className="p-4">Ta'minotchi / Faktura</th>
                                     <th className="p-4 text-center">Boshlang'ich</th>
                                     <th className="p-4 text-center">Qoldiq</th>
+                                    {/* YANGI QO'SHILGAN USTUN: FAQAT DIREKTOR UCHUN */}
+                                    {isDirector && <th className="p-4 text-right text-amber-600">Kirim Narxi</th>}
                                     {isDirector && <th className="p-4 text-right">Amal</th>}
                                 </tr>
                             </thead>
@@ -274,11 +276,17 @@ const Sklad = () => {
                                             <td className="p-4 text-center text-slate-400">{batch.initialQty}</td>
                                             <td className="p-4 text-center">{batch.quantity === 0 ? <span className="text-rose-500 text-[10px] bg-rose-50 px-2 py-1 rounded-md uppercase font-black tracking-tighter">Tugagan</span> : batch.quantity}</td>
                                             
-                                            {/* O'ZGARTIRILGAN TUGMA: ALERT O'RNIGA MODAL OCHADI */}
+                                            {/* YANGI QO'SHILGAN QATOR: FAQAT DIREKTOR UCHUN (NARX VA VALYUTA) */}
+                                            {isDirector && (
+                                                <td className="p-4 text-right text-amber-700 bg-amber-50/20">
+                                                    {Number(batch.buyPrice).toLocaleString()} <span className="text-[10px] text-amber-400">{batch.buyCurrency || 'UZS'}</span>
+                                                </td>
+                                            )}
+                                            
                                             {isDirector && (
                                               <td className="p-4 text-right">
                                                   <button 
-                                                      onClick={() => promptArchiveBatch(batch.id)}
+                                                      onClick={() => promptArchiveBatch(batch.id)} // DIQQAT: Sizda bu funksiya yuqorida executeArchiveBatch ga o'zgartirilgan bo'lishi mumkin, o'zingiznikiga moslang
                                                       className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors"
                                                       title="Ro'yxatdan yashirish"
                                                   >
@@ -289,7 +297,7 @@ const Sklad = () => {
                                         </tr>
                                     ))
                                 ) : (
-                                    <tr><td colSpan={isDirector ? "5" : "4"} className="p-10 text-center text-slate-300 uppercase font-black text-xs">Aktiv partiyalar yo'q</td></tr>
+                                    <tr><td colSpan={isDirector ? "6" : "4"} className="p-10 text-center text-slate-300 uppercase font-black text-xs">Aktiv partiyalar yo'q</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -489,6 +497,7 @@ const Sklad = () => {
 
 
 export default Sklad;
+
 
 
 
