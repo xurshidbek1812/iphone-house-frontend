@@ -50,9 +50,6 @@ const AddSupplierIncome = () => {
     setSuppliersList(savedSuppliers);
   }, [token]);
 
-  // ==========================================
-  // --- MATEMATIKA: DOLLARNI SO'MGA O'GIRISH ---
-  // ==========================================
   const getCostInUZS = (price, currency, rate) => {
       const numPrice = Number(price) || 0;
       const numRate = Number(rate) || 12500;
@@ -131,7 +128,6 @@ const AddSupplierIncome = () => {
         id: productToAdd.id,
         customId: productToAdd.customId,
         name: productToAdd.name,
-        category: productToAdd.category || '-',
         count: Number(inputCount),
         price: Number(inputPrice),
         markup: Number(inputMarkup),
@@ -153,8 +149,6 @@ const AddSupplierIncome = () => {
     setSelectedItems(selectedItems.map(item => {
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
-        
-        // Jadvolda ma'lumot o'zgarganda qayta hisoblash
         const currentCurrency = field === 'currency' ? value : updatedItem.currency;
         const currentPrice = field === 'price' ? Number(value) : Number(updatedItem.price);
         const costUZS = getCostInUZS(currentPrice, currentCurrency, exchangeRate);
@@ -213,16 +207,40 @@ const AddSupplierIncome = () => {
     setShowConfirmModal(true);
   };
 
-  const handleSaveInvoice = () => {
-    const newInvoice = {
-      id: Date.now(), date, supplier, invoiceNumber, items: selectedItems,
-      totalSum: grandTotalUZS, status: 'Jarayonda', exchangeRate, userName: currentUserName
-    };
-    const existingInvoices = JSON.parse(localStorage.getItem('supplierInvoices') || "[]");
-    localStorage.setItem('supplierInvoices', JSON.stringify([newInvoice, ...existingInvoices]));
-    setShowConfirmModal(false); 
-    toast.success("Faktura muvaffaqiyatli saqlandi!");
-    navigate('/ombor/taminotchi-kirim');
+  // --- BAZAGA YUBORISH ---
+  const handleSaveInvoice = async () => {
+    try {
+        const payload = {
+            date, 
+            supplier, 
+            invoiceNumber, 
+            exchangeRate,
+            totalSum: grandTotalUZS, 
+            status: 'Jarayonda', 
+            userName: currentUserName,
+            items: selectedItems
+        };
+
+        const res = await fetch('https://iphone-house-api.onrender.com/api/invoices', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            toast.success("Faktura muvaffaqiyatli saqlandi!");
+            navigate('/ombor/taminotchi-kirim');
+        } else {
+            toast.error("Fakturani saqlashda xatolik yuz berdi");
+        }
+    } catch (err) {
+        toast.error("Server bilan aloqa yo'q!");
+    } finally {
+        setShowConfirmModal(false); 
+    }
   };
 
   const [activeTab, setActiveTab] = useState('products');
@@ -242,7 +260,7 @@ const AddSupplierIncome = () => {
         <div className="grid grid-cols-12 gap-6">
             <div className={`space-y-6 ${userRole === 'director' ? 'col-span-8' : 'col-span-12'}`}>
                 
-                {/* --- ASOSIY MA'LUMOTLAR --- */}
+                {/* ASOSIY MA'LUMOTLAR */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Asosiy ma'lumotlar</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -252,16 +270,15 @@ const AddSupplierIncome = () => {
                             <option value="">Ta'minotchi tanlang...</option>
                             {suppliersList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                         </select>
-                        <input type="number" className="w-full p-3 border rounded-lg border-blue-300 bg-blue-50 outline-blue-500" placeholder="Kurs (Masalan: 12500)" value={exchangeRate} onChange={e=>setExchangeRate(e.target.value)}/>
+                        <input type="number" className="w-full p-3 border rounded-lg border-blue-300 bg-blue-50 outline-blue-500" placeholder="Kurs" value={exchangeRate} onChange={e=>setExchangeRate(e.target.value)}/>
                     </div>
                 </div>
 
-                {/* --- TOVAR TANLASH VA NARXLASH (YANGI KENGAYTIRILGAN DIZAYN) --- */}
+                {/* TOVAR TANLASH VA NARXLASH */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Tovarni tanlash va Narxlash</h3>
                     
                     <div className="flex flex-col gap-4">
-                        {/* 1-QATOR: Tovar, Soni, Valyuta, Kirim */}
                         <div className="flex flex-wrap md:flex-nowrap gap-4 items-start">
                             <div className="flex-1 relative min-w-[200px]">
                                 <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Tovar nomi / Kod</label>
@@ -297,7 +314,6 @@ const AddSupplierIncome = () => {
                             </div>
                         </div>
 
-                        {/* 2-QATOR: Ustama, Sotuv narxi, Qo'shish tugmasi */}
                         <div className="flex flex-wrap md:flex-nowrap gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-100 mt-2">
                             <div className="w-32">
                                 <label className="text-[11px] font-bold text-amber-600 uppercase mb-1 block">Ustama (%)</label>
@@ -333,12 +349,10 @@ const AddSupplierIncome = () => {
             )}
         </div>
 
-        {/* --- PASTKI JADVAL QISMI --- */}
+        {/* JADVAL QISMI */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mt-6 min-h-[400px] flex flex-col">
             <div className="flex border-b">
-                <button onClick={() => setActiveTab('products')} className={`px-8 py-4 font-bold text-sm transition-all ${activeTab === 'products' ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'}`}>
-                    Qidiruv (Katalog)
-                </button>
+                <button onClick={() => setActiveTab('products')} className={`px-8 py-4 font-bold text-sm transition-all ${activeTab === 'products' ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'}`}>Qidiruv (Katalog)</button>
                 <button onClick={() => setActiveTab('invoice')} className={`px-8 py-4 font-bold text-sm transition-all relative ${activeTab === 'invoice' ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'}`}>
                     Faktura tovarlari 
                     {selectedItems.length > 0 && <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{selectedItems.length}</span>}
@@ -429,7 +443,7 @@ const AddSupplierIncome = () => {
             )}
         </div>
 
-        {/* TASDIQLASH MODALI (O'zgarishsiz) */}
+        {/* TASDIQLASH MODALI */}
         {showConfirmModal && (
             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
                 <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in zoom-in-95">
