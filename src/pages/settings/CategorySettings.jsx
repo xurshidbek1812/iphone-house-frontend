@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Layers } from 'lucide-react';
-import toast from 'react-hot-toast'; // ZAMONAVIY XABARLAR UCHUN
+import toast from 'react-hot-toast'; 
 
 const CategorySettings = () => {
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState('');
-  const token = localStorage.getItem('token'); // XAVFSIZLIK KALITI
+  const token = localStorage.getItem('token'); 
 
-  // --- 1. BAZADAN YUKLASH ---
   const fetchCategories = async () => {
     try {
         const res = await fetch('https://iphone-house-api.onrender.com/api/categories', {
@@ -15,9 +14,15 @@ const CategorySettings = () => {
         });
         if (res.ok) {
             const data = await res.json();
-            setCategories(data);
-            // Boshqa sahifalar tez ishlashi uchun xotiraga ham yangilab qo'yamiz
-            localStorage.setItem('categoryList', JSON.stringify(data)); 
+            console.log("Bazadan kelgan kategoriyalar:", data); // <-- Shu yozuv F12 Konsolda ko'rinadi
+            
+            // Xavfsiz tarzda saqlash (Agar data array bo'lsa)
+            if (Array.isArray(data)) {
+                setCategories(data);
+                localStorage.setItem('categoryList', JSON.stringify(data)); 
+            } else {
+                setCategories([]); // Xato kelsa bo'shatib qo'yamiz
+            }
         }
     } catch (err) {
         console.error(err);
@@ -29,11 +34,11 @@ const CategorySettings = () => {
     fetchCategories();
   }, []);
 
-  // --- 2. BAZAGA QO'SHISH ---
   const handleAdd = async () => {
     if (!newCategory.trim()) return toast.error("Kategoriya nomini yozing!");
     
-    if (categories.some(c => c.name.toLowerCase() === newCategory.trim().toLowerCase())) {
+    // Tekshiruv (Xavfsiz tekshiruv)
+    if (Array.isArray(categories) && categories.some(c => c.name?.toLowerCase() === newCategory.trim().toLowerCase())) {
         return toast.error("Bu kategoriya allaqachon mavjud!");
     }
 
@@ -50,16 +55,16 @@ const CategorySettings = () => {
         if (res.ok) {
             toast.success("Kategoriya muvaffaqiyatli qo'shildi!");
             setNewCategory('');
-            fetchCategories(); // Jadvalni yangilash
+            fetchCategories(); 
         } else {
-            toast.error("Qo'shishda xatolik yuz berdi.");
+            const errorData = await res.json();
+            toast.error(errorData.error || "Qo'shishda xatolik yuz berdi.");
         }
     } catch (err) {
         toast.error("Server bilan aloqa yo'q!");
     }
   };
 
-  // --- 3. BAZADAN O'CHIRISH ---
   const handleDelete = async (id) => {
     if(window.confirm("Kategoriyani o'chirmoqchimisiz?")) {
         try {
@@ -70,7 +75,7 @@ const CategorySettings = () => {
             
             if (res.ok) {
                 toast.success("Kategoriya o'chirildi!");
-                fetchCategories(); // Jadvalni yangilash
+                fetchCategories(); 
             } else {
                 const errorData = await res.json();
                 toast.error(errorData.error || "O'chirib bo'lmaydi! (Balki bu kategoriyada tovarlar bordir)");
@@ -86,8 +91,6 @@ const CategorySettings = () => {
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Kategoriyalarni boshqarish</h1>
 
       <div className="grid grid-cols-12 gap-6">
-        
-        {/* CHAP: QO'SHISH FORMASI */}
         <div className="col-span-4">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
@@ -102,7 +105,7 @@ const CategorySettings = () => {
                             placeholder="Masalan: Telefonlar"
                             value={newCategory}
                             onChange={(e) => setNewCategory(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleAdd()} // Enter bosilganda ham saqlaydi
+                            onKeyDown={(e) => e.key === 'Enter' && handleAdd()} 
                         />
                     </div>
                     <button onClick={handleAdd} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition-all">
@@ -112,14 +115,13 @@ const CategorySettings = () => {
             </div>
         </div>
 
-        {/* O'NG: RO'YXAT */}
         <div className="col-span-8">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="p-4 border-b bg-gray-50 font-bold text-gray-600 flex justify-between">
-                    <span>Mavjud kategoriyalar ({categories.length})</span>
+                    <span>Mavjud kategoriyalar ({Array.isArray(categories) ? categories.length : 0})</span>
                     <span className="text-xs font-normal text-gray-400">Barcha xodimlar uchun umumiy ro'yxat</span>
                 </div>
-                {categories.length === 0 ? (
+                {(!Array.isArray(categories) || categories.length === 0) ? (
                     <div className="p-8 text-center text-gray-400">Hozircha kategoriyalar yo'q</div>
                 ) : (
                     <ul className="divide-y">
@@ -137,11 +139,9 @@ const CategorySettings = () => {
                 )}
             </div>
         </div>
-
       </div>
     </div>
   );
 };
 
 export default CategorySettings;
-
