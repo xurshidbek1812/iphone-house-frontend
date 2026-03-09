@@ -254,7 +254,7 @@ const Sklad = () => {
                             <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase">
                                 <tr>
                                     <th className="p-4">Sana</th>
-                                    <th className="p-4 text-center">Partiya ID</th>
+                                    <th className="p-4">Ta'minotchi / Faktura</th>
                                     <th className="p-4 text-center">Boshlang'ich</th>
                                     <th className="p-4 text-center">Qoldiq</th>
                                     {isDirector && <th className="p-4 text-right">Amal</th>}
@@ -265,7 +265,12 @@ const Sklad = () => {
                                     selectedProduct.batches.filter(b => !b.isArchived).map((batch) => (
                                         <tr key={batch.id} className="hover:bg-slate-50/50">
                                             <td className="p-4 text-slate-500">{new Date(batch.createdAt).toLocaleDateString('uz-UZ')}</td>
-                                            <td className="p-4 text-center"><span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-xs font-bold">P-{batch.id}</span></td>
+                                            <td className="p-4">
+                                                <div className="font-bold text-slate-800">{batch.supplierName || "Boshlang'ich qoldiq"}</div>
+                                                <div className="text-[10px] text-slate-400 font-mono mt-0.5 uppercase tracking-widest">
+                                                    {batch.invoiceNumber ? `Faktura: #${batch.invoiceNumber}` : `Partiya ID: P-${batch.id}`}
+                                                </div>
+                                            </td>
                                             <td className="p-4 text-center text-slate-400">{batch.initialQty}</td>
                                             <td className="p-4 text-center">{batch.quantity === 0 ? <span className="text-rose-500 text-[10px] bg-rose-50 px-2 py-1 rounded-md uppercase font-black tracking-tighter">Tugagan</span> : batch.quantity}</td>
                                             
@@ -484,5 +489,6 @@ const Sklad = () => {
 
 
 export default Sklad;
+
 
 
