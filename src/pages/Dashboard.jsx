@@ -5,16 +5,29 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
+// --- YANGI: Katta raqamlarni qisqartirish uchun yordamchi funksiya ---
+const formatLargeNumber = (num) => {
+    if (num >= 1000000000) {
+        return (num / 1000000000).toFixed(1) + ' mlrd';
+    }
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + ' mln';
+    }
+    if (num >= 1000) {
+        return (num / 1000).toFixed(1) + ' ming';
+    }
+    return num.toLocaleString();
+};
+
 const Dashboard = () => {
   const [stats, setStats] = useState({ inventoryValue: 0, totalIncome: 0, totalDebt: 0, productCount: 0 });
   const [notifications, setNotifications] = useState([]);
   
   const userRole = (sessionStorage.getItem('userRole') || 'admin').toLowerCase();
-  const token = sessionStorage.getItem('token'); // <-- 1. TOKENNI CHAQIRAMIZ
+  const token = sessionStorage.getItem('token'); 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); 
 
   useEffect(() => {
-    // API dan ham statlarni, ham xabarlarni bittada olib kelamiz
     fetch('https://iphone-house-api.onrender.com/api/dashboard', {
         headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -24,19 +37,15 @@ const Dashboard = () => {
       })
       .then(data => {
           setStats(data.stats || { inventoryValue: 0, totalIncome: 0, totalDebt: 0, productCount: 0 });
-          setNotifications(data.notifications || []); // Xabarlarni joylaymiz
+          setNotifications(data.notifications || []); 
       })
       .catch(err => console.error(err));
   }, [token]);
 
-  // 1. XABARLARNI YUKLASH FUNKSIYASI (Qayta ishlatish uchun alohida qildik)
-// 1. XABARLARNI YUKLASH FUNKSIYASI (Filtrlangan)
   const loadNotifications = () => {
     const returns = JSON.parse(sessionStorage.getItem('supplierReturns') || "[]");
     const incomes = JSON.parse(sessionStorage.getItem('supplierInvoices') || "[]");
     
-    // O'ZGARISH: Faqatgina yuborilganlarini olamiz. 
-    // "Jarayonda" (yoki "Qoralama") holatidagilarni kesib tashlaymiz.
     const filteredReturns = returns.filter(r => r.status !== 'Jarayonda');
     const filteredIncomes = incomes.filter(i => i.status !== 'Jarayonda');
 
@@ -48,15 +57,13 @@ const Dashboard = () => {
     setNotifications(allLogs.slice(0, 10)); 
   };
 
-  // 2. BITTA XABARNI O'QILGAN QILISH
-const markAsRead = (id) => {
+  const markAsRead = (id) => {
     setNotifications(prev => prev.map(note => 
         note.id === id ? { ...note, isRead: true } : note
     ));
   };
 
-  // 3. BARCHASINI O'QILGAN QILISH (Messenjer uslubi)
-const markAllAsRead = () => {
+  const markAllAsRead = () => {
     setNotifications(prev => prev.map(note => ({ ...note, isRead: true })));
   };
 
@@ -65,7 +72,6 @@ const markAllAsRead = () => {
     { name: 'Pa', uv: 2780 }, { name: 'Ju', uv: 1890 }, { name: 'Sh', uv: 2390 }, { name: 'Ya', uv: 3490 },
   ];
 
-  // Qancha yangi xabar borligini hisoblash
   const unreadCount = notifications.filter(n => !n.isRead && n.status !== 'Tasdiqlandi').length;
 
   return (
@@ -81,7 +87,6 @@ const markAllAsRead = () => {
               </h2>
               
               <div className="flex items-center gap-3">
-                  {/* BARCHASINI O'QILGAN QILISH TUGMASI */}
                   {unreadCount > 0 && (
                       <button onClick={markAllAsRead} className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 transition-all">
                           <CheckCheck size={14} /> Hammasini o'qish
@@ -137,7 +142,6 @@ const markAllAsRead = () => {
                               </p>
                           </div>
                           
-                          {/* BITTA XABARNI O'QILGAN QILISH TUGMASI (Yangi bo'lsa chiqadi) */}
                           {isNew && (
                               <button 
                                 onClick={() => markAsRead(note.id, note.type)}
@@ -172,6 +176,7 @@ const markAllAsRead = () => {
             </div>
         </div>
 
+        {/* 🚨 KARTALAR QISMI YANGILANDI */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Ombor qiymati" value={stats.inventoryValue} unit="UZS" icon={<Package />} colors={{ bg: 'bg-blue-50', iconBg: 'bg-blue-600', text: 'text-blue-600', border: 'border-blue-100' }} />
           <StatCard title="Kassa (Tushum)" value={stats.totalIncome} unit="UZS" icon={<DollarSign />} colors={{ bg: 'bg-emerald-50', iconBg: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-emerald-100' }} />
@@ -215,18 +220,28 @@ const markAllAsRead = () => {
   );
 };
 
+// 🚨 YANGILANGAN KARTA KOMPONENTI
 const StatCard = ({ title, value, unit, icon, colors }) => {
+    // Agar raqam bo'lsa va juda katta bo'lsa, yordamchi funksiya orqali qisqartiramiz
+    const displayValue = typeof value === 'number' ? formatLargeNumber(value) : value;
+    
+    // To'liq raqamni hover qilinganda (title) ko'rsatish uchun
+    const fullValue = typeof value === 'number' ? value.toLocaleString() + ' ' + unit : value;
+
     return (
-      <div className={`bg-white p-5 rounded-[24px] shadow-sm border border-slate-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300 group flex items-center gap-4`}>
+      <div 
+        title={fullValue} // <-- Hover qilinganda to'liq summa ko'rinadi
+        className={`bg-white p-5 rounded-[24px] shadow-sm border border-slate-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300 group flex items-center gap-4 cursor-pointer`}
+      >
         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-sm flex-shrink-0 transition-transform group-hover:scale-105 ${colors.iconBg}`}>
             {React.cloneElement(icon, { size: 24, strokeWidth: 2.5 })}
         </div>
         
-        <div>
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">{title}</p>
-            <h3 className="text-xl font-black text-slate-800 flex items-baseline gap-1.5">
-                {typeof value === 'number' ? value.toLocaleString() : value}
-                <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md ${colors.bg} ${colors.text}`}>
+        <div className="flex-1 min-w-0"> {/* min-w-0 juda muhim, text toshib ketmasligi uchun */}
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1 truncate">{title}</p>
+            <h3 className="text-lg lg:text-xl font-black text-slate-800 flex items-center gap-1.5 truncate">
+                <span className="truncate">{displayValue}</span>
+                <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md flex-shrink-0 ${colors.bg} ${colors.text}`}>
                     {unit}
                 </span>
             </h3>
@@ -235,6 +250,4 @@ const StatCard = ({ title, value, unit, icon, colors }) => {
     );
 };
 
-
 export default Dashboard;
-
