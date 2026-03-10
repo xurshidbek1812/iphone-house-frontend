@@ -22,19 +22,18 @@ const ProfileSettings = () => {
   });
 
   const [securityForm, setSecurityForm] = useState({
-    currentPassword: '', // <--- YANGI
+    currentPassword: '', 
     newValue: '',
     confirmValue: ''
   });
 
   const token = sessionStorage.getItem('token');
-  const currentLogin = sessionStorage.getItem('currentUserLogin');
+  // currentLogin olib tashlandi, endi unga hojat yo'q
 
   // --- 1. MA'LUMOTLARNI HAQIQIY BAZADAN YUKLASH ---
   useEffect(() => {
     const fetchMyProfile = async () => {
         try {
-            // O'ZGARISH: Endi barcha userlarni emas, faqat o'zini (me) yuklaymiz!
             const res = await fetch('https://iphone-house-api.onrender.com/api/users/me', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -50,7 +49,7 @@ const ProfileSettings = () => {
                     lastName: parts.slice(1).join(' ') || '',
                     phone: me.phone || '+998',
                     login: me.username,
-                    password: "", // Xavfsizlik uchun parol boshlang'ich bo'sh keladi
+                    password: "", 
                     role: me.role
                 });
             } else {
@@ -62,7 +61,7 @@ const ProfileSettings = () => {
         }
     };
 
-    if (token) { // currentLogin ga ehtiyoj qolmadi, chunki tokenning o'zi kimligini biladi
+    if (token) {
         fetchMyProfile();
     }
   }, [token]);
@@ -94,13 +93,18 @@ const ProfileSettings = () => {
             })
         });
 
-        if (!res.ok) throw new Error("Saqlab bo'lmadi");
+        // 🚨 TIZILGAN QISM: Xatoning real sababini ko'rsatish
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.message || "Saqlab bo'lmadi");
+        }
         
         sessionStorage.setItem('userName', fullName);
         setIsEditingInfo(false);
         toast.success("Shaxsiy ma'lumotlar yangilandi!");
     } catch (err) {
-        toast.error("Server bilan xatolik yuz berdi");
+        // Xatoni to'g'ridan-to'g'ri ko'rsatamiz
+        toast.error(err.message || "Server bilan xatolik yuz berdi");
     }
   };
 
@@ -125,22 +129,28 @@ const ProfileSettings = () => {
 
         const data = await res.json();
         if (!res.ok) {
-            return toast.error(data.message || "Bu login band yoki xato yuz berdi!");
+            throw new Error(data.message || "Bu login band yoki xato yuz berdi!");
         }
 
-        sessionStorage.setItem('currentUserLogin', securityForm.newValue); 
         setUserData({ ...userData, login: securityForm.newValue });
         setIsChangingLogin(false);
         resetSecurityForm();
         toast.success("Login muvaffaqiyatli o'zgartirildi!");
+        
+        // Login o'zgargani uchun tizimdan chiqarib, qayta kirgizish xavfsizroq bo'ladi
+        setTimeout(() => {
+            sessionStorage.clear();
+            window.location.reload();
+        }, 2000);
+
     } catch (err) {
-        toast.error("Server bilan xatolik yuz berdi");
+        toast.error(err.message || "Server bilan xatolik yuz berdi");
     }
   };
 
   // --- 4. PAROLNI O'ZGARTIRISH (API ORQALI) ---
   const handleChangePassword = async () => {
-    if (!securityForm.currentPassword) return toast.error("Joriy parolni kiriting!"); // <--- YANGI
+    if (!securityForm.currentPassword) return toast.error("Joriy parolni kiriting!"); 
     if (securityForm.newValue.length < 4) return toast.error("Yangi parol juda qisqa!");
     if (securityForm.newValue !== securityForm.confirmValue) return toast.error("Yangi parollar mos kelmadi!");
 
@@ -152,7 +162,7 @@ const ProfileSettings = () => {
                 'Authorization': `Bearer ${token}` 
             },
             body: JSON.stringify({
-                currentPassword: securityForm.currentPassword, // <--- BAZAGA KETADI
+                currentPassword: securityForm.currentPassword, 
                 password: securityForm.newValue, 
                 username: userData.login,
                 fullName: `${userData.firstName} ${userData.lastName}`.trim(),
@@ -169,7 +179,6 @@ const ProfileSettings = () => {
         resetSecurityForm();
         toast.success("Parol muvaffaqiyatli o'zgartirildi! Xavfsizlik uchun qayta kiring.");
         
-        // Parol o'zgargach login ekraniga otib yuborish yaxshi amaliyot:
         setTimeout(() => {
             sessionStorage.clear();
             window.location.reload();
@@ -181,8 +190,8 @@ const ProfileSettings = () => {
   };
 
   const resetSecurityForm = () => {
-    setSecurityForm({ currentPassword: '', newValue: '', confirmValue: '' }); // <--- TOZALANADI
-    setShowCurrentPass(false); // <--- TOZALANADI
+    setSecurityForm({ currentPassword: '', newValue: '', confirmValue: '' }); 
+    setShowCurrentPass(false); 
     setShowNewPass(false);
     setShowConfirmPass(false);
   };
@@ -310,7 +319,7 @@ const ProfileSettings = () => {
                 </div>
                 
                 <div className="space-y-4">
-                    {/* --- YANGI: JORIY PAROL KIRITISH MAYDONI --- */}
+                    {/* --- JORIY PAROL KIRITISH MAYDONI --- */}
                     <div className="relative">
                         <label className="block text-sm font-bold text-gray-700 mb-1">Joriy (eski) parol</label>
                         <input type={showCurrentPass ? "text" : "password"} 
@@ -385,6 +394,3 @@ const ProfileSettings = () => {
 };
 
 export default ProfileSettings;
-
-
-
