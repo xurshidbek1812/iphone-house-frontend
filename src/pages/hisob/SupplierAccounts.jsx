@@ -1,74 +1,91 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, FileText, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const SupplierAccounts = () => {
   const [suppliersData, setSuppliersData] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  const token = sessionStorage.getItem('token');
 
   useEffect(() => {
-    const suppliers = JSON.parse(sessionStorage.getItem('suppliersList') || "[]");
-    const incomes = JSON.parse(sessionStorage.getItem('supplierInvoices') || "[]");
-    const returns = JSON.parse(sessionStorage.getItem('supplierReturns') || "[]");
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        // 1. Ta'minotchilar va Fakturalarni (Kirimlar) Backenddan yuklaymiz
+        const [suppliersRes, invoicesRes] = await Promise.all([
+          fetch('https://iphone-house-api.onrender.com/api/suppliers', { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch('https://iphone-house-api.onrender.com/api/invoices', { headers: { 'Authorization': `Bearer ${token}` } })
+        ]);
 
-    const calculatedData = suppliers.map(supplier => {
-        let debtUZS = 0;
-        let debtUSD = 0;
-        let creditUZS = 0;
-        let creditUSD = 0;
-        let lastDate = null;
+        if (!suppliersRes.ok || !invoicesRes.ok) throw new Error("Ma'lumotlarni yuklashda xatolik");
 
-        // A) KIRIMLAR 
-        const supplierIncomes = incomes.filter(i => i.supplier === supplier.name && i.status === 'Tasdiqlandi');
-        supplierIncomes.forEach(inc => {
-            inc.items.forEach(item => {
-                if (item.currency === 'USD') debtUSD += Number(item.total);
-                else debtUZS += Number(item.total);
-            });
-            if (!lastDate || new Date(inc.date) > new Date(lastDate)) lastDate = inc.date;
-        });
+        const suppliers = await suppliersRes.json();
+        const incomes = await invoicesRes.json(); // Bu sizning SupplierInvoice laringiz
 
-        // B) QAYTARISHLAR 
-        const supplierReturns = returns.filter(r => r.supplier === supplier.name && r.status === 'Tasdiqlandi');
-        supplierReturns.forEach(ret => {
-            ret.items.forEach(item => {
-                const total = item.inputQty * item.inputPrice;
-                if (item.inputCurrency === 'USD') {
-                    debtUSD -= total; 
-                    if (debtUSD < 0) { 
-                        creditUSD += Math.abs(debtUSD);
-                        debtUSD = 0;
+        // 2. Har bir ta'minotchi uchun hisob-kitobni amalga oshiramiz
+        const calculatedData = suppliers.map(supplier => {
+            let debtUZS = 0;
+            let debtUSD = 0;
+            let creditUZS = 0;
+            let creditUSD = 0;
+            let lastDate = null;
+
+            // A) KIRIMLAR (Fakturalar bo'yicha) - Agar status "Tasdiqlandi" bo'lsa
+            const supplierIncomes = incomes.filter(i => i.supplierName === supplier.name && i.status === 'Tasdiqlandi');
+            
+            supplierIncomes.forEach(inc => {
+                // Faktura ichidagi barcha tovarlarni aylanib chiqamiz
+                inc.items.forEach(item => {
+                    if (item.currency === 'USD') {
+                        debtUSD += Number(item.total); // Biz qarz bo'lamiz
+                    } else {
+                        debtUZS += Number(item.total); // Biz qarz bo'lamiz
                     }
-                } else {
-                    debtUZS -= total;
-                    if (debtUZS < 0) {
-                        creditUZS += Math.abs(debtUZS);
-                        debtUZS = 0;
-                    }
+                });
+                
+                // Oxirgi amaliyot sanasini topish
+                if (!lastDate || new Date(inc.date) > new Date(lastDate)) {
+                    lastDate = inc.date;
                 }
             });
-            const retDate = ret.date.split(',')[0]; 
-            if (!lastDate || new Date(retDate) > new Date(lastDate)) lastDate = retDate;
+
+            /*
+              B) QAYTARISHLAR VA TO'LOVLAR (Hozircha API da faqat Kirim bor)
+              Bu yerga keyinchalik Ta'minotchiga qilingan To'lovlar (Payments) va 
+              Ombordan qaytarilgan tovarlar (Returns) ni ayirish mantig'i qo'shiladi.
+              Misol uchun: debtUSD -= tolovSummasi
+            */
+
+            return {
+                ...supplier,
+                debtUZS,
+                debtUSD,
+                creditUZS,
+                creditUSD,
+                limitUZS: 0, // Hozircha limitlar bazada yo'q
+                limitUSD: 0,
+                lastDate: lastDate ? new Date(lastDate).toLocaleDateString('uz-UZ') : '-'
+            };
         });
 
-        return {
-            ...supplier,
-            debtUZS,
-            debtUSD,
-            creditUZS,
-            creditUSD,
-            limitUZS: supplier.limitUZS || 0, 
-            limitUSD: supplier.limitUSD || 0,
-            lastDate: lastDate || '-'
-        };
-    });
+        setSuppliersData(calculatedData);
+      } catch (err) {
+        toast.error("Xatolik yuz berdi");
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    setSuppliersData(calculatedData);
-  }, []);
+    fetchData();
+  }, [token]);
 
   const filteredSuppliers = suppliersData.filter(s => 
       s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.phone && s.phone.includes(searchTerm)) ||
-      (s.customId && s.customId.toString().includes(searchTerm)) // ID bo'yicha qidirish
+      (s.customId && s.customId.toString().includes(searchTerm))
   );
 
   return (
@@ -142,14 +159,15 @@ const SupplierAccounts = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50 text-sm">
-            {filteredSuppliers.length > 0 ? (
+            {isLoading ? (
+                <tr><td colSpan="6" className="p-10 text-center text-slate-400 font-bold">Yuklanmoqda...</td></tr>
+            ) : filteredSuppliers.length > 0 ? (
                 filteredSuppliers.map((item) => (
                 <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
                     
                     <td className="p-5">
                         <div className="flex items-center gap-2 mb-1">
                             <div className="font-bold text-slate-800 text-base">{item.name}</div>
-                            {/* KORINADIGAN ID SHU YERDA */}
                             <span className="text-[10px] font-black text-blue-600 bg-blue-100 px-2 py-0.5 rounded-md tracking-wider">
                                 #{item.customId || "0000"}
                             </span>
