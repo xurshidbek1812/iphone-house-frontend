@@ -35,7 +35,7 @@ const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
                                 <div className="font-bold text-gray-800 uppercase text-sm">{customer.lastName} {customer.firstName} {customer.middleName}</div>
                                 <div className="text-[11px] font-mono text-gray-500 flex gap-3 mt-1">
                                     <span>JSHSHIR: {customer.pinfl}</span>
-                                    <span>Tel: {customer.phones?.[0]?.phone || '-'}</span>
+                                    <span>Tel: {customer.phones?.[0]?.phone || customer.phone || '-'}</span>
                                 </div>
                             </div>
                         ))
@@ -53,7 +53,6 @@ const AddCashSale = () => {
   
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
-  
   const token = sessionStorage.getItem('token');
   const barcodeInputRef = useRef(null); 
 
@@ -63,8 +62,8 @@ const AddCashSale = () => {
       otherName: '',
       otherPhone: '+998 ',
       items: [],
-      discount: '', // 🚨 YANGI QO'SHILDI
-      note: ''      // 🚨 YANGI QO'SHILDI
+      discount: '',
+      note: ''     
   });
 
   const [productTab, setProductTab] = useState('catalog'); 
@@ -89,19 +88,16 @@ const AddCashSale = () => {
           const code = e.target.value.trim();
           const foundProduct = products.find(p => p.customId.toString() === code || p.id.toString() === code);
           
-          if (foundProduct) {
-              addProductToCart(foundProduct);
-          } else {
-              toast.error(`Kod [${code}] bo'yicha tovar topilmadi!`);
-          }
+          if (foundProduct) addProductToCart(foundProduct);
+          else toast.error(`Kod [${code}] bo'yicha tovar topilmadi!`);
+          
           e.target.value = '';
           barcodeInputRef.current?.focus();
       }
   };
 
-  // HISOB KITOB (UMUMIY)
   const grandTotal = saleData.items.reduce((sum, item) => sum + ((Number(item.salePrice) || 0) * item.qty), 0);
-  const finalAmount = Math.max(0, grandTotal - Number(saleData.discount || 0)); // Chegirmadan keyingi summa manfiy bo'lib ketmasligi kerak
+  const finalAmount = Math.max(0, grandTotal - Number(saleData.discount || 0)); 
 
   const addProductToCart = (product) => {
       if (product.quantity <= 0) return toast.error("Omborda qoldiq yo'q!");
@@ -143,9 +139,16 @@ const AddCashSale = () => {
   };
 
   const submitSale = async () => {
+      // 🚨 HIMOYA: Agar chegirma berilgan bo'lsa, izoh majburiy!
+      if (Number(saleData.discount) > 0 && (!saleData.note || saleData.note.trim() === '')) {
+          return toast.error("Chegirma berilganda sababini (izoh) yozish majburiy!");
+      }
+      if (Number(saleData.discount) > grandTotal) {
+          return toast.error("Chegirma summasi tovarlar narxidan ko'p bo'lishi mumkin emas!");
+      }
+
       setIsLoading(true);
       try {
-          // 🚨 YUBORILAYOTGAN YUK (Payload) ga chegirma va izohni qo'shamiz
           const payload = {
               isAnonymous: saleData.isAnonymous,
               customerId: saleData.isAnonymous ? null : (saleData.mainCustomer?.id || null),
@@ -185,6 +188,14 @@ const AddCashSale = () => {
       p.customId.toString().includes(productSearch)
   );
 
+  // Telefon raqamni to'g'ri ko'rsatish mantig'i
+  const getCustomerPhone = (customer) => {
+      if (!customer) return 'Tel kiritilmagan';
+      if (customer.phones && customer.phones.length > 0) return customer.phones[0].phone;
+      if (customer.phone) return customer.phone;
+      return 'Tel kiritilmagan';
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
@@ -210,7 +221,7 @@ const AddCashSale = () => {
                 ) : saleData.mainCustomer ? (
                     <div>
                         <h3 className="font-black text-gray-800 text-lg leading-tight uppercase mb-2">{saleData.mainCustomer.lastName} <br/> {saleData.mainCustomer.firstName}</h3>
-                        <p className="text-sm font-mono text-gray-500">{saleData.mainCustomer.phones?.[0]?.phone || 'Tel kiritilmagan'}</p>
+                        <p className="text-sm font-mono text-gray-500">{getCustomerPhone(saleData.mainCustomer)}</p>
                     </div>
                 ) : (
                     <p className="text-sm text-gray-400 italic">Mijoz tanlanmagan</p>
@@ -276,11 +287,9 @@ const AddCashSale = () => {
                 </div>
             )}
 
-            {/* QADAM 2: TOVARLAR (SKANER VA KATALOG) */}
+            {/* QADAM 2: TOVARLAR */}
             {step === 2 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[650px] animate-in slide-in-from-right-8">
-                    
-                    {/* DOIMIY SKANER INPUTI */}
                     <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
                         <div className="relative max-w-lg mx-auto">
                             <ScanLine className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500" size={24}/>
@@ -294,7 +303,6 @@ const AddCashSale = () => {
                         </div>
                     </div>
 
-                    {/* TABLAR */}
                     <div className="flex border-b border-gray-100 bg-white">
                         <button onClick={() => setProductTab('catalog')} className={`flex-1 py-3 text-sm font-bold transition-colors ${productTab === 'catalog' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700 bg-gray-50'}`}>Katalog (Qidiruv)</button>
                         <button onClick={() => setProductTab('cart')} className={`flex-1 py-3 text-sm font-bold transition-colors relative ${productTab === 'cart' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700 bg-gray-50'}`}>
@@ -303,7 +311,6 @@ const AddCashSale = () => {
                         </button>
                     </div>
 
-                    {/* KATALOG QISMI */}
                     {productTab === 'catalog' && (
                         <div className="p-4 flex flex-col flex-1 overflow-hidden bg-white">
                             <div className="relative mb-4">
@@ -340,7 +347,6 @@ const AddCashSale = () => {
                         </div>
                     )}
 
-                    {/* SAVAT QISMI */}
                     {productTab === 'cart' && (
                         <div className="p-4 flex flex-col flex-1 overflow-hidden bg-gray-50/50">
                             {saleData.items.length === 0 ? (
@@ -405,15 +411,29 @@ const AddCashSale = () => {
                                     placeholder="Masalan: 50000"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><MessageSquare size={14}/> Savdo uchun izoh (ixtiyoriy)</label>
-                                <textarea 
-                                    value={saleData.note} 
-                                    onChange={(e) => setSaleData({...saleData, note: e.target.value})} 
-                                    className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 resize-none h-24" 
-                                    placeholder="Nega chegirma berilgani yoki boshqa eslatma..."
-                                ></textarea>
-                            </div>
+                            
+                            {/* 🚨 DIQQAT: Agar chegirma bo'lsa izoh majburiy (qizil) bo'ladi */}
+                            {Number(saleData.discount) > 0 ? (
+                                <div className="animate-in fade-in slide-in-from-top-2">
+                                    <label className="block text-xs font-bold text-rose-500 uppercase mb-2 flex items-center gap-1"><MessageSquare size={14}/> Chegirma sababi (Izoh) *</label>
+                                    <textarea 
+                                        value={saleData.note} 
+                                        onChange={(e) => setSaleData({...saleData, note: e.target.value})} 
+                                        className="w-full p-4 bg-rose-50 border border-rose-200 rounded-xl outline-none focus:border-rose-500 text-rose-900 resize-none h-24" 
+                                        placeholder="Chegirma nima sababdan berilganini yozing (majburiy)..."
+                                    ></textarea>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><MessageSquare size={14}/> Savdo uchun izoh (ixtiyoriy)</label>
+                                    <textarea 
+                                        value={saleData.note} 
+                                        onChange={(e) => setSaleData({...saleData, note: e.target.value})} 
+                                        className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 resize-none h-24" 
+                                        placeholder="Eslatma yoki izoh qoldirishingiz mumkin..."
+                                    ></textarea>
+                                </div>
+                            )}
                         </div>
 
                         {/* YAKUNIY HISOB */}
