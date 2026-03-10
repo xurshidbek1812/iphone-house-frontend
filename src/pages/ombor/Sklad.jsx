@@ -16,13 +16,13 @@ const Sklad = () => {
   // Modallar
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCalcOpen, setIsCalcOpen] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false); // 🚨 Filtr modali uchun
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, productId: null });
   const [archiveModal, setArchiveModal] = useState({ isOpen: false, batchId: null }); 
   
-  // --- YANGI: Tahrirlash modali uchun ---
+  // Tahrirlash modali uchun
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editData, setEditData] = useState({
       id: null, name: '', category: '', unit: 'Dona', buyPrice: '', salePrice: ''
@@ -42,6 +42,7 @@ const Sklad = () => {
     name: '', category: '', buyPrice: '', salePrice: '', quantity: '0', unit: 'Dona', buyCurrency: 'USD', saleCurrency: 'UZS'
   });
 
+  // 🚨 FILTR QIYMATLARI
   const [filterValues, setFilterValues] = useState({
     id: '', category: '', buyPriceFrom: '', buyPriceTo: '', salePriceFrom: '', salePriceTo: '', stockStatus: ''
   });
@@ -108,7 +109,7 @@ const Sklad = () => {
         body: JSON.stringify(newProduct)
       });
       
-      const responseData = await res.json(); // Javobni o'qiymiz
+      const responseData = await res.json();
 
       if (res.ok) {
         setIsModalOpen(false); 
@@ -119,7 +120,6 @@ const Sklad = () => {
           setFormData({ name: '', category: '', buyPrice: '', salePrice: '', quantity: '0', unit: 'Dona', buyCurrency: 'USD', saleCurrency: 'UZS' });
         }, 2500);
       } else {
-        // 🚨 TIZILGAN QISM: Xato bo'lsa uni ekranga chiqaramiz
         toast.error(responseData.error || "Saqlashda xatolik yuz berdi");
       }
     } catch (err) { 
@@ -140,7 +140,6 @@ const Sklad = () => {
       finally { setDeleteModal({ isOpen: false, productId: null }); }
   };
 
-  // --- YANGI: Tahrirlash funksiyalari ---
   const handleEditClick = (product) => {
       setEditData({
           id: product.id,
@@ -239,15 +238,38 @@ const Sklad = () => {
     setPrintProduct(null);
   };
 
+  // 🚨 HIMOYA QILINGAN VA MUKAMMAL FILTRLASh MANTIQI
   const filteredProducts = products.filter(p => {
+    // 1. Qidiruv paneli (Nomi yoki ID)
     const search = searchTerm.toLowerCase();
     const matchesSearch = p.name.toLowerCase().includes(search) || (p.customId && p.customId.toString().includes(search));
+    
+    // 2. Tovar ID bo'yicha aniq filtr
     const matchesId = filterValues.id ? p.customId.toString().includes(filterValues.id) : true;
+    
+    // 3. Kategoriya filtri
     const matchesCategory = filterValues.category ? p.category === filterValues.category : true;
+    
+    // 4. Qoldiq holati filtri
     let matchesStock = true;
     if (filterValues.stockStatus === 'available') matchesStock = p.quantity > 0;
     if (filterValues.stockStatus === 'unavailable') matchesStock = p.quantity === 0;
-    return matchesSearch && matchesId && matchesCategory && matchesStock;
+
+    // 5. Kirim narxi oraliqlari
+    const buyFrom = filterValues.buyPriceFrom ? Number(filterValues.buyPriceFrom) : null;
+    const buyTo = filterValues.buyPriceTo ? Number(filterValues.buyPriceTo) : null;
+    let matchesBuyPrice = true;
+    if (buyFrom !== null && Number(p.buyPrice) < buyFrom) matchesBuyPrice = false;
+    if (buyTo !== null && Number(p.buyPrice) > buyTo) matchesBuyPrice = false;
+
+    // 6. Sotuv narxi oraliqlari
+    const saleFrom = filterValues.salePriceFrom ? Number(filterValues.salePriceFrom) : null;
+    const saleTo = filterValues.salePriceTo ? Number(filterValues.salePriceTo) : null;
+    let matchesSalePrice = true;
+    if (saleFrom !== null && Number(p.salePrice) < saleFrom) matchesSalePrice = false;
+    if (saleTo !== null && Number(p.salePrice) > saleTo) matchesSalePrice = false;
+
+    return matchesSearch && matchesId && matchesCategory && matchesStock && matchesBuyPrice && matchesSalePrice;
   });
 
   return (
@@ -268,6 +290,7 @@ const Sklad = () => {
         <button onClick={() => setIsFilterOpen(true)} className={`px-6 rounded-2xl border font-bold flex items-center gap-2 transition-all ${Object.values(filterValues).some(v => v !== '') ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}><Filter size={20} /> Filtr</button>
       </div>
 
+      {/* --- ASOSIY JADVAL --- */}
       <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 overflow-hidden">
         <table className="w-full text-left">
             <thead className="bg-slate-50/50 text-slate-400 text-[11px] uppercase font-black tracking-widest border-b border-slate-100">
@@ -327,6 +350,124 @@ const Sklad = () => {
         </table>
       </div>
 
+      {/* 🚨 YANGI: MUKAMMAL FILTR MODALI (SLIDE-OVER KO'RINISHIDA) */}
+      {isFilterOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[200] flex justify-end">
+            <div className="bg-white w-full max-w-[450px] h-full shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col">
+                <div className="flex justify-between items-center p-6 border-b border-slate-100">
+                    <h2 className="text-xl font-black text-slate-800">Ma'lumotlarni filtrlash</h2>
+                    <button onClick={() => setIsFilterOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><X size={20}/></button>
+                </div>
+
+                <div className="p-6 flex-1 overflow-y-auto space-y-6 custom-scrollbar">
+                    {/* Tovar ID */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tovar ID</label>
+                        <input 
+                            type="text" 
+                            value={filterValues.id} 
+                            onChange={(e) => setFilterValues({...filterValues, id: e.target.value})} 
+                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 transition-all" 
+                            placeholder="Kodni yozing..." 
+                        />
+                    </div>
+
+                    {/* Kategoriyasi */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Kategoriyasi</label>
+                        <select 
+                            value={filterValues.category} 
+                            onChange={(e) => setFilterValues({...filterValues, category: e.target.value})} 
+                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 transition-all"
+                        >
+                            <option value="">Barchasi</option>
+                            {categories.map((c, i) => (
+                                <option key={c.id || i} value={c.name}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Kirim narxi (Faqat Direktorga) */}
+                    {isDirector && (
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Kirim narxi</label>
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1 relative">
+                                    <input type="number" placeholder="Dan" value={filterValues.buyPriceFrom} onChange={(e) => setFilterValues({...filterValues, buyPriceFrom: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-700" />
+                                </div>
+                                <div className="text-slate-300">-</div>
+                                <div className="flex-1 relative">
+                                    <input type="number" placeholder="Gacha" value={filterValues.buyPriceTo} onChange={(e) => setFilterValues({...filterValues, buyPriceTo: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-700" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Sotish narxi */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Sotish narxi</label>
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1 relative">
+                                <input type="number" placeholder="Dan" value={filterValues.salePriceFrom} onChange={(e) => setFilterValues({...filterValues, salePriceFrom: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-700" />
+                            </div>
+                            <div className="text-slate-300">-</div>
+                            <div className="flex-1 relative">
+                                <input type="number" placeholder="Gacha" value={filterValues.salePriceTo} onChange={(e) => setFilterValues({...filterValues, salePriceTo: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-700" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Qoldiq holati */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-4">Qoldiq holati</label>
+                        <div className="flex flex-col gap-3">
+                            <label className="flex items-center gap-3 cursor-pointer group">
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${filterValues.stockStatus === '' ? 'border-blue-600 bg-blue-600' : 'border-slate-300 group-hover:border-blue-400'}`}>
+                                    {filterValues.stockStatus === '' && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                </div>
+                                <input type="radio" className="hidden" checked={filterValues.stockStatus === ''} onChange={() => setFilterValues({...filterValues, stockStatus: ''})} />
+                                <span className="font-bold text-slate-700 group-hover:text-slate-900">Barchasi</span>
+                            </label>
+                            
+                            <label className="flex items-center gap-3 cursor-pointer group">
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${filterValues.stockStatus === 'available' ? 'border-blue-600 bg-blue-600' : 'border-slate-300 group-hover:border-blue-400'}`}>
+                                    {filterValues.stockStatus === 'available' && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                </div>
+                                <input type="radio" className="hidden" checked={filterValues.stockStatus === 'available'} onChange={() => setFilterValues({...filterValues, stockStatus: 'available'})} />
+                                <span className="font-bold text-slate-700 group-hover:text-slate-900">Qoldiq mavjud</span>
+                            </label>
+
+                            <label className="flex items-center gap-3 cursor-pointer group">
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${filterValues.stockStatus === 'unavailable' ? 'border-blue-600 bg-blue-600' : 'border-slate-300 group-hover:border-blue-400'}`}>
+                                    {filterValues.stockStatus === 'unavailable' && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                </div>
+                                <input type="radio" className="hidden" checked={filterValues.stockStatus === 'unavailable'} onChange={() => setFilterValues({...filterValues, stockStatus: 'unavailable'})} />
+                                <span className="font-bold text-slate-700 group-hover:text-slate-900">Qoldiq mavjud emas</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-6 border-t border-slate-100 flex gap-4 bg-slate-50 shrink-0">
+                    <button 
+                        onClick={() => setFilterValues({ id: '', category: '', buyPriceFrom: '', buyPriceTo: '', salePriceFrom: '', salePriceTo: '', stockStatus: '' })} 
+                        className="flex-1 py-3.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-100 transition-colors"
+                    >
+                        Tozalash
+                    </button>
+                    <button 
+                        onClick={() => setIsFilterOpen(false)} 
+                        className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"
+                    >
+                        Tasdiqlash
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Qolgan Modallar: Details, Print, Edit, Delete... (Asl kod bilan bir xil, qisqartirildi) */}
+      
       {/* --- BATAFSIL (KIRIM TARIXI) MODALI --- */}
       {isDetailsOpen && selectedProduct && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[999] p-4">
@@ -649,4 +790,3 @@ const Sklad = () => {
 };
 
 export default Sklad;
-
