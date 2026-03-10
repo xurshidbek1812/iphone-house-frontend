@@ -25,8 +25,8 @@ const ProfileSettings = () => {
     confirmValue: ''
   });
 
-  const token = localStorage.getItem('token');
-  const currentLogin = localStorage.getItem('currentUserLogin');
+  const token = sessionStorage.getItem('token');
+  const currentLogin = sessionStorage.getItem('currentUserLogin');
 
   // --- 1. MA'LUMOTLARNI HAQIQIY BAZADAN YUKLASH ---
   useEffect(() => {
@@ -95,7 +95,7 @@ const ProfileSettings = () => {
 
         if (!res.ok) throw new Error("Saqlab bo'lmadi");
         
-        localStorage.setItem('userName', fullName);
+        sessionStorage.setItem('userName', fullName);
         setIsEditingInfo(false);
         toast.success("Shaxsiy ma'lumotlar yangilandi!");
     } catch (err) {
@@ -127,7 +127,7 @@ const ProfileSettings = () => {
             return toast.error(data.message || "Bu login band yoki xato yuz berdi!");
         }
 
-        localStorage.setItem('currentUserLogin', securityForm.newValue); 
+        sessionStorage.setItem('currentUserLogin', securityForm.newValue); 
         setUserData({ ...userData, login: securityForm.newValue });
         setIsChangingLogin(false);
         resetSecurityForm();

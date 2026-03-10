@@ -9,7 +9,7 @@ const Dashboard = () => {
   const [stats, setStats] = useState({ inventoryValue: 0, totalIncome: 0, totalDebt: 0, productCount: 0 });
   const [notifications, setNotifications] = useState([]);
   
-  const userRole = (localStorage.getItem('userRole') || 'admin').toLowerCase();
+  const userRole = (sessionStorage.getItem('userRole') || 'admin').toLowerCase();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); 
 
   useEffect(() => {
@@ -23,8 +23,8 @@ const Dashboard = () => {
   // 1. XABARLARNI YUKLASH FUNKSIYASI (Qayta ishlatish uchun alohida qildik)
 // 1. XABARLARNI YUKLASH FUNKSIYASI (Filtrlangan)
   const loadNotifications = () => {
-    const returns = JSON.parse(localStorage.getItem('supplierReturns') || "[]");
-    const incomes = JSON.parse(localStorage.getItem('supplierInvoices') || "[]");
+    const returns = JSON.parse(sessionStorage.getItem('supplierReturns') || "[]");
+    const incomes = JSON.parse(sessionStorage.getItem('supplierInvoices') || "[]");
     
     // O'ZGARISH: Faqatgina yuborilganlarini olamiz. 
     // "Jarayonda" (yoki "Qoralama") holatidagilarni kesib tashlaymiz.
@@ -42,14 +42,14 @@ const Dashboard = () => {
   // 2. BITTA XABARNI O'QILGAN QILISH
 const markAsRead = (id, type) => {
     const storageKey = type === 'Kirim' ? 'supplierInvoices' : 'supplierReturns';
-    const items = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    const items = JSON.parse(sessionStorage.getItem(storageKey) || "[]");
     
     // O'ZGARISH: status ni "Tasdiqlandi" qilmaymiz! Faqat isRead: true degan belgi qo'shamiz.
     const updatedItems = items.map(item => 
         item.id === id ? { ...item, isRead: true } : item
     );
     
-    localStorage.setItem(storageKey, JSON.stringify(updatedItems));
+    sessionStorage.setItem(storageKey, JSON.stringify(updatedItems));
     
     // Ekranni yangilaymiz
     setNotifications(prev => prev.map(note => 
@@ -60,10 +60,10 @@ const markAsRead = (id, type) => {
   // 3. BARCHASINI O'QILGAN QILISH (Messenjer uslubi)
 const markAllAsRead = () => {
     ['supplierInvoices', 'supplierReturns'].forEach(key => {
-        const items = JSON.parse(localStorage.getItem(key) || "[]");
+        const items = JSON.parse(sessionStorage.getItem(key) || "[]");
         // O'ZGARISH: Hammasiga isRead: true beramiz. Status o'z joyida qoladi.
         const updatedItems = items.map(item => ({ ...item, isRead: true }));
-        localStorage.setItem(key, JSON.stringify(updatedItems));
+        sessionStorage.setItem(key, JSON.stringify(updatedItems));
     });
 
     setNotifications(prev => prev.map(note => ({ ...note, isRead: true })));

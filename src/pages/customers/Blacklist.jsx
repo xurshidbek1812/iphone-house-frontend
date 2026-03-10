@@ -4,7 +4,7 @@ import { Search } from 'lucide-react';
 const Blacklist = () => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
 
   useEffect(() => {
     const fetchBlacklist = async () => {

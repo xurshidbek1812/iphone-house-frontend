@@ -3,8 +3,8 @@ import { Save, User, Lock, Info, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast'; // <--- TOAST QO'SHILDI
 
 const Settings = () => {
-  const currentRole = localStorage.getItem('userRole') || 'admin';
-  const currentLogin = localStorage.getItem('currentUserLogin');
+  const currentRole = sessionStorage.getItem('userRole') || 'admin';
+  const currentLogin = sessionStorage.getItem('currentUserLogin');
 
   // Forma ma'lumotlari
   const [formData, setFormData] = useState({
@@ -18,7 +18,7 @@ const Settings = () => {
   useEffect(() => {
       // 1. Agar Master Direktor bo'lsa
       if (currentRole === 'director') {
-          const savedDirector = JSON.parse(localStorage.getItem('masterDirector') || "null");
+          const savedDirector = JSON.parse(sessionStorage.getItem('masterDirector') || "null");
           if (savedDirector) {
               const names = savedDirector.name.split(' ');
               setFormData({
@@ -39,7 +39,7 @@ const Settings = () => {
       } 
       // 2. Agar oddiy xodim bo'lsa
       else {
-          const staffList = JSON.parse(localStorage.getItem('staffList') || "[]");
+          const staffList = JSON.parse(sessionStorage.getItem('staffList') || "[]");
           const me = staffList.find(u => u.login === currentLogin);
           if (me) {
               setFormData({
@@ -73,23 +73,23 @@ const Settings = () => {
               login: formData.login,
               password: formData.password
           };
-          localStorage.setItem('masterDirector', JSON.stringify(directorData));
+          sessionStorage.setItem('masterDirector', JSON.stringify(directorData));
       } 
       // 2. XODIM UCHUN SAQLASH
       else {
-          const staffList = JSON.parse(localStorage.getItem('staffList') || "[]");
+          const staffList = JSON.parse(sessionStorage.getItem('staffList') || "[]");
           const updatedList = staffList.map(u => {
               if (u.login === currentLogin) {
                   return { ...u, firstName: formData.firstName, lastName: formData.lastName, name: fullName, login: formData.login, password: formData.password };
               }
               return u;
           });
-          localStorage.setItem('staffList', JSON.stringify(updatedList));
+          sessionStorage.setItem('staffList', JSON.stringify(updatedList));
       }
 
       // 3. Ikkala holat uchun ham joriy sessiyani yangilash
-      localStorage.setItem('userName', fullName);
-      localStorage.setItem('currentUserLogin', formData.login);
+      sessionStorage.setItem('userName', fullName);
+      sessionStorage.setItem('currentUserLogin', formData.login);
 
       toast.success("Profil ma'lumotlari muvaffaqiyatli saqlandi!");
       

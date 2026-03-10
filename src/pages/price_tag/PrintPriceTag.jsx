@@ -23,7 +23,7 @@ const PrintPriceTag = () => {
 
   // --- SOZLAMALAR ---
   const MARKUP_PERCENT = 44; // 12 oy uchun ustama
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
 
   // --- 1. BAZADAN YUKLASH ---
   useEffect(() => {

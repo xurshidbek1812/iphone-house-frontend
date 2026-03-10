@@ -17,7 +17,7 @@ const InventoryCount = () => {
   const [selectedIds, setSelectedIds] = useState([]); 
 
   const inputRef = useRef(null);
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
 
   // OVOZ EFFEKTI
   const playBeep = (type) => {

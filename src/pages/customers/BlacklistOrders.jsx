@@ -12,9 +12,9 @@ const BlacklistOrders = () => {
   const [isEditMode, setIsEditMode] = useState(false); // <--- Tahrirlash rejimi
   const [editId, setEditId] = useState(null);
 
-  const token = localStorage.getItem('token');
-  const userRole = localStorage.getItem('userRole') || 'admin';
-  const currentUserName = localStorage.getItem('userName');
+  const token = sessionStorage.getItem('token');
+  const userRole = sessionStorage.getItem('userRole') || 'admin';
+  const currentUserName = sessionStorage.getItem('userName');
 
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [searchCust, setSearchCust] = useState('');

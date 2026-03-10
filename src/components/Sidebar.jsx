@@ -14,8 +14,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const navigate = useNavigate();
 
   // --- ROL VA ISM NI OLISH ---
-  const userRole = (localStorage.getItem('userRole') || 'admin').toLowerCase();
-  const userName = localStorage.getItem('userName') || 'Foydalanuvchi';
+  const userRole = (sessionStorage.getItem('userRole') || 'admin').toLowerCase();
+  const userName = sessionStorage.getItem('userName') || 'Foydalanuvchi';
 
   // --- MODALLAR STATE ---
   const [isRateModalOpen, setIsRateModalOpen] = useState(false);
@@ -37,7 +37,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       setOpenSubmenu(activeIndex);
     }
 
-    const savedRate = localStorage.getItem('globalExchangeRate');
+    const savedRate = sessionStorage.getItem('globalExchangeRate');
     if (savedRate) setGlobalRate(savedRate);
   }, [location.pathname]);
 
@@ -45,7 +45,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const handleSaveRate = () => {
     if(!globalRate || globalRate <= 0) return;
     
-    localStorage.setItem('globalExchangeRate', globalRate);
+    sessionStorage.setItem('globalExchangeRate', globalRate);
     
     setIsRateModalOpen(false); 
     setIsSuccessModalOpen(true); 
@@ -58,9 +58,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   // --- CHIQISH FUNKSIYASI (MODAL ORQALI) ---
   const confirmLogout = () => {
-      localStorage.removeItem('userRole');
-      localStorage.removeItem('userName');
-      localStorage.removeItem('currentUserLogin');
+      sessionStorage.removeItem('userRole');
+      sessionStorage.removeItem('userName');
+      sessionStorage.removeItem('currentUserLogin');
       navigate('/login');
       window.location.reload(); 
   };

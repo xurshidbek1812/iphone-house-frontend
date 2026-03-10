@@ -12,9 +12,9 @@ const SupplierIncomeList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewInvoice, setViewInvoice] = useState(null);
   
-  const userRole = localStorage.getItem('userRole') || 'admin';
-  const currentUserName = localStorage.getItem('userName');
-  const token = localStorage.getItem('token');
+  const userRole = sessionStorage.getItem('userRole') || 'admin';
+  const currentUserName = sessionStorage.getItem('userName');
+  const token = sessionStorage.getItem('token');
 
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: null, invoiceId: null });
   const [printModalOpen, setPrintModalOpen] = useState(false);

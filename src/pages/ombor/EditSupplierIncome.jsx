@@ -7,8 +7,8 @@ const EditSupplierIncome = () => {
   const navigate = useNavigate();
   const { id } = useParams(); 
   
-  const userRole = localStorage.getItem('userRole') || 'admin';
-  const token = localStorage.getItem('token');
+  const userRole = sessionStorage.getItem('userRole') || 'admin';
+  const token = sessionStorage.getItem('token');
   
   const [date, setDate] = useState('');
   const [supplier, setSupplier] = useState('');
@@ -37,7 +37,7 @@ const EditSupplierIncome = () => {
     fetch('https://iphone-house-api.onrender.com/api/products', { headers: { 'Authorization': `Bearer ${token}` } })
       .then(res => res.json()).then(data => setProducts(data)).catch(err => console.error(err));
 
-    const savedSuppliers = JSON.parse(localStorage.getItem('suppliersList') || "[]");
+    const savedSuppliers = JSON.parse(sessionStorage.getItem('suppliersList') || "[]");
     setSuppliersList(savedSuppliers);
 
     // 2. Tahrirlanayotgan fakturani bazadan chaqirish

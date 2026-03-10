@@ -36,11 +36,11 @@ const Login = () => {
         // ... (oldingi kodlar)
         if (response.ok && data.success) {
             // 1. Ma'lumotlarni saqlaymiz
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('user', JSON.stringify(data.user)); // <--- USERNI HAM SAQLAYMIZ
-            localStorage.setItem('userRole', data.user.role);
-            localStorage.setItem('userName', data.user.fullName);
-            localStorage.setItem('currentUserLogin', data.user.username); 
+            sessionStorage.setItem('token', data.token);
+            sessionStorage.setItem('user', JSON.stringify(data.user)); // <--- USERNI HAM SAQLAYMIZ
+            sessionStorage.setItem('userRole', data.user.role);
+            sessionStorage.setItem('userName', data.user.fullName);
+            sessionStorage.setItem('currentUserLogin', data.user.username); 
         
             toast.success(`Xush kelibsiz, ${data.user.fullName}!`);
             

@@ -28,7 +28,7 @@ const AddCustomer = () => {
   const [regionsData, setRegionsData] = useState([]); // API dan keladi
   const [districts, setDistricts] = useState([]);
 
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
 
   // --- ASOSIY STATE ---
   const [formData, setFormData] = useState({

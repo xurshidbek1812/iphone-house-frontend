@@ -6,9 +6,9 @@ const SupplierAccounts = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const suppliers = JSON.parse(localStorage.getItem('suppliersList') || "[]");
-    const incomes = JSON.parse(localStorage.getItem('supplierInvoices') || "[]");
-    const returns = JSON.parse(localStorage.getItem('supplierReturns') || "[]");
+    const suppliers = JSON.parse(sessionStorage.getItem('suppliersList') || "[]");
+    const incomes = JSON.parse(sessionStorage.getItem('supplierInvoices') || "[]");
+    const returns = JSON.parse(sessionStorage.getItem('supplierReturns') || "[]");
 
     const calculatedData = suppliers.map(supplier => {
         let debtUZS = 0;

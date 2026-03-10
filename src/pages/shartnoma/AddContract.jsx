@@ -61,7 +61,7 @@ const AddContract = () => {
   const [staffList, setStaffList] = useState([]);
   const [products, setProducts] = useState([]);
 
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   
   // Skaner uchun Reference
   const barcodeInputRef = useRef(null);

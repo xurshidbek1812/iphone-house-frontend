@@ -7,7 +7,7 @@ const ContractList = () => {
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
 
   useEffect(() => {
       const fetchContracts = async () => {

@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 const CategorySettings = () => {
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState('');
-  const token = localStorage.getItem('token'); 
+  const token = sessionStorage.getItem('token'); 
 
   const fetchCategories = async () => {
     try {
@@ -19,7 +19,7 @@ const CategorySettings = () => {
             // Xavfsiz tarzda saqlash (Agar data array bo'lsa)
             if (Array.isArray(data)) {
                 setCategories(data);
-                localStorage.setItem('categoryList', JSON.stringify(data)); 
+                sessionStorage.setItem('categoryList', JSON.stringify(data)); 
             } else {
                 setCategories([]); // Xato kelsa bo'shatib qo'yamiz
             }

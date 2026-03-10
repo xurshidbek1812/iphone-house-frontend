@@ -8,7 +8,7 @@ const CustomerList = () => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   
   // Qidiruv va Filtr State
   const [searchTerm, setSearchTerm] = useState('');

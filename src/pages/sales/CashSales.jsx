@@ -7,7 +7,7 @@ const CashSales = () => {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
 
   useEffect(() => {
       const fetchSales = async () => {

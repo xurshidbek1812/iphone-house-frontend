@@ -3,14 +3,14 @@ import { Bell, User, LogOut, Menu } from 'lucide-react';
 
 const Navbar = () => {
   // Foydalanuvchi ma'lumotlarini olish (Hozircha statik)
-  const userRole = localStorage.getItem('userRole') || 'Admin';
+  const userRole = sessionStorage.getItem('userRole') || 'Admin';
   const userName = "Foydalanuvchi"; 
 
   // Tizimdan chiqish
   const handleLogout = () => {
      if(window.confirm("Tizimdan chiqmoqchimisiz?")) {
-         localStorage.removeItem('token');
-         localStorage.removeItem('userRole');
+         sessionStorage.removeItem('token');
+         sessionStorage.removeItem('userRole');
          window.location.href = '/login'; // Login sahifasiga qaytish
      }
   }

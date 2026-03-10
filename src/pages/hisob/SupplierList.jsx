@@ -3,9 +3,9 @@ import { Search, Plus, Trash2, Phone, User, MapPin, X, Save, AlertTriangle, Chec
 
 const SupplierList = () => {
   // ROLNI ANIQLASH
-  const userRole = localStorage.getItem('userRole');
+  const userRole = sessionStorage.getItem('userRole');
   const isDirector = userRole === 'director'; 
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
 
   const [suppliers, setSuppliers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,13 +36,13 @@ const SupplierList = () => {
       
       if (res.ok) {
           setSuppliers(data);
-          localStorage.setItem('suppliersList', JSON.stringify(data));
+          sessionStorage.setItem('suppliersList', JSON.stringify(data));
       } else {
           console.error("Server xatosi:", data);
       }
     } catch (err) {
       console.error("Xatolik:", err);
-      const saved = JSON.parse(localStorage.getItem('suppliersList') || "[]");
+      const saved = JSON.parse(sessionStorage.getItem('suppliersList') || "[]");
       setSuppliers(saved);
     }
   };

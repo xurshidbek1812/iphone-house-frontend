@@ -6,16 +6,16 @@ import toast from 'react-hot-toast';
 const AddSupplierIncome = () => {
   const navigate = useNavigate();
   
-  const userRole = localStorage.getItem('userRole') || 'admin';
-  const currentUserName = localStorage.getItem('userName') || 'Bekchonov Azomat';
-  const token = localStorage.getItem('token');
+  const userRole = sessionStorage.getItem('userRole') || 'admin';
+  const currentUserName = sessionStorage.getItem('userName') || 'Bekchonov Azomat';
+  const token = sessionStorage.getItem('token');
   
   const generateInvoiceNumber = () => `${Math.floor(100000 + Math.random() * 900000)}`;
 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [supplier, setSupplier] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState(generateInvoiceNumber()); 
-  const [exchangeRate, setExchangeRate] = useState(localStorage.getItem('globalExchangeRate') || '12500'); 
+  const [exchangeRate, setExchangeRate] = useState(sessionStorage.getItem('globalExchangeRate') || '12500'); 
 
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false); 
@@ -46,7 +46,7 @@ const AddSupplierIncome = () => {
           toast.error("Server bilan aloqa yo'q yoki Token eskirgan!");
       });
 
-    const savedSuppliers = JSON.parse(localStorage.getItem('suppliersList') || "[]");
+    const savedSuppliers = JSON.parse(sessionStorage.getItem('suppliersList') || "[]");
     setSuppliersList(savedSuppliers);
   }, [token]);
 

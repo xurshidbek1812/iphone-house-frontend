@@ -54,7 +54,7 @@ const AddCashSale = () => {
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   const barcodeInputRef = useRef(null); 
 
   const [saleData, setSaleData] = useState({

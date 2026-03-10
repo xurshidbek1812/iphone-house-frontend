@@ -23,7 +23,7 @@ const StaffList = () => {
   });
 
   const API_URL = 'https://iphone-house-api.onrender.com/api/users';
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
 
   // --- 1. SERVERDAN YUKLASH ---
   const fetchStaff = async () => {

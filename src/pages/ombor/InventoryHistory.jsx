@@ -9,7 +9,7 @@ const InventoryHistory = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   // 1. TOKENNI OLAMIZ (Cho'ntakdan pasportni oldik)
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
 
   // 2. SERVERDAN TARIXNI YUKLASH
   useEffect(() => {

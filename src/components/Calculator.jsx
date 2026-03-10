@@ -19,7 +19,7 @@ const Calculator = ({ isOpen, onClose, initialTotal = '', initialCurrency = 'UZS
         setCurrency(initialCurrency || 'UZS'); 
         
         // --- DIREKTOR KURSINI OLISH (To'g'rilandi!) ---
-        const savedRate = localStorage.getItem('globalExchangeRate'); // <-- Aynan sizning nomingiz qo'yildi
+        const savedRate = sessionStorage.getItem('globalExchangeRate'); // <-- Aynan sizning nomingiz qo'yildi
         
         if (savedRate) {
             setExchangeRate(Number(savedRate));
@@ -126,8 +126,8 @@ const Calculator = ({ isOpen, onClose, initialTotal = '', initialCurrency = 'UZS
                       value={exchangeRate}
                       onChange={e => { 
                           setExchangeRate(Number(e.target.value)); 
-                          // Istasangiz bu yerdan o'zgartirilganda LocalStorage ga ham saqlab qo'yish mumkin
-                          // localStorage.setItem('dollarKursi', e.target.value);
+                          // Istasangiz bu yerdan o'zgartirilganda sessionStorage ga ham saqlab qo'yish mumkin
+                          // sessionStorage.setItem('dollarKursi', e.target.value);
                           setShowMonths(false); 
                       }}
                       className="w-24 p-1.5 text-right font-bold text-gray-800 border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"

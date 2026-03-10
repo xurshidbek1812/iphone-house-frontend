@@ -10,14 +10,14 @@ const SupplierReturn = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   // 1. ROLNI OLAMIZ
-  const userRole = localStorage.getItem('userRole') || 'admin'; // 'director' yoki 'admin'
-  const currentUserName = localStorage.getItem('userName') || 'Bekchonov Azomat';
-  const token = localStorage.getItem('token');
+  const userRole = sessionStorage.getItem('userRole') || 'admin'; // 'director' yoki 'admin'
+  const currentUserName = sessionStorage.getItem('userName') || 'Bekchonov Azomat';
+  const token = sessionStorage.getItem('token');
 
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: null, id: null });
 
   useEffect(() => {
-    const savedReturns = localStorage.getItem('supplierReturns');
+    const savedReturns = sessionStorage.getItem('supplierReturns');
     if (savedReturns) {
       setReturns(JSON.parse(savedReturns));
     }
@@ -41,7 +41,7 @@ const SupplierReturn = () => {
         item.id === id ? { ...item, status: 'Yuborildi' } : item
     );
     setReturns(updatedReturns);
-    localStorage.setItem('supplierReturns', JSON.stringify(updatedReturns));
+    sessionStorage.setItem('supplierReturns', JSON.stringify(updatedReturns));
     toast.success("Qaytarish hujjati yuborildi!");
     setConfirmModal({ isOpen: false, type: null, id: null });
   };
@@ -71,7 +71,7 @@ const SupplierReturn = () => {
         );
         
         setReturns(updatedReturns);
-        localStorage.setItem('supplierReturns', JSON.stringify(updatedReturns));
+        sessionStorage.setItem('supplierReturns', JSON.stringify(updatedReturns));
         
         toast.success("Muvaffaqiyatli!");
 

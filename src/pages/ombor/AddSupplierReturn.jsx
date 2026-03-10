@@ -17,16 +17,16 @@ const AddSupplierReturn = () => {
   const [supplierId, setSupplierId] = useState(''); 
   const [note, setNote] = useState('');
   
-  const [currencyRate, setCurrencyRate] = useState(localStorage.getItem('globalExchangeRate') || '12500');
+  const [currencyRate, setCurrencyRate] = useState(sessionStorage.getItem('globalExchangeRate') || '12500');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
 
   // --- MA'LUMOTLARNI YUKLASH ---
   useEffect(() => {
-    const savedSuppliers = JSON.parse(localStorage.getItem('suppliersList') || "[]");
+    const savedSuppliers = JSON.parse(sessionStorage.getItem('suppliersList') || "[]");
     setSuppliersList(savedSuppliers);
 
-    const savedInvoices = JSON.parse(localStorage.getItem('supplierInvoices') || "[]");
+    const savedInvoices = JSON.parse(sessionStorage.getItem('supplierInvoices') || "[]");
     setInvoicesHistory(savedInvoices);
 
     const fetchProducts = async () => {
@@ -162,7 +162,7 @@ const AddSupplierReturn = () => {
 const executeSave = () => {
     const supplierName = suppliersList.find(s => String(s.id) === String(supplierId))?.name || "Noma'lum";
     // Tizimga kirgan xodimning ismini olamiz
-    const currentUserName = localStorage.getItem('userName') || 'Bekchonov Azomat';
+    const currentUserName = sessionStorage.getItem('userName') || 'Bekchonov Azomat';
 
     const newReturn = {
         id: Date.now(),
@@ -179,8 +179,8 @@ const executeSave = () => {
         userName: currentUserName
     };
 
-    const existingReturns = JSON.parse(localStorage.getItem('supplierReturns') || "[]");
-    localStorage.setItem('supplierReturns', JSON.stringify([newReturn, ...existingReturns]));
+    const existingReturns = JSON.parse(sessionStorage.getItem('supplierReturns') || "[]");
+    sessionStorage.setItem('supplierReturns', JSON.stringify([newReturn, ...existingReturns]));
 
     setShowConfirmModal(false);
     toast.success("Qaytarish hujjati saqlandi!");

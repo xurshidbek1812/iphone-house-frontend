@@ -6,7 +6,7 @@ import Calculator from '../../components/Calculator';
 import toast from 'react-hot-toast';
 
 const Sklad = () => {
-  const userRole = localStorage.getItem('userRole');
+  const userRole = sessionStorage.getItem('userRole');
   const isDirector = userRole === 'director'; 
 
   const [products, setProducts] = useState([]);
@@ -29,7 +29,7 @@ const Sklad = () => {
   });
   
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
 
   // QR Print uchun state-lar
   const [printProduct, setPrintProduct] = useState(null); 
@@ -70,7 +70,7 @@ const Sklad = () => {
                   const data = await res.json();
                   const safeData = Array.isArray(data) ? data : []; 
                   setCategories(safeData); 
-                  localStorage.setItem('categoryList', JSON.stringify(safeData)); 
+                  sessionStorage.setItem('categoryList', JSON.stringify(safeData)); 
               }
           } catch (err) {
               console.error("Kategoriyalarni yuklashda xatolik:", err);
