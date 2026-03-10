@@ -2,35 +2,39 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
-// 🚨 YANGI: Tokenni "ochib" (decode qilib), muddatini tekshiruvchi maxsus funksiya
+// 🚨 YANGI: 100% xavfsiz va ishonchli JWT dekoder
 const isTokenValid = (token) => {
     if (!token) return false;
     try {
-        // JWT 3 qismdan iborat bo'ladi (header.payload.signature)
-        // Bizga o'rtadagi qismi (payload) kerak
-        const payloadBase64 = token.split('.')[1];
-        const decodedJson = atob(payloadBase64); // Base64 dan matnga o'giramiz
-        const decoded = JSON.parse(decodedJson); // Matnni JSON obyektga aylantiramiz
+        const base64Url = token.split('.')[1];
         
-        // decoded.exp soniyalarda bo'ladi, biz uni millisoniyaga o'giramiz (*1000)
+        // 1-HIMOYA: Base64Url ni oddiy Base64 formatiga to'g'irlash
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        
+        // 2-HIMOYA: atob() xato bermasligi va Unicode (masalan, kirill yoki maxsus belgilar) ni to'g'ri o'qishi uchun maxsus dekodirovka
+        const jsonPayload = decodeURIComponent(
+            atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join('')
+        );
+
+        const decoded = JSON.parse(jsonPayload);
         const expirationTime = decoded.exp * 1000; 
         
-        // Hozirgi vaqt tokenning yaroqlilik vaqtidan kichikmi? (Yaroqli bo'lsa true)
         return Date.now() < expirationTime;
     } catch (error) {
-        return false; // Token buzilgan yoki noto'g'ri formatda bo'lsa false
+        console.error("Tokenni o'qishda xatolik:", error);
+        return false; 
     }
 };
 
 const ProtectedRoute = ({ children }) => {
     const token = sessionStorage.getItem('token');
 
-    // 🚨 YANGI: Endi shunchaki token borligini emas, uning "YAROQLI" ekanligini ham tekshiramiz
     if (!isTokenValid(token)) {
         if (token) {
-            // Agar xotirada token bo'lsa-yu, lekin muddati o'tgan bo'lsa
             sessionStorage.clear();
-            toast.error("Seans muddati tugadi. Iltimos, tizimga qayta kiring!", { duration: 4000 });
+            toast.error("Seans muddati tugadi yoki xatolik yuz berdi. Iltimos, tizimga qayta kiring!", { duration: 4000 });
         }
         return <Navigate to="/login" replace />;
     }
