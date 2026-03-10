@@ -6,6 +6,17 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Calculator from './components/Calculator';
 import { Toaster } from 'react-hot-toast';
 
+const originalFetch = window.fetch;
+window.fetch = async (...args) => {
+    const response = await originalFetch(...args);
+    // Agar ruxsat xatosi bo'lsa va hozir o'zi login sahifasida bo'lmasa
+    if ((response.status === 401 || response.status === 403) && window.location.pathname !== '/login') {
+        sessionStorage.clear();
+        window.location.href = '/login'; 
+    }
+    return response;
+};
+
 // YUKLANAYOTGANDA KO'RINADIGAN ANIMATSIYA
 const LoadingSpinner = () => (
   <div className="flex h-screen w-full items-center justify-center bg-gray-50">
