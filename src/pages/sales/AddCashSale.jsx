@@ -158,9 +158,10 @@ const AddCashSale = () => {
           
           if (res.ok) {
               toast.success("Naqd savdo saqlandi!");
-              navigate('/naqd-savdo/ro-yxati');
+              navigate('/savdo'); // <--- TO'G'RILANDI
           } else {
-              toast.error("Saqlashda xatolik");
+              const errData = await res.json();
+              toast.error(errData.error || "Saqlashda xatolik");
           }
       } catch (err) { toast.error("Server xatosi"); } 
       finally { setIsLoading(false); }
