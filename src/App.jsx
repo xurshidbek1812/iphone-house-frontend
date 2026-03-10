@@ -130,7 +130,6 @@ const OrderListKassa = lazy(() => import('./pages/kassa/OrderListKassa'));
 const SmsSend = lazy(() => import('./pages/sms/SmsSend'));
 
 // --- SETTINGS ---
-const Settings = lazy(() => import('./pages/Settings'));
 const Expenses = lazy(() => import('./pages/Expenses')); 
 const StaffList = lazy(() => import('./pages/settings/StaffList')); 
 const ProfileSettings = lazy(() => import('./pages/settings/ProfileSettings'));
@@ -320,7 +319,6 @@ function App() {
                   <Route path="/kassa/valyuta" element={<CurrencyExchange />} />
 
                   {/* SOZLAMALAR */}
-                  <Route path="/sozlamalar" element={<Settings />} />
                   <Route path="/sozlamalar/xodimlar" element={<StaffList />} />
                   <Route path="/xarajatlar" element={<Expenses />} />
                   <Route path="/sozlamalar/profil" element={<ProfileSettings />} />
