@@ -55,12 +55,11 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       window.location.reload();
     }, 2000);
   };
-
-  // --- CHIQISH FUNKSIYASI (MODAL ORQALI) ---
+// --- CHIQISH FUNKSIYASI (MODAL ORQALI) ---
   const confirmLogout = () => {
-      sessionStorage.removeItem('userRole');
-      sessionStorage.removeItem('userName');
-      sessionStorage.removeItem('currentUserLogin');
+      sessionStorage.clear(); 
+      localStorage.clear();
+      
       navigate('/login');
       window.location.reload(); 
   };
@@ -486,5 +485,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     </div>
   );
 };
+
 
 export default Sidebar;
