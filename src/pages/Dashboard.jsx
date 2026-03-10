@@ -5,17 +5,15 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-// --- YANGI: Katta raqamlarni qisqartirish uchun yordamchi funksiya ---
+// --- YANGI: Katta raqamlarni chiroyli qisqartirish (mln, mlrd) ---
 const formatLargeNumber = (num) => {
     if (num >= 1000000000) {
-        return (num / 1000000000).toFixed(1) + ' mlrd';
+        return (num / 1000000000).toFixed(2) + ' mlrd';
     }
     if (num >= 1000000) {
-        return (num / 1000000).toFixed(1) + ' mln';
+        return (num / 1000000).toFixed(2) + ' mln';
     }
-    if (num >= 1000) {
-        return (num / 1000).toFixed(1) + ' ming';
-    }
+    // 1 milliondan kichiklarni shunchaki probel bilan yozadi: 150,000
     return num.toLocaleString();
 };
 
@@ -176,8 +174,8 @@ const Dashboard = () => {
             </div>
         </div>
 
-        {/* 🚨 KARTALAR QISMI YANGILANDI */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* 🚨 KARTALAR QISMI */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <StatCard title="Ombor qiymati" value={stats.inventoryValue} unit="UZS" icon={<Package />} colors={{ bg: 'bg-blue-50', iconBg: 'bg-blue-600', text: 'text-blue-600', border: 'border-blue-100' }} />
           <StatCard title="Kassa (Tushum)" value={stats.totalIncome} unit="UZS" icon={<DollarSign />} colors={{ bg: 'bg-emerald-50', iconBg: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-emerald-100' }} />
           <StatCard title="Undiruv (Qarz)" value={stats.totalDebt} unit="UZS" icon={<TrendingUp />} colors={{ bg: 'bg-rose-50', iconBg: 'bg-rose-500', text: 'text-rose-600', border: 'border-rose-100' }} />
@@ -220,30 +218,30 @@ const Dashboard = () => {
   );
 };
 
-// 🚨 YANGILANGAN KARTA KOMPONENTI
+// 🚨 YANGILANGAN VERTIKAL KARTA KOMPONENTI (Sig'ish va chiroyli ko'rinish uchun)
 const StatCard = ({ title, value, unit, icon, colors }) => {
-    // Agar raqam bo'lsa va juda katta bo'lsa, yordamchi funksiya orqali qisqartiramiz
+    // Qisqartirilgan va to'liq qiymatlar
     const displayValue = typeof value === 'number' ? formatLargeNumber(value) : value;
-    
-    // To'liq raqamni hover qilinganda (title) ko'rsatish uchun
     const fullValue = typeof value === 'number' ? value.toLocaleString() + ' ' + unit : value;
 
     return (
       <div 
-        title={fullValue} // <-- Hover qilinganda to'liq summa ko'rinadi
-        className={`bg-white p-5 rounded-[24px] shadow-sm border border-slate-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300 group flex items-center gap-4 cursor-pointer`}
+        title={fullValue} // Ustiga sichqoncha borganda to'liq summa chiqadi
+        className={`bg-white p-6 rounded-[24px] shadow-sm border border-slate-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group cursor-pointer flex flex-col justify-between h-[150px]`}
       >
-        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-sm flex-shrink-0 transition-transform group-hover:scale-105 ${colors.iconBg}`}>
-            {React.cloneElement(icon, { size: 24, strokeWidth: 2.5 })}
+        <div className="flex justify-between items-start">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-sm flex-shrink-0 transition-transform group-hover:scale-110 ${colors.iconBg}`}>
+                {React.cloneElement(icon, { size: 22, strokeWidth: 2.5 })}
+            </div>
+            <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg flex-shrink-0 ${colors.bg} ${colors.text}`}>
+                {unit}
+            </span>
         </div>
         
-        <div className="flex-1 min-w-0"> {/* min-w-0 juda muhim, text toshib ketmasligi uchun */}
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1 truncate">{title}</p>
-            <h3 className="text-lg lg:text-xl font-black text-slate-800 flex items-center gap-1.5 truncate">
-                <span className="truncate">{displayValue}</span>
-                <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md flex-shrink-0 ${colors.bg} ${colors.text}`}>
-                    {unit}
-                </span>
+        <div className="mt-auto">
+            <p className="text-slate-400 text-[11px] font-bold uppercase tracking-widest mb-1">{title}</p>
+            <h3 className="text-2xl lg:text-3xl font-black text-slate-800 tracking-tight leading-none truncate">
+                {displayValue}
             </h3>
         </div>
       </div>
