@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Trash2, X, CheckCircle, Edit2, Eye, AlertTriangle, Clock, Calendar, User, ShoppingCart } from 'lucide-react';
+import { Search, Plus, Trash2, X, CheckCircle, Edit2, Eye, AlertTriangle, Clock, User, ShoppingCart, Tag, MessageSquare, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const CashSales = () => {
@@ -8,28 +8,24 @@ const CashSales = () => {
   const [sales, setSales] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('ALL'); // ALL, JARAYONDA, TASDIQLANDI
+  const [filterStatus, setFilterStatus] = useState('ALL'); 
 
-  // Modallar uchun holatlar
+  // Modallar
   const [detailsModal, setDetailsModal] = useState({ isOpen: false, sale: null });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, id: null });
+  const [editModal, setEditModal] = useState({ isOpen: false, data: null });
 
   const token = sessionStorage.getItem('token');
 
-  // 1. Savdolarni yuklash
   const fetchSales = async () => {
     setIsLoading(true);
     try {
       const res = await fetch('https://iphone-house-api.onrender.com/api/cash-sales', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setSales(data);
-      } else {
-        toast.error("Savdolarni yuklashda xatolik!");
-      }
+      if (res.ok) setSales(await res.json());
+      else toast.error("Savdolarni yuklashda xatolik!");
     } catch (err) {
       toast.error("Server bilan aloqa yo'q!");
     } finally {
@@ -37,11 +33,8 @@ const CashSales = () => {
     }
   };
 
-  useEffect(() => {
-    fetchSales();
-  }, []);
+  useEffect(() => { fetchSales(); }, []);
 
-  // 2. Savdoni tasdiqlash
   const handleApprove = async () => {
     const id = confirmModal.id;
     try {
@@ -49,23 +42,18 @@ const CashSales = () => {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
       const data = await res.json();
       
       if (res.ok) {
         toast.success("Savdo muvaffaqiyatli tasdiqlandi!");
         fetchSales();
       } else {
-        toast.error(data.error || "Tasdiqlashda xatolik yuz berdi");
+        toast.error(data.error || "Tasdiqlashda xatolik");
       }
-    } catch (err) {
-      toast.error("Server xatosi!");
-    } finally {
-      setConfirmModal({ isOpen: false, id: null });
-    }
+    } catch (err) { toast.error("Server xatosi!"); } 
+    finally { setConfirmModal({ isOpen: false, id: null }); }
   };
 
-  // 3. Savdoni o'chirish
   const handleDelete = async () => {
     const id = deleteModal.id;
     try {
@@ -73,20 +61,74 @@ const CashSales = () => {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
       const data = await res.json();
-
       if (res.ok) {
-        toast.success("Savdo bekor qilindi va o'chirildi!");
+        toast.success("Savdo bekor qilindi!");
         fetchSales();
       } else {
-        toast.error(data.error || "O'chirishda xatolik yuz berdi");
+        toast.error(data.error || "O'chirishda xatolik");
       }
-    } catch (err) {
-      toast.error("Server xatosi!");
-    } finally {
-      setDeleteModal({ isOpen: false, id: null });
-    }
+    } catch (err) { toast.error("Server xatosi!"); } 
+    finally { setDeleteModal({ isOpen: false, id: null }); }
+  };
+
+  // --- TAHRIRLASH MANTIQI ---
+  const openEditModal = (sale) => {
+      setEditModal({
+          isOpen: true,
+          data: {
+              id: sale.id,
+              discount: sale.discount || '',
+              note: sale.note || '',
+              items: sale.items.map(i => ({
+                  id: i.productId,
+                  name: i.product?.name,
+                  qty: i.quantity,
+                  salePrice: i.price
+              }))
+          }
+      });
+  };
+
+  const updateEditQty = (itemId, newQty) => {
+      if (newQty < 1) return;
+      setEditModal(prev => ({
+          ...prev,
+          data: {
+              ...prev.data,
+              items: prev.data.items.map(i => i.id === itemId ? { ...i, qty: newQty } : i)
+          }
+      }));
+  };
+
+  const saveEdit = async () => {
+      const { id, discount, note, items } = editModal.data;
+      const totalAmount = items.reduce((sum, i) => sum + (i.salePrice * i.qty), 0);
+      const finalAmount = Math.max(0, totalAmount - Number(discount || 0));
+
+      if (Number(discount) > 0 && (!note || note.trim() === '')) {
+          return toast.error("Chegirma uchun izoh majburiy!");
+      }
+      if (Number(discount) > totalAmount) {
+          return toast.error("Chegirma summasi jami summadan ko'p bo'lishi mumkin emas!");
+      }
+
+      try {
+          const payload = { totalAmount, discount: Number(discount), finalAmount, note, items };
+          const res = await fetch(`https://iphone-house-api.onrender.com/api/cash-sales/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify(payload)
+          });
+          
+          if (res.ok) {
+              toast.success("Savdo o'zgarishlari saqlandi!");
+              setEditModal({ isOpen: false, data: null });
+              fetchSales();
+          } else {
+              toast.error("Tahrirlashda xatolik yuz berdi");
+          }
+      } catch (err) { toast.error("Server xatosi"); }
   };
 
   // Qidiruv va Filtr
@@ -94,7 +136,6 @@ const CashSales = () => {
     const searchString = `${sale.id} ${sale.customer?.firstName || ''} ${sale.customer?.lastName || ''} ${sale.otherName || ''} ${sale.otherPhone || ''}`.toLowerCase();
     const matchesSearch = searchString.includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'ALL' || sale.status === filterStatus;
-    
     return matchesSearch && matchesStatus;
   });
 
@@ -169,8 +210,9 @@ const CashSales = () => {
                                     </div>
                                 )}
                             </td>
-                            <td className="p-5 text-center text-lg font-black text-blue-600">
-                                {Number(sale.totalAmount).toLocaleString()} <span className="text-xs text-slate-400 font-normal">UZS</span>
+                            <td className="p-5 text-center">
+                                <div className="text-lg font-black text-blue-600">{Number(sale.finalAmount || sale.totalAmount).toLocaleString()} <span className="text-xs text-slate-400 font-normal">UZS</span></div>
+                                {Number(sale.discount) > 0 && <div className="text-[10px] text-rose-500 mt-0.5">Chegirma: {Number(sale.discount).toLocaleString()}</div>}
                             </td>
                             <td className="p-5 text-center">
                                 {sale.status === 'JARAYONDA' ? (
@@ -195,8 +237,7 @@ const CashSales = () => {
                                                 <CheckCircle size={18} strokeWidth={2.5}/>
                                             </button>
                                             
-                                            {/* Tahrirlash tugmasi (Hozircha tezkor ishlamaydi, chunki bu murakkab oyna. Uni alohida quramiz yoki o'chirib boshqadan qo'shiladi) */}
-                                            <button onClick={() => toast("Tahrirlash sahifasi tez orada qo'shiladi!", {icon: '🚧'})} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-xl transition-all" title="Tahrirlash">
+                                            <button onClick={() => openEditModal(sale)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-xl transition-all" title="Tahrirlash">
                                                 <Edit2 size={18}/>
                                             </button>
 
@@ -219,8 +260,8 @@ const CashSales = () => {
       {/* --- BATAFSIL KO'RISH MODALI --- */}
       {detailsModal.isOpen && detailsModal.sale && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-            <div className="bg-white w-full max-w-3xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95">
-                <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center">
+            <div className="bg-white w-full max-w-3xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
                     <div>
                         <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><ShoppingCart className="text-blue-600"/> Savdo batafsil</h2>
                         <p className="text-xs text-slate-400 font-black mt-1 uppercase tracking-widest">ID: #{detailsModal.sale.id} | Sana: {new Date(detailsModal.sale.date).toLocaleString('uz-UZ')}</p>
@@ -228,7 +269,7 @@ const CashSales = () => {
                     <button onClick={() => setDetailsModal({ isOpen: false, sale: null })} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24} /></button>
                 </div>
                 
-                <div className="p-8">
+                <div className="p-8 overflow-y-auto custom-scrollbar">
                     <div className="grid grid-cols-2 gap-6 mb-8">
                         <div className="p-5 rounded-2xl bg-blue-50/50 border border-blue-100">
                             <p className="text-[10px] text-blue-500 font-black uppercase tracking-widest mb-1">Xaridor</p>
@@ -240,15 +281,23 @@ const CashSales = () => {
                         <div className={`p-5 rounded-2xl border ${detailsModal.sale.status === 'JARAYONDA' ? 'bg-amber-50/50 border-amber-100' : 'bg-emerald-50/50 border-emerald-100'}`}>
                             <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${detailsModal.sale.status === 'JARAYONDA' ? 'text-amber-500' : 'text-emerald-500'}`}>Holati</p>
                             <p className={`text-lg font-bold ${detailsModal.sale.status === 'JARAYONDA' ? 'text-amber-700' : 'text-emerald-700'}`}>
-                                {detailsModal.sale.status === 'JARAYONDA' ? 'Kutilyapti (Kassaga tushmagan)' : 'Tasdiqlangan (Yakunlangan)'}
+                                {detailsModal.sale.status === 'JARAYONDA' ? 'Kutilyapti (Tasdiqlanmagan)' : 'Tasdiqlangan (Yakunlangan)'}
                             </p>
                         </div>
                     </div>
 
+                    {/* Izoh ko'rsatish */}
+                    {detailsModal.sale.note && (
+                        <div className={`p-5 rounded-2xl mb-8 border ${Number(detailsModal.sale.discount) > 0 ? 'bg-rose-50 border-rose-100 text-rose-800' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+                            <p className={`text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-1 ${Number(detailsModal.sale.discount) > 0 ? 'text-rose-500' : 'text-slate-500'}`}><MessageSquare size={14}/> Izoh / Sabab</p>
+                            <p className="text-sm font-medium leading-relaxed">{detailsModal.sale.note}</p>
+                        </div>
+                    )}
+
                     <h3 className="font-black text-slate-700 mb-4 uppercase text-xs tracking-widest">Xarid qilingan tovarlar:</h3>
-                    <div className="border-2 border-slate-100 rounded-2xl overflow-hidden max-h-[300px] overflow-y-auto custom-scrollbar">
+                    <div className="border-2 border-slate-100 rounded-2xl overflow-hidden mb-6">
                         <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase sticky top-0">
+                            <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase">
                                 <tr>
                                     <th className="p-4">Tovar Nomi</th>
                                     <th className="p-4 text-center">Soni</th>
@@ -268,7 +317,86 @@ const CashSales = () => {
                             </tbody>
                         </table>
                     </div>
+
+                    <div className="bg-slate-800 text-white rounded-2xl p-6">
+                        <div className="flex justify-between text-sm mb-2 text-slate-400">
+                            <span>Jami summa:</span>
+                            <span className="font-bold">{Number(detailsModal.sale.totalAmount).toLocaleString()} UZS</span>
+                        </div>
+                        <div className="flex justify-between text-sm mb-4 text-amber-400 border-b border-slate-600 pb-4">
+                            <span>Chegirma:</span>
+                            <span className="font-bold">- {Number(detailsModal.sale.discount || 0).toLocaleString()} UZS</span>
+                        </div>
+                        <div className="flex justify-between items-end">
+                            <span className="text-[11px] uppercase tracking-widest text-emerald-400">Yakuniy To'lov</span>
+                            <span className="text-3xl font-black text-emerald-400">{Number(detailsModal.sale.finalAmount || detailsModal.sale.totalAmount).toLocaleString()} <span className="text-sm font-normal">UZS</span></span>
+                        </div>
+                    </div>
                 </div>
+            </div>
+        </div>
+      )}
+
+      {/* --- TAHRIRLASH MODALI --- */}
+      {editModal.isOpen && editModal.data && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
+            <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-8 animate-in zoom-in-95">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><Edit2 className="text-blue-600"/> Savdoni Tahrirlash</h2>
+                    <button onClick={() => setEditModal({ isOpen: false, data: null })} className="p-2 hover:bg-slate-100 rounded-full text-slate-400"><X size={24} /></button>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl text-blue-800 text-xs font-medium mb-6">
+                    Bu yerda siz tovarlar sonini, chegirma miqdorini va izohni o'zgartirishingiz mumkin. Agar yangi tovar qo'shmoqchi bo'lsangiz, ushbu savdoni o'chirib yangidan yaratganingiz ma'qul.
+                </div>
+
+                <div className="max-h-60 overflow-y-auto mb-6 border border-slate-100 rounded-xl">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 sticky top-0 text-[10px] text-slate-400 uppercase font-black">
+                            <tr><th className="p-3">Tovar</th><th className="p-3 text-center">Soni</th><th className="p-3 text-right">Jami</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-bold">
+                            {editModal.data.items.map(item => (
+                                <tr key={item.id}>
+                                    <td className="p-3 text-slate-700">{item.name}</td>
+                                    <td className="p-3 w-28">
+                                        <input 
+                                            type="number" min="1" 
+                                            value={item.qty} 
+                                            onChange={(e) => updateEditQty(item.id, Number(e.target.value))} 
+                                            className="w-full p-2 border border-slate-200 rounded-lg text-center outline-blue-500 font-black text-blue-600 bg-slate-50 focus:bg-white"
+                                        />
+                                    </td>
+                                    <td className="p-3 text-right text-slate-600">{(item.salePrice * item.qty).toLocaleString()}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6 mb-8">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><Tag size={14}/> Chegirma (UZS)</label>
+                        <input 
+                            type="number" min="0" 
+                            value={editModal.data.discount} 
+                            onChange={(e) => setEditModal(p => ({...p, data: {...p.data, discount: e.target.value}}))} 
+                            className="w-full p-4 bg-amber-50 border border-amber-200 rounded-xl outline-none focus:border-amber-400 font-black text-amber-700 text-lg" 
+                        />
+                    </div>
+                    <div>
+                        <label className={`block text-xs font-bold uppercase mb-2 flex items-center gap-1 ${Number(editModal.data.discount) > 0 ? 'text-rose-500' : 'text-gray-500'}`}><MessageSquare size={14}/> Izoh {Number(editModal.data.discount) > 0 && '*'}</label>
+                        <textarea 
+                            value={editModal.data.note} 
+                            onChange={(e) => setEditModal(p => ({...p, data: {...p.data, note: e.target.value}}))} 
+                            className={`w-full p-3 border rounded-xl outline-none resize-none h-16 ${Number(editModal.data.discount) > 0 ? 'bg-rose-50 border-rose-200 focus:border-rose-500 text-rose-900' : 'bg-slate-50 border-slate-200 focus:border-blue-500 text-slate-700'}`}
+                        ></textarea>
+                    </div>
+                </div>
+
+                <button onClick={saveEdit} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex justify-center items-center gap-2 uppercase tracking-widest">
+                    <Save size={20}/> O'zgarishlarni Saqlash
+                </button>
             </div>
         </div>
       )}
