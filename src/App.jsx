@@ -4,16 +4,25 @@ import { Calculator as CalcIcon } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ProtectedRoute from './components/ProtectedRoute';
 import Calculator from './components/Calculator';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 
 const originalFetch = window.fetch;
 window.fetch = async (...args) => {
     const response = await originalFetch(...args);
-    // Agar ruxsat xatosi bo'lsa va hozir o'zi login sahifasida bo'lmasa
-    if ((response.status === 401 || response.status === 403) && window.location.pathname !== '/login') {
+    
+    // 1. Agar 401 (Token eskirgan/yo'q) bo'lsa -> Tizimdan chiqarish
+    if (response.status === 401 && window.location.pathname !== '/login') {
         sessionStorage.clear();
         window.location.href = '/login'; 
     }
+    
+    // 2. Agar 403 (Ruxsat yo'q - Rol to'g'ri kelmasa) bo'lsa -> Faqat ogohlantirish
+    if (response.status === 403) {
+        toast.error("Sizda ushbu amalni bajarish yoki ma'lumotni ko'rish uchun ruxsat yo'q!", {
+            id: 'forbidden-toast' // Bir xil xato ketma-ket chiqib ketmasligi uchun id beramiz
+        });
+    }
+    
     return response;
 };
 
