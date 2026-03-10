@@ -14,21 +14,20 @@ const Dashboard = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); 
 
   useEffect(() => {
-    // 2. FETCH ICHIGA HEADERS QO'SHAMIZ
+    // API dan ham statlarni, ham xabarlarni bittada olib kelamiz
     fetch('https://iphone-house-api.onrender.com/api/dashboard', {
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => {
-          if (!res.ok) throw new Error("Avtorizatsiya xatosi yoki server xatosi");
+          if(!res.ok) throw new Error("Server xatosi");
           return res.json();
       })
-      .then(data => setStats(data))
-      .catch(err => console.error("Dashboard ma'lumotlarini yuklashda xatolik:", err));
-
-    loadNotifications();
-  }, [token]); // <-- 3. TOKENNI DEPENDENCY GA QO'SHAMIZ
+      .then(data => {
+          setStats(data.stats || { inventoryValue: 0, totalIncome: 0, totalDebt: 0, productCount: 0 });
+          setNotifications(data.notifications || []); // Xabarlarni joylaymiz
+      })
+      .catch(err => console.error(err));
+  }, [token]);
 
   // 1. XABARLARNI YUKLASH FUNKSIYASI (Qayta ishlatish uchun alohida qildik)
 // 1. XABARLARNI YUKLASH FUNKSIYASI (Filtrlangan)
@@ -50,18 +49,7 @@ const Dashboard = () => {
   };
 
   // 2. BITTA XABARNI O'QILGAN QILISH
-const markAsRead = (id, type) => {
-    const storageKey = type === 'Kirim' ? 'supplierInvoices' : 'supplierReturns';
-    const items = JSON.parse(sessionStorage.getItem(storageKey) || "[]");
-    
-    // O'ZGARISH: status ni "Tasdiqlandi" qilmaymiz! Faqat isRead: true degan belgi qo'shamiz.
-    const updatedItems = items.map(item => 
-        item.id === id ? { ...item, isRead: true } : item
-    );
-    
-    sessionStorage.setItem(storageKey, JSON.stringify(updatedItems));
-    
-    // Ekranni yangilaymiz
+const markAsRead = (id) => {
     setNotifications(prev => prev.map(note => 
         note.id === id ? { ...note, isRead: true } : note
     ));
@@ -69,13 +57,6 @@ const markAsRead = (id, type) => {
 
   // 3. BARCHASINI O'QILGAN QILISH (Messenjer uslubi)
 const markAllAsRead = () => {
-    ['supplierInvoices', 'supplierReturns'].forEach(key => {
-        const items = JSON.parse(sessionStorage.getItem(key) || "[]");
-        // O'ZGARISH: Hammasiga isRead: true beramiz. Status o'z joyida qoladi.
-        const updatedItems = items.map(item => ({ ...item, isRead: true }));
-        sessionStorage.setItem(key, JSON.stringify(updatedItems));
-    });
-
     setNotifications(prev => prev.map(note => ({ ...note, isRead: true })));
   };
 
@@ -256,3 +237,4 @@ const StatCard = ({ title, value, unit, icon, colors }) => {
 
 
 export default Dashboard;
+
