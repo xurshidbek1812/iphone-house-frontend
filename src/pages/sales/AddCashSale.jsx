@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, CheckCircle, ChevronRight, Search, User, X, ShoppingCart, Save, ScanLine, Trash2, Plus } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Search, User, X, ShoppingCart, Save, ScanLine, Trash2, Plus, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
@@ -65,7 +65,7 @@ const AddCashSale = () => {
       items: []
   });
 
-  const [productTab, setProductTab] = useState('catalog'); // 'catalog' yoki 'cart'
+  const [productTab, setProductTab] = useState('catalog'); 
   const [productSearch, setProductSearch] = useState('');
 
   useEffect(() => {
@@ -77,7 +77,7 @@ const AddCashSale = () => {
               ]);
               if (custRes.ok) setCustomers(await custRes.json());
               if (prodRes.ok) setProducts(await prodRes.json());
-          } catch (err) { toast.error("Xatolik"); }
+          } catch (err) { toast.error("Ma'lumotlarni yuklashda xatolik"); }
       };
       fetchData();
   }, [token]);
@@ -143,12 +143,10 @@ const AddCashSale = () => {
       try {
           const payload = {
               isAnonymous: saleData.isAnonymous,
-              // Agar mijoz tanlanmagan bo'lsa null jo'natish xavfsizroq
               customerId: saleData.isAnonymous ? null : (saleData.mainCustomer?.id || null),
               otherName: saleData.otherName || null,
               otherPhone: saleData.otherPhone || null,
               totalAmount: grandTotal,
-              // Faqat kerakli maydonlarni tozalab (map qilib) jo'natamiz
               items: saleData.items.map(item => ({
                   id: item.id,
                   name: item.name,
@@ -164,8 +162,8 @@ const AddCashSale = () => {
           });
           
           if (res.ok) {
-              toast.success("Naqd savdo saqlandi!");
-              navigate('/savdo'); // <--- TO'G'RILANDI
+              toast.success("Savdo saqlandi (Jarayonda)");
+              navigate('/savdo'); // Muvaffaqiyatli saqlangach Ro'yxatga qaytadi
           } else {
               const errData = await res.json();
               toast.error(errData.error || "Saqlashda xatolik");
@@ -184,7 +182,7 @@ const AddCashSale = () => {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
          <div className="flex items-center gap-4">
             <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full"><ArrowLeft size={20} className="text-gray-600"/></button>
-            <h1 className="text-xl font-bold text-gray-800">Naqd savdo qo'shish</h1>
+            <h1 className="text-xl font-bold text-gray-800">Naqd savdo yaratish</h1>
          </div>
          <button onClick={() => navigate(-1)} className="px-5 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Bekor qilish</button>
       </div>
@@ -262,7 +260,7 @@ const AddCashSale = () => {
                 </div>
             )}
 
-            {/* QADAM 2: TOVARLAR (SKANER VA KATALOG BIKGA) */}
+            {/* QADAM 2: TOVARLAR (SKANER VA KATALOG) */}
             {step === 2 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[650px] animate-in slide-in-from-right-8">
                     
@@ -361,17 +359,17 @@ const AddCashSale = () => {
                 </div>
             )}
 
-            {/* QADAM 3: TASDIQLASH (PUL TO'LASH) */}
+            {/* QADAM 3: SAQLASH (KUTISH HOLATI) */}
             {step === 3 && (
                 <div className="bg-white p-10 rounded-2xl shadow-sm border border-gray-100 text-center animate-in slide-in-from-right-8">
-                    <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <CheckCircle size={40} />
+                    <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Clock size={40} />
                     </div>
-                    <h2 className="text-2xl font-black text-gray-800 mb-2">To'lovni qabul qiling</h2>
-                    <p className="text-gray-500 mb-8">Mijoz quyidagi summani to'liq kiritishini tasdiqlaysizmi?</p>
+                    <h2 className="text-2xl font-black text-gray-800 mb-2">Ma'lumotlarni saqlash</h2>
+                    <p className="text-gray-500 mb-8">Ushbu savdo <strong>"Jarayonda"</strong> holatida saqlanadi. <br/>Kassa xodimi uni tasdiqlagandan so'ng, tovarlar ombordan yechiladi.</p>
                     
                     <div className="bg-gray-800 text-white p-8 rounded-2xl max-w-sm mx-auto shadow-2xl mb-8 transform -rotate-2">
-                        <p className="text-emerald-400 font-bold tracking-widest uppercase text-xs mb-2">Jami to'lov summasi</p>
+                        <p className="text-blue-400 font-bold tracking-widest uppercase text-xs mb-2">Jami savdo summasi</p>
                         <p className="text-4xl font-black">{grandTotal.toLocaleString()} UZS</p>
                     </div>
                 </div>
@@ -384,9 +382,9 @@ const AddCashSale = () => {
                 <button 
                     onClick={handleNext} 
                     disabled={isLoading}
-                    className={`px-10 py-3 rounded-xl font-black flex items-center gap-2 transition-all shadow-lg ${step === 3 ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`px-10 py-3 rounded-xl font-black flex items-center gap-2 transition-all shadow-lg ${step === 3 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                    {isLoading ? "Kuting..." : (step === 3 ? <><Save size={20}/> Tasdiqlash</> : <>Davom etish <ChevronRight size={20}/></>)}
+                    {isLoading ? "Kuting..." : (step === 3 ? <><Save size={20}/> Saqlash</> : <>Davom etish <ChevronRight size={20}/></>)}
                 </button>
             </div>
         </div>
