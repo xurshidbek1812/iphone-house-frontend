@@ -7,6 +7,7 @@ const ProfileSettings = () => {
   const [isChangingPassword, setIsChangingPassword] = useState(false); 
   const [isChangingLogin, setIsChangingLogin] = useState(false); 
 
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
 
@@ -21,6 +22,7 @@ const ProfileSettings = () => {
   });
 
   const [securityForm, setSecurityForm] = useState({
+    currentPassword: '', // <--- YANGI
     newValue: '',
     confirmValue: ''
   });
@@ -138,6 +140,7 @@ const ProfileSettings = () => {
 
   // --- 4. PAROLNI O'ZGARTIRISH (API ORQALI) ---
   const handleChangePassword = async () => {
+    if (!securityForm.currentPassword) return toast.error("Joriy parolni kiriting!"); // <--- YANGI
     if (securityForm.newValue.length < 4) return toast.error("Yangi parol juda qisqa!");
     if (securityForm.newValue !== securityForm.confirmValue) return toast.error("Yangi parollar mos kelmadi!");
 
@@ -149,6 +152,7 @@ const ProfileSettings = () => {
                 'Authorization': `Bearer ${token}` 
             },
             body: JSON.stringify({
+                currentPassword: securityForm.currentPassword, // <--- BAZAGA KETADI
                 password: securityForm.newValue, 
                 username: userData.login,
                 fullName: `${userData.firstName} ${userData.lastName}`.trim(),
@@ -157,20 +161,28 @@ const ProfileSettings = () => {
             })
         });
 
-        if (!res.ok) throw new Error("Saqlab bo'lmadi");
+        const data = await res.json();
+        
+        if (!res.ok) throw new Error(data.message || "Saqlab bo'lmadi");
 
         setIsChangingPassword(false);
         resetSecurityForm();
         toast.success("Parol muvaffaqiyatli o'zgartirildi! Xavfsizlik uchun qayta kiring.");
-      
+        
+        // Parol o'zgargach login ekraniga otib yuborish yaxshi amaliyot:
+        setTimeout(() => {
+            sessionStorage.clear();
+            window.location.reload();
+        }, 2000);
 
     } catch (err) {
-        toast.error("Server bilan xatolik yuz berdi");
+        toast.error(err.message || "Server bilan xatolik yuz berdi");
     }
   };
 
   const resetSecurityForm = () => {
-    setSecurityForm({ newValue: '', confirmValue: '' });
+    setSecurityForm({ currentPassword: '', newValue: '', confirmValue: '' }); // <--- TOZALANADI
+    setShowCurrentPass(false); // <--- TOZALANADI
     setShowNewPass(false);
     setShowConfirmPass(false);
   };
@@ -298,6 +310,18 @@ const ProfileSettings = () => {
                 </div>
                 
                 <div className="space-y-4">
+                    {/* --- YANGI: JORIY PAROL KIRITISH MAYDONI --- */}
+                    <div className="relative">
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Joriy (eski) parol</label>
+                        <input type={showCurrentPass ? "text" : "password"} 
+                            className="w-full p-3 pr-10 border border-gray-300 rounded-xl outline-blue-500 bg-white" placeholder="Hozirgi parolingiz..."
+                            value={securityForm.currentPassword} onChange={e => setSecurityForm({...securityForm, currentPassword: e.target.value})}
+                        />
+                         <button onClick={() => setShowCurrentPass(!showCurrentPass)} className="absolute right-3 top-9 text-gray-400 hover:text-blue-600">
+                            {showCurrentPass ? <EyeOff size={20}/> : <Eye size={20}/>}
+                        </button>
+                    </div>
+
                     <div className="relative">
                         <label className="block text-sm font-bold text-green-700 mb-1">Yangi parol</label>
                         <input type={showNewPass ? "text" : "password"} 
@@ -327,7 +351,7 @@ const ProfileSettings = () => {
             </div>
         </div>
       )}
-
+      
       {/* --- MODAL: LOGINNI O'ZGARTIRISH --- */}
       {isChangingLogin && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -361,5 +385,6 @@ const ProfileSettings = () => {
 };
 
 export default ProfileSettings;
+
 
 
