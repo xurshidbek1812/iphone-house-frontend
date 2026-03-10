@@ -62,8 +62,8 @@ const AddContract = () => {
   const [products, setProducts] = useState([]);
 
   const token = sessionStorage.getItem('token');
+  const userRole = sessionStorage.getItem('userRole'); // <--- YANGI: Rolni olamiz
   
-  // Skaner uchun Reference
   const barcodeInputRef = useRef(null);
 
   const [contractData, setContractData] = useState({
@@ -82,24 +82,42 @@ const AddContract = () => {
   const [productTab, setProductTab] = useState('catalog'); 
   const [productSearch, setProductSearch] = useState('');
 
+  // --- YANGI YUKLASH LOGIKASI ---
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [custRes, staffRes, prodRes] = await Promise.all([
+        const [custRes, prodRes] = await Promise.all([
             fetch('https://iphone-house-api.onrender.com/api/customers', { headers: { 'Authorization': `Bearer ${token}` } }),
-            fetch('https://iphone-house-api.onrender.com/api/users', { headers: { 'Authorization': `Bearer ${token}` } }),
             fetch('https://iphone-house-api.onrender.com/api/products', { headers: { 'Authorization': `Bearer ${token}` } })
         ]);
         
         if (custRes.ok) { const d = await custRes.json(); setCustomers(Array.isArray(d) ? d : []); }
-        if (staffRes.ok) { const d = await staffRes.json(); setStaffList(Array.isArray(d) ? d : []); }
         if (prodRes.ok) { const d = await prodRes.json(); setProducts(Array.isArray(d) ? d : []); }
+
+        // ROLGA QARAB XODIMLARNI YUKLASH
+        if (userRole === 'director') {
+            const staffRes = await fetch('https://iphone-house-api.onrender.com/api/users', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (staffRes.ok) {
+                const d = await staffRes.json();
+                setStaffList(Array.isArray(d) ? d : []);
+            }
+        } else {
+            // Agar oddiy xodim bo'lsa, faqat o'zini yuklaydi
+            const meRes = await fetch('https://iphone-house-api.onrender.com/api/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (meRes.ok) {
+                const meData = await meRes.json();
+                setStaffList([meData]);
+                // Va avtomatik tarzda o'zini tanlab qo'yadi
+                setContractData(prev => ({ ...prev, staffId: meData.id }));
+            }
+        }
+
       } catch (err) {
         toast.error("Ma'lumotlarni yuklashda xatolik!");
       }
     };
-    fetchData();
-  }, [token]);
+    if (token) fetchData();
+  }, [token, userRole]);
 
   // Hisob-kitoblar
   const grandTotal = contractData.items.reduce((sum, item) => sum + ((Number(item.salePrice) || 0) * item.qty), 0);
@@ -129,7 +147,6 @@ const AddContract = () => {
   const addCoBorrower = (customer) => setContractData(prev => ({ ...prev, coBorrowers: [...prev.coBorrowers, customer] }));
   const removeCoBorrower = (id) => setContractData(prev => ({ ...prev, coBorrowers: prev.coBorrowers.filter(c => c.id !== id) }));
 
-  // --- YANGI: SHTRIX KODNI O'QISH ---
   const handleBarcodeScan = (e) => {
       if (e.key === 'Enter' && e.target.value.trim() !== '') {
           const code = e.target.value.trim();
@@ -178,14 +195,12 @@ const AddContract = () => {
       
       if (step < 4) {
           setStep(step + 1);
-          // Skanerga avtomat fokus qaratish
           if (step === 1) setTimeout(() => barcodeInputRef.current?.focus(), 100);
       } else {
           submitContract();
       }
   };
 
-  // --- HAQIQIY BAZAGA YUBORISH ---
   const submitContract = async () => {
       setIsLoading(true);
       try {
@@ -207,9 +222,10 @@ const AddContract = () => {
           
           if (res.ok) {
               toast.success("Shartnoma muvaffaqiyatli saqlandi!");
-              navigate('/shartnoma/ro-yxati');
+              navigate('/shartnoma');
           } else {
-              toast.error("Xatolik yuz berdi");
+              const errData = await res.json();
+              toast.error(errData.error || "Xatolik yuz berdi");
           }
       } catch (err) {
           toast.error("Server xatosi");
@@ -338,8 +354,15 @@ const AddContract = () => {
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-2">3. Jalb qilgan xodim (Sotuvchi) *</label>
                             <div className="relative">
                                 <Briefcase className="absolute left-4 top-3.5 text-gray-400" size={20}/>
-                                <select className={`w-full pl-12 pr-4 py-3 border rounded-xl outline-none font-medium appearance-none transition-colors ${contractData.staffId ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 bg-gray-50 text-gray-700 focus:bg-white focus:border-blue-500'}`} value={contractData.staffId} onChange={(e) => setContractData(prev => ({...prev, staffId: e.target.value}))}>
-                                    <option value="">Ro'yxatdan xodimni tanlang...</option>
+                                
+                                {/* YANGI: ROLGA QARAB DROPDOWN QULFLANADI */}
+                                <select 
+                                    disabled={userRole !== 'director'}
+                                    className={`w-full pl-12 pr-4 py-3 border rounded-xl outline-none font-medium transition-colors ${contractData.staffId ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 bg-gray-50 text-gray-700 focus:bg-white focus:border-blue-500'} ${userRole !== 'director' ? 'opacity-80 cursor-not-allowed' : 'appearance-none'}`} 
+                                    value={contractData.staffId} 
+                                    onChange={(e) => setContractData(prev => ({...prev, staffId: e.target.value}))}
+                                >
+                                    {userRole === 'director' && <option value="">Ro'yxatdan xodimni tanlang...</option>}
                                     {staffList.map(user => (<option key={user.id} value={user.id}>{user.fullName} ({user.role})</option>))}
                                 </select>
                             </div>
@@ -351,7 +374,6 @@ const AddContract = () => {
             {step === 2 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[650px] animate-in slide-in-from-right-8">
                     
-                    {/* YAngilangan Skaner inputi (Eng tepadagi asosiy joyda) */}
                     <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
                         <div className="relative max-w-lg mx-auto">
                             <ScanLine className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500" size={24}/>
