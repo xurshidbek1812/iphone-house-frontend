@@ -32,14 +32,13 @@ const ProfileSettings = () => {
   useEffect(() => {
     const fetchMyProfile = async () => {
         try {
-            const res = await fetch('https://iphone-house-api.onrender.com/api/users', {
+            // O'ZGARISH: Endi barcha userlarni emas, faqat o'zini (me) yuklaymiz!
+            const res = await fetch('https://iphone-house-api.onrender.com/api/users/me', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!res.ok) throw new Error("Yuklab bo'lmadi");
             
-            const users = await res.json();
-            // Bazadan aynan hozirgi loginli odamni topib olamiz (Direktor bo'lsa ham shu yerdan topiladi)
-            const me = users.find(u => u.username === currentLogin);
+            const me = await res.json();
 
             if (me) {
                 const parts = (me.fullName || "").split(' ');
@@ -49,7 +48,7 @@ const ProfileSettings = () => {
                     lastName: parts.slice(1).join(' ') || '',
                     phone: me.phone || '+998',
                     login: me.username,
-                    password: me.password,
+                    password: "", // Xavfsizlik uchun parol boshlang'ich bo'sh keladi
                     role: me.role
                 });
             } else {
@@ -61,10 +60,10 @@ const ProfileSettings = () => {
         }
     };
 
-    if (currentLogin && token) {
+    if (token) { // currentLogin ga ehtiyoj qolmadi, chunki tokenning o'zi kimligini biladi
         fetchMyProfile();
     }
-  }, [currentLogin, token]);
+  }, [token]);
 
   const handlePhoneChange = (e) => {
     const val = e.target.value;
@@ -362,4 +361,5 @@ const ProfileSettings = () => {
 };
 
 export default ProfileSettings;
+
 
