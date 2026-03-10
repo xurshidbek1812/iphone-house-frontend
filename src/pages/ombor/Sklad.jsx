@@ -84,10 +84,18 @@ const Sklad = () => {
     e.preventDefault();
     if (!formData.name || !formData.category) return toast.error("Nomi va kategoriyasini kiriting!");
     const avtomatikId = Math.floor(10000 + Math.random() * 90000).toString();
+    
     const newProduct = {
-        id: Date.now().toString(), customId: avtomatikId, name: formData.name,
-        category: formData.category, quantity: Number(formData.quantity), buyPrice: Number(formData.buyPrice),
-        salePrice: Number(formData.salePrice), unit: formData.unit, buyCurrency: formData.buyCurrency, saleCurrency: formData.saleCurrency
+        id: Date.now().toString(), 
+        customId: avtomatikId, 
+        name: formData.name,
+        category: formData.category, 
+        quantity: Number(formData.quantity), 
+        buyPrice: Number(formData.buyPrice),
+        salePrice: Number(formData.salePrice), 
+        unit: formData.unit, 
+        buyCurrency: formData.buyCurrency, 
+        saleCurrency: formData.saleCurrency
     };
 
     try {
@@ -99,16 +107,25 @@ const Sklad = () => {
         }, 
         body: JSON.stringify(newProduct)
       });
+      
+      const responseData = await res.json(); // Javobni o'qiymiz
+
       if (res.ok) {
-        setIsModalOpen(false); setIsSuccessOpen(true); fetchProducts(); 
+        setIsModalOpen(false); 
+        setIsSuccessOpen(true); 
+        fetchProducts(); 
         setTimeout(() => {
           setIsSuccessOpen(false); 
           setFormData({ name: '', category: '', buyPrice: '', salePrice: '', quantity: '0', unit: 'Dona', buyCurrency: 'USD', saleCurrency: 'UZS' });
         }, 2500);
       } else {
-        toast.error("Saqlashda xatolik yuz berdi");
+        // 🚨 TIZILGAN QISM: Xato bo'lsa uni ekranga chiqaramiz
+        toast.error(responseData.error || "Saqlashda xatolik yuz berdi");
       }
-    } catch (err) { console.error(err); toast.error("Server bilan aloqa yo'q!"); }
+    } catch (err) { 
+        console.error(err); 
+        toast.error("Server bilan aloqa yo'q!"); 
+    }
   };
   
   const executeDelete = async (id) => {
@@ -632,3 +649,4 @@ const Sklad = () => {
 };
 
 export default Sklad;
+
