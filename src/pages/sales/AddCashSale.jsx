@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronRight, Search, User, X, ShoppingCart, Save, ScanLine, Trash2, Plus } from 'lucide-react';
+import { ArrowLeft, Check, CheckCircle, ChevronRight, Search, User, X, ShoppingCart, Save, ScanLine, Trash2, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
