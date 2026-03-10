@@ -143,11 +143,18 @@ const AddCashSale = () => {
       try {
           const payload = {
               isAnonymous: saleData.isAnonymous,
-              customerId: saleData.mainCustomer?.id,
-              otherName: saleData.otherName,
-              otherPhone: saleData.otherPhone,
+              // Agar mijoz tanlanmagan bo'lsa null jo'natish xavfsizroq
+              customerId: saleData.isAnonymous ? null : (saleData.mainCustomer?.id || null),
+              otherName: saleData.otherName || null,
+              otherPhone: saleData.otherPhone || null,
               totalAmount: grandTotal,
-              items: saleData.items
+              // Faqat kerakli maydonlarni tozalab (map qilib) jo'natamiz
+              items: saleData.items.map(item => ({
+                  id: item.id,
+                  name: item.name,
+                  qty: Number(item.qty),
+                  salePrice: Number(item.salePrice)
+              }))
           };
 
           const res = await fetch('https://iphone-house-api.onrender.com/api/cash-sales', {
