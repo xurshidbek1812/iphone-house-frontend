@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronRight, Search, User, X, ShoppingCart, Save, ScanLine, Trash2, Plus, Clock } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Search, User, X, ShoppingCart, Save, ScanLine, Trash2, Plus, Clock, Tag, MessageSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
@@ -62,7 +62,9 @@ const AddCashSale = () => {
       mainCustomer: null,
       otherName: '',
       otherPhone: '+998 ',
-      items: []
+      items: [],
+      discount: '', // 🚨 YANGI QO'SHILDI
+      note: ''      // 🚨 YANGI QO'SHILDI
   });
 
   const [productTab, setProductTab] = useState('catalog'); 
@@ -97,7 +99,9 @@ const AddCashSale = () => {
       }
   };
 
+  // HISOB KITOB (UMUMIY)
   const grandTotal = saleData.items.reduce((sum, item) => sum + ((Number(item.salePrice) || 0) * item.qty), 0);
+  const finalAmount = Math.max(0, grandTotal - Number(saleData.discount || 0)); // Chegirmadan keyingi summa manfiy bo'lib ketmasligi kerak
 
   const addProductToCart = (product) => {
       if (product.quantity <= 0) return toast.error("Omborda qoldiq yo'q!");
@@ -141,12 +145,16 @@ const AddCashSale = () => {
   const submitSale = async () => {
       setIsLoading(true);
       try {
+          // 🚨 YUBORILAYOTGAN YUK (Payload) ga chegirma va izohni qo'shamiz
           const payload = {
               isAnonymous: saleData.isAnonymous,
               customerId: saleData.isAnonymous ? null : (saleData.mainCustomer?.id || null),
               otherName: saleData.otherName || null,
               otherPhone: saleData.otherPhone || null,
               totalAmount: grandTotal,
+              discount: Number(saleData.discount || 0),
+              finalAmount: finalAmount,
+              note: saleData.note || null,
               items: saleData.items.map(item => ({
                   id: item.id,
                   name: item.name,
@@ -163,7 +171,7 @@ const AddCashSale = () => {
           
           if (res.ok) {
               toast.success("Savdo saqlandi (Jarayonda)");
-              navigate('/savdo'); // Muvaffaqiyatli saqlangach Ro'yxatga qaytadi
+              navigate('/savdo'); 
           } else {
               const errData = await res.json();
               toast.error(errData.error || "Saqlashda xatolik");
@@ -216,9 +224,17 @@ const AddCashSale = () => {
                         <span className="text-gray-300">Tovarlar soni:</span>
                         <span className="font-bold">{saleData.items.reduce((s, i) => s + i.qty, 0)} ta</span>
                     </div>
+                    
+                    {Number(saleData.discount) > 0 && (
+                        <div className="flex justify-between text-sm mb-3 text-amber-400 border-t border-gray-600 pt-3">
+                            <span>Chegirma:</span>
+                            <span className="font-bold">- {Number(saleData.discount).toLocaleString()} UZS</span>
+                        </div>
+                    )}
+
                     <div className="border-t border-gray-600 pt-4 mt-2">
                         <p className="text-gray-400 text-[11px] uppercase mb-1">To'lanadigan summa</p>
-                        <p className="text-3xl font-black text-emerald-400">{grandTotal.toLocaleString()} <span className="text-sm font-normal text-emerald-600">UZS</span></p>
+                        <p className="text-3xl font-black text-emerald-400">{finalAmount.toLocaleString()} <span className="text-sm font-normal text-emerald-600">UZS</span></p>
                     </div>
                 </div>
             )}
@@ -359,18 +375,67 @@ const AddCashSale = () => {
                 </div>
             )}
 
-            {/* QADAM 3: SAQLASH (KUTISH HOLATI) */}
+            {/* QADAM 3: SAQLASH (KUTISH HOLATI VA CHEGIRMA) */}
             {step === 3 && (
-                <div className="bg-white p-10 rounded-2xl shadow-sm border border-gray-100 text-center animate-in slide-in-from-right-8">
-                    <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <Clock size={40} />
+                <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8">
+                    <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-100">
+                        <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
+                                <Clock size={32} />
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-800 mb-1">Qo'shimcha va Saqlash</h2>
+                                <p className="text-gray-500 text-sm">Savdoni "Jarayonda" qilib saqlashdan oldin chegirma kiritishingiz mumkin.</p>
+                            </div>
+                        </div>
                     </div>
-                    <h2 className="text-2xl font-black text-gray-800 mb-2">Ma'lumotlarni saqlash</h2>
-                    <p className="text-gray-500 mb-8">Ushbu savdo <strong>"Jarayonda"</strong> holatida saqlanadi. <br/>Kassa xodimi uni tasdiqlagandan so'ng, tovarlar ombordan yechiladi.</p>
                     
-                    <div className="bg-gray-800 text-white p-8 rounded-2xl max-w-sm mx-auto shadow-2xl mb-8 transform -rotate-2">
-                        <p className="text-blue-400 font-bold tracking-widest uppercase text-xs mb-2">Jami savdo summasi</p>
-                        <p className="text-4xl font-black">{grandTotal.toLocaleString()} UZS</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                        {/* Chegirma va Izoh */}
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><Tag size={14}/> Chegirma berish (UZS)</label>
+                                <input 
+                                    type="number" 
+                                    min="0"
+                                    max={grandTotal}
+                                    value={saleData.discount} 
+                                    onChange={(e) => setSaleData({...saleData, discount: e.target.value})} 
+                                    className="w-full p-4 bg-amber-50 border-2 border-amber-100 rounded-xl outline-none focus:border-amber-400 font-black text-amber-700 text-lg" 
+                                    placeholder="Masalan: 50000"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><MessageSquare size={14}/> Savdo uchun izoh (ixtiyoriy)</label>
+                                <textarea 
+                                    value={saleData.note} 
+                                    onChange={(e) => setSaleData({...saleData, note: e.target.value})} 
+                                    className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 resize-none h-24" 
+                                    placeholder="Nega chegirma berilgani yoki boshqa eslatma..."
+                                ></textarea>
+                            </div>
+                        </div>
+
+                        {/* YAKUNIY HISOB */}
+                        <div className="bg-gray-800 rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute -right-10 -top-10 text-gray-700 opacity-20"><ShoppingCart size={150}/></div>
+                            <div className="relative z-10 space-y-4">
+                                <div className="flex justify-between text-gray-400 text-sm">
+                                    <span>Tovarlar ({saleData.items.reduce((s, i) => s + i.qty, 0)} ta):</span>
+                                    <span className="font-bold text-white">{grandTotal.toLocaleString()} UZS</span>
+                                </div>
+                                {Number(saleData.discount) > 0 && (
+                                    <div className="flex justify-between text-amber-400 text-sm border-b border-gray-600 pb-4">
+                                        <span>Chegirma:</span>
+                                        <span className="font-bold">- {Number(saleData.discount).toLocaleString()} UZS</span>
+                                    </div>
+                                )}
+                                <div className="pt-2">
+                                    <p className="text-gray-400 text-[10px] uppercase mb-1 tracking-widest">Mijoz to'laydigan summa</p>
+                                    <p className="text-4xl font-black text-emerald-400">{finalAmount.toLocaleString()} <span className="text-base font-normal">UZS</span></p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
