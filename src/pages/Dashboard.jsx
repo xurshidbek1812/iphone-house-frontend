@@ -10,15 +10,25 @@ const Dashboard = () => {
   const [notifications, setNotifications] = useState([]);
   
   const userRole = (sessionStorage.getItem('userRole') || 'admin').toLowerCase();
+  const token = sessionStorage.getItem('token'); // <-- 1. TOKENNI CHAQIRAMIZ
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); 
 
   useEffect(() => {
-    fetch('https://iphone-house-api.onrender.com/api/dashboard')
-      .then(res => res.json())
-      .then(data => setStats(data));
+    // 2. FETCH ICHIGA HEADERS QO'SHAMIZ
+    fetch('https://iphone-house-api.onrender.com/api/dashboard', {
+        headers: {
+            'Authorization': `Bearer ${token}`
+        }
+    })
+      .then(res => {
+          if (!res.ok) throw new Error("Avtorizatsiya xatosi yoki server xatosi");
+          return res.json();
+      })
+      .then(data => setStats(data))
+      .catch(err => console.error("Dashboard ma'lumotlarini yuklashda xatolik:", err));
 
     loadNotifications();
-  }, []);
+  }, [token]); // <-- 3. TOKENNI DEPENDENCY GA QO'SHAMIZ
 
   // 1. XABARLARNI YUKLASH FUNKSIYASI (Qayta ishlatish uchun alohida qildik)
 // 1. XABARLARNI YUKLASH FUNKSIYASI (Filtrlangan)
@@ -243,5 +253,6 @@ const StatCard = ({ title, value, unit, icon, colors }) => {
       </div>
     );
 };
+
 
 export default Dashboard;
