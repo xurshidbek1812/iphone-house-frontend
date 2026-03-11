@@ -53,7 +53,7 @@ const SupplierIncome = () => {
       'Content-Type': 'application/json'
   }), [getAuthHeaders]);
 
-  // --- 1. YUKLASH ---
+  // --- YUKLASH ---
   const fetchData = useCallback(async (signal = undefined) => {
       if (!token) return;
       try {
@@ -89,7 +89,7 @@ const SupplierIncome = () => {
       return () => controller.abort();
   }, [fetchData]);
 
-  // --- NARXLARNI AVTOMAT HISOBLASH MANTIQI ---
+  // --- NARXLARNI HISOBLASH ---
   const getCostInUZS = (price, currency, rate) => {
       const numPrice = Number(price) || 0;
       const numRate = Number(rate) || 12500;
@@ -176,7 +176,6 @@ const SupplierIncome = () => {
     if (!qty || qty <= 0) return toast.error("Sonini to'g'ri kiriting!");
     if (!price || price <= 0) return toast.error("Kirim narxini to'g'ri kiriting!");
     if (sale <= 0) return toast.error("Sotuv narxini to'g'ri kiriting!");
-    
     if (productToAdd.unit === 'Dona' && !Number.isInteger(qty)) {
         return toast.error("Dona o'lchov birligi uchun miqdor butun son bo'lishi shart!");
     }
@@ -196,7 +195,6 @@ const SupplierIncome = () => {
 
     setInvoiceItems(prev => [...prev, newItem]);
     
-    // Tozalash
     setSelectedProduct(null);
     setSearchTerm('');
     setInputCount('');
@@ -209,7 +207,6 @@ const SupplierIncome = () => {
     setInvoiceItems(prev => prev.filter(item => item.id !== id));
   };
 
-  // --- HISOBLASH VA QIDIRUV ---
   const { grandTotalUZS } = useMemo(() => {
     let totalUZS = 0; let totalUSD = 0;
     invoiceItems.forEach(item => {
@@ -229,7 +226,7 @@ const SupplierIncome = () => {
       );
   }, [allProducts, searchTerm]);
 
-  // --- SAQLASH (Baza bilan ulanish) ---
+  // --- SAQLASH ---
   const handleSave = async () => {
     const cleanSupplier = supplierName.trim();
     if (!cleanSupplier) return toast.error("Ta'minotchi nomini tanlang!");
@@ -268,7 +265,7 @@ const SupplierIncome = () => {
       const data = await parseJsonSafe(response);
 
       if (response.ok) {
-          toast.success("Kirim 'Jarayonda' holatida saqlandi!");
+          toast.success("Kirim saqlandi!");
           navigate('/ombor/taminotchi-kirim'); 
       } else {
           toast.error(data?.error || `Saqlashda xatolik (${response.status})`);
@@ -305,13 +302,13 @@ const SupplierIncome = () => {
         </div>
       </div>
 
-      {/* 2. FORM VA STATISTIKA (TO'G'RI GRID JOYLASHTIRISH) */}
+      {/* 2. FORM VA STATISTIKA (GRID CONTAINER) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
          
          {/* CHAP TOMON: ASOSIY FORMALAR (8 ustun) */}
          <div className="lg:col-span-8 flex flex-col gap-6">
              
-             {/* Asosiy ma'lumotlar formasi */}
+             {/* Asosiy ma'lumotlar */}
              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Asosiy ma'lumotlar</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -338,7 +335,7 @@ const SupplierIncome = () => {
                 </div>
              </div>
 
-             {/* Tovarni tanlash formasi */}
+             {/* Tovar qo'shish formasi */}
              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Tovarni tanlash va Narxlash</h3>
                 
@@ -402,7 +399,9 @@ const SupplierIncome = () => {
                         </div>
                     </div>
                 </div>
+             </div>
          </div>
+         {/* --- CHAP TOMON TUGADI --- */}
 
          {/* O'NG TOMON: STATISTIKA (4 ustun) */}
          <div className="lg:col-span-4 flex flex-col gap-6">
@@ -414,23 +413,25 @@ const SupplierIncome = () => {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col justify-center relative overflow-hidden">
                 <div className="absolute right-[-20px] top-[-20px] opacity-5"><DollarSign size={140}/></div>
                 <div className="text-slate-400 text-[11px] font-black uppercase tracking-widest mb-1">Jami Summasi</div>
-                <div className="text-3xl font-black text-emerald-500 relative z-10 truncate" title={`${grandTotalUZS.toLocaleString()} UZS`}>
+                <div className="text-3xl lg:text-4xl font-black text-emerald-500 relative z-10 truncate" title={`${grandTotalUZS.toLocaleString()} UZS`}>
                     {grandTotalUZS.toLocaleString()} <span className="text-base text-emerald-600/50 font-bold ml-1">UZS</span>
                 </div>
             </div>
          </div>
+         {/* --- O'NG TOMON TUGADI --- */}
 
-      </div>
+      </div> 
+      {/* 🚨 GRID CONTAINER SHU YERDA YOPILADI 🚨 */}
 
-      {/* 3. FAKTURA JADVALI (To'liq kenglikda, pastda joylashadi) */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[300px] flex flex-col overflow-hidden">
+      {/* 3. FAKTURA JADVALI (To'liq kenglikda) */}
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[300px] flex flex-col overflow-hidden">
          <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
              <h3 className="font-bold text-slate-700 flex items-center gap-2">
                  <Package size={18} className="text-blue-500"/> Qo'shilgan tovarlar ro'yxati
              </h3>
          </div>
 
-         <div className="flex flex-col h-full flex-1 p-6 animate-in fade-in duration-300">
+         <div className="flex flex-col h-full flex-1 p-6">
             {invoiceItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center flex-1 text-slate-400 py-10 border-2 border-dashed border-slate-200 rounded-2xl">
                     <Package size={48} className="mb-3 text-slate-300"/>
