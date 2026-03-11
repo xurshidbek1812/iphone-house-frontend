@@ -1,13 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Check, ChevronRight, Search, User, 
   X, Briefcase, Users, ShoppingCart, Calendar, Save, 
-  CheckCircle, Plus, Trash2, ScanLine
+  CheckCircle, Plus, Trash2, ScanLine, Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// QIDIRUV KOMPONENTI
+const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
+
+const parseJsonSafe = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+};
+
+// QIDIRUV KOMPONENTI (Null-safe)
 const SearchableSelect = ({ placeholder, onSelect, excludeIds = [], customers = [] }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -21,11 +31,16 @@ const SearchableSelect = ({ placeholder, onSelect, excludeIds = [], customers = 
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [wrapperRef]);
 
-    const filteredCustomers = customers.filter(c => {
-        if (excludeIds.includes(c.id)) return false;
-        const text = `${c.firstName} ${c.lastName} ${c.pinfl} ${c.document?.number || ''}`.toLowerCase();
-        return text.includes(search.toLowerCase());
-    });
+    const filteredCustomers = useMemo(() => {
+        if (!search) return customers.filter(c => !excludeIds.includes(c.id));
+        const lowerSearch = search.trim().toLowerCase();
+        
+        return customers.filter(c => {
+            if (excludeIds.includes(c.id)) return false;
+            const text = `${c.firstName || ''} ${c.lastName || ''} ${c.pinfl || ''} ${c.document?.number || ''}`.toLowerCase();
+            return text.includes(lowerSearch);
+        });
+    }, [customers, search, excludeIds]);
 
     return (
         <div className="relative" ref={wrapperRef}>
@@ -41,7 +56,7 @@ const SearchableSelect = ({ placeholder, onSelect, excludeIds = [], customers = 
                                 <div className="font-bold text-gray-800 uppercase text-sm">{customer.lastName} {customer.firstName} {customer.middleName}</div>
                                 <div className="text-[11px] font-mono text-gray-500 flex gap-3 mt-1">
                                     <span className="bg-gray-100 px-2 py-0.5 rounded">ID: {customer.id}</span>
-                                    <span className="bg-gray-100 px-2 py-0.5 rounded">JSHSHIR: {customer.pinfl}</span>
+                                    <span className="bg-gray-100 px-2 py-0.5 rounded">JSHSHIR: {customer.pinfl || '-'}</span>
                                 </div>
                             </div>
                         ))
@@ -56,13 +71,14 @@ const AddContract = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
   
   const [customers, setCustomers] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [products, setProducts] = useState([]);
 
   const token = sessionStorage.getItem('token');
-  const userRole = sessionStorage.getItem('userRole'); // <--- YANGI: Rolni olamiz
+  const userRole = sessionStorage.getItem('userRole'); 
   
   const barcodeInputRef = useRef(null);
 
@@ -82,54 +98,87 @@ const AddContract = () => {
   const [productTab, setProductTab] = useState('catalog'); 
   const [productSearch, setProductSearch] = useState('');
 
-  // --- YANGI YUKLASH LOGIKASI ---
-  useEffect(() => {
-    const fetchData = async () => {
+  const getAuthHeaders = useCallback(() => ({
+      'Authorization': `Bearer ${token}`
+  }), [token]);
+
+  const getJsonAuthHeaders = useCallback(() => ({
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+  }), [getAuthHeaders]);
+
+  // --- YANGI YUKLASH LOGIKASI (Xavfsiz) ---
+  const fetchData = useCallback(async (signal = undefined) => {
+      if (!token) return;
       try {
-        const [custRes, prodRes] = await Promise.all([
-            fetch('https://iphone-house-api.onrender.com/api/customers', { headers: { 'Authorization': `Bearer ${token}` } }),
-            fetch('https://iphone-house-api.onrender.com/api/products', { headers: { 'Authorization': `Bearer ${token}` } })
-        ]);
-        
-        if (custRes.ok) { const d = await custRes.json(); setCustomers(Array.isArray(d) ? d : []); }
-        if (prodRes.ok) { const d = await prodRes.json(); setProducts(Array.isArray(d) ? d : []); }
+          setDataLoading(true);
+          const [custRes, prodRes] = await Promise.allSettled([
+              fetch(`${API_URL}/api/customers`, { headers: getAuthHeaders(), signal }),
+              fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal })
+          ]);
+          
+          if (custRes.status === 'fulfilled' && custRes.value.ok) {
+              const d = await parseJsonSafe(custRes.value);
+              setCustomers(Array.isArray(d) ? d : []); 
+          }
 
-        // ROLGA QARAB XODIMLARNI YUKLASH
-        if (userRole === 'director') {
-            const staffRes = await fetch('https://iphone-house-api.onrender.com/api/users', { headers: { 'Authorization': `Bearer ${token}` } });
-            if (staffRes.ok) {
-                const d = await staffRes.json();
-                setStaffList(Array.isArray(d) ? d : []);
-            }
-        } else {
-            // Agar oddiy xodim bo'lsa, faqat o'zini yuklaydi
-            const meRes = await fetch('https://iphone-house-api.onrender.com/api/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
-            if (meRes.ok) {
-                const meData = await meRes.json();
-                setStaffList([meData]);
-                // Va avtomatik tarzda o'zini tanlab qo'yadi
-                setContractData(prev => ({ ...prev, staffId: meData.id }));
-            }
-        }
+          if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
+              const d = await parseJsonSafe(prodRes.value);
+              setProducts(Array.isArray(d) ? d : []); 
+          }
 
+          // ROLGA QARAB XODIMLARNI YUKLASH
+          if (userRole === 'director') {
+              const staffRes = await fetch(`${API_URL}/api/users`, { headers: getAuthHeaders(), signal });
+              if (staffRes.ok) {
+                  const d = await parseJsonSafe(staffRes);
+                  setStaffList(Array.isArray(d) ? d : []);
+              }
+          } else {
+              const meRes = await fetch(`${API_URL}/api/users/me`, { headers: getAuthHeaders(), signal });
+              if (meRes.ok) {
+                  const meData = await parseJsonSafe(meRes);
+                  if (meData) {
+                      setStaffList([meData]);
+                      setContractData(prev => ({ ...prev, staffId: meData.id }));
+                  }
+              }
+          }
       } catch (err) {
-        toast.error("Ma'lumotlarni yuklashda xatolik!");
+          if (err.name !== 'AbortError') toast.error("Ma'lumotlarni yuklashda xatolik!");
+      } finally {
+          if (!signal?.aborted) setDataLoading(false);
       }
-    };
-    if (token) fetchData();
-  }, [token, userRole]);
+  }, [token, userRole, getAuthHeaders]);
 
-  // Hisob-kitoblar
-  const grandTotal = contractData.items.reduce((sum, item) => sum + ((Number(item.salePrice) || 0) * item.qty), 0);
-  const debtAmount = Math.max(0, grandTotal - Number(contractData.prepayment || 0));
-  const monthlyPayment = contractData.duration > 0 ? (debtAmount / contractData.duration) : 0;
+  useEffect(() => {
+      const controller = new AbortController();
+      fetchData(controller.signal);
+      return () => controller.abort();
+  }, [fetchData]);
 
-  const generateSchedule = () => {
+  // --- HISOB-KITOBLAR (Memoized) ---
+  const grandTotal = useMemo(() => {
+      return contractData.items.reduce((sum, item) => sum + ((Number(item.salePrice) || 0) * (Number(item.qty) || 0)), 0);
+  }, [contractData.items]);
+
+  const debtAmount = useMemo(() => {
+      return Math.max(0, grandTotal - Number(contractData.prepayment || 0));
+  }, [grandTotal, contractData.prepayment]);
+
+  const monthlyPayment = useMemo(() => {
+      return Number(contractData.duration) > 0 ? (debtAmount / Number(contractData.duration)) : 0;
+  }, [debtAmount, contractData.duration]);
+
+  const generateSchedule = useCallback(() => {
       let schedule = [];
       let currentDate = new Date();
-      for(let i = 1; i <= contractData.duration; i++) {
+      const dur = Number(contractData.duration) || 0;
+      const pDay = Number(contractData.paymentDay) || 1;
+
+      for(let i = 1; i <= dur; i++) {
           currentDate.setMonth(currentDate.getMonth() + 1);
-          let d = new Date(currentDate.getFullYear(), currentDate.getMonth(), contractData.paymentDay);
+          let d = new Date(currentDate.getFullYear(), currentDate.getMonth(), pDay);
           if (d.getMonth() !== currentDate.getMonth()) {
               d = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0); 
           }
@@ -140,7 +189,7 @@ const AddContract = () => {
           });
       }
       return schedule;
-  };
+  }, [contractData.duration, contractData.paymentDay, monthlyPayment]);
 
   // Logika
   const selectMainCustomer = (customer) => setContractData(prev => ({ ...prev, mainCustomer: customer }));
@@ -150,7 +199,7 @@ const AddContract = () => {
   const handleBarcodeScan = (e) => {
       if (e.key === 'Enter' && e.target.value.trim() !== '') {
           const code = e.target.value.trim();
-          const foundProduct = products.find(p => p.customId.toString() === code || p.id.toString() === code);
+          const foundProduct = products.find(p => String(p.customId) === code || String(p.id) === code);
           
           if (foundProduct) {
               addProductToCart(foundProduct);
@@ -163,7 +212,7 @@ const AddContract = () => {
   };
 
   const addProductToCart = (product) => {
-      if (product.quantity <= 0) return toast.error("Bazada qoldiq yo'q!");
+      if (Number(product.quantity) <= 0) return toast.error("Bazada qoldiq yo'q!");
       
       const existingItem = contractData.items.find(i => i.id === product.id);
       if (existingItem) {
@@ -191,7 +240,7 @@ const AddContract = () => {
   const handleNext = () => {
       if (step === 1 && (!contractData.mainCustomer || !contractData.staffId)) return toast.error("Asosiy mijoz va xodimni tanlang!");
       if (step === 2 && contractData.items.length === 0) return toast.error("Kamida 1 ta tovar tanlang!");
-      if (step === 3 && (contractData.prepayment > grandTotal)) return toast.error("Oldindan to'lov umumiy summadan ko'p bo'lolmaydi!");
+      if (step === 3 && (Number(contractData.prepayment) > grandTotal)) return toast.error("Oldindan to'lov umumiy summadan ko'p bo'lolmaydi!");
       
       if (step < 4) {
           setStep(step + 1);
@@ -207,46 +256,60 @@ const AddContract = () => {
           const payload = {
               customerId: contractData.mainCustomer.id,
               staffId: contractData.staffId,
-              durationMonths: contractData.duration,
+              durationMonths: Number(contractData.duration),
               totalAmount: grandTotal,
-              prepayment: contractData.prepayment,
+              prepayment: Number(contractData.prepayment) || 0,
               debtAmount: debtAmount,
-              items: contractData.items
+              note: contractData.note.trim() || null,
+              items: contractData.items.map(i => ({
+                  id: i.id, // Yoki productId (Backend talabiga qarab)
+                  qty: Number(i.qty),
+                  salePrice: Number(i.salePrice)
+              }))
           };
 
-          const res = await fetch('https://iphone-house-api.onrender.com/api/contracts', {
+          const res = await fetch(`${API_URL}/api/contracts`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              headers: getJsonAuthHeaders(),
               body: JSON.stringify(payload)
           });
           
+          const data = await parseJsonSafe(res);
+
           if (res.ok) {
               toast.success("Shartnoma muvaffaqiyatli saqlandi!");
               navigate('/shartnoma');
           } else {
-              const errData = await res.json();
-              toast.error(errData.error || "Xatolik yuz berdi");
+              toast.error(data?.error || `Xatolik yuz berdi (${res.status})`);
           }
       } catch (err) {
-          toast.error("Server xatosi");
+          toast.error("Server bilan aloqa yo'q!");
       } finally {
           setIsLoading(false);
       }
   };
 
-  const filteredProducts = products.filter(p => 
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
-      p.customId.toString().includes(productSearch)
-  );
+  const filteredProducts = useMemo(() => {
+      if (!productSearch) return products;
+      const search = productSearch.trim().toLowerCase();
+      return products.filter(p => 
+          (p.name || '').toLowerCase().includes(search) || 
+          (p.customId != null && String(p.customId).includes(search))
+      );
+  }, [products, productSearch]);
+
+  if (dataLoading) {
+      return <div className="min-h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-blue-500" size={48}/></div>;
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gray-50 pb-24 animate-in fade-in duration-300">
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
          <div className="flex items-center gap-4">
-            <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><ArrowLeft size={20} className="text-gray-600"/></button>
-            <h1 className="text-xl font-bold text-gray-800">Yangi shartnoma rasmiylashtirish</h1>
+            <button disabled={isLoading} onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50"><ArrowLeft size={20} className="text-gray-600"/></button>
+            <h1 className="text-xl font-black text-gray-800 tracking-tight">Yangi shartnoma rasmiylashtirish</h1>
          </div>
-         <button onClick={() => navigate(-1)} className="px-5 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Bekor qilish</button>
+         <button disabled={isLoading} onClick={() => navigate(-1)} className="px-5 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50">Bekor qilish</button>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -258,7 +321,7 @@ const AddContract = () => {
                     <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full -mr-10 -mt-10 transition-transform group-hover:scale-150 z-0"></div>
                     <div className="relative z-10">
                         <div className="flex justify-between items-start mb-3">
-                            <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-wider">
+                            <div className="flex items-center gap-2 text-blue-600 font-bold text-[10px] uppercase tracking-widest">
                                 <User size={14}/> Asosiy Mijoz
                             </div>
                             <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-2 py-1 rounded">ID: {contractData.mainCustomer.id}</span>
@@ -271,37 +334,40 @@ const AddContract = () => {
             {contractData.coBorrowers.map((co, idx) => (
                 <div key={co.id} className="bg-white p-4 rounded-xl shadow-sm border border-purple-100 relative overflow-hidden animate-in fade-in">
                     <div className="flex justify-between items-start mb-2">
-                        <div className="flex items-center gap-2 text-purple-600 font-bold text-xs uppercase tracking-wider">
+                        <div className="flex items-center gap-2 text-purple-600 font-bold text-[10px] uppercase tracking-widest">
                             <Users size={14}/> Qarz oluvchi #{idx + 1}
                         </div>
-                        <button onClick={() => removeCoBorrower(co.id)} className="text-gray-400 hover:text-red-500 transition-colors"><X size={16}/></button>
+                        <button disabled={isLoading} onClick={() => removeCoBorrower(co.id)} className="text-gray-400 hover:text-rose-500 transition-colors disabled:opacity-50"><X size={16}/></button>
                     </div>
                     <h3 className="font-bold text-gray-800 text-sm uppercase">{co.lastName} {co.firstName}</h3>
                 </div>
             ))}
 
             {contractData.items.length > 0 && (
-                <div className="bg-gray-800 p-6 rounded-2xl shadow-lg text-white animate-in slide-in-from-bottom-4">
-                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2"><ShoppingCart size={14}/> Shartnoma summasi</h3>
-                    <div className="space-y-3 mb-4">
-                        <div className="flex justify-between text-sm">
-                            <span className="text-gray-300">Jami tovarlar:</span>
-                            <span className="font-bold">{contractData.items.reduce((s, i) => s + i.qty, 0)} ta</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                            <span className="text-gray-300">Tannarx:</span>
-                            <span className="font-bold">{grandTotal.toLocaleString()} UZS</span>
-                        </div>
-                        {step >= 3 && contractData.prepayment > 0 && (
-                            <div className="flex justify-between text-sm text-emerald-400 border-t border-gray-700 pt-3">
-                                <span>Oldindan to'lov:</span>
-                                <span className="font-bold">- {Number(contractData.prepayment).toLocaleString()} UZS</span>
+                <div className="bg-gray-900 p-6 rounded-3xl shadow-xl text-white animate-in slide-in-from-bottom-4 relative overflow-hidden">
+                    <div className="absolute -right-4 -bottom-4 text-gray-800"><ShoppingCart size={120}/></div>
+                    <div className="relative z-10">
+                        <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2"><ShoppingCart size={14}/> Shartnoma summasi</h3>
+                        <div className="space-y-3 mb-4">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-400 font-medium">Jami tovarlar:</span>
+                                <span className="font-bold">{contractData.items.reduce((s, i) => s + i.qty, 0)} ta</span>
                             </div>
-                        )}
-                    </div>
-                    <div className="border-t border-gray-600 pt-4 mt-2">
-                        <p className="text-gray-400 text-[11px] uppercase mb-1">Qolgan qarz miqdori</p>
-                        <p className="text-2xl font-black text-white">{debtAmount.toLocaleString()} <span className="text-sm font-normal text-gray-400">UZS</span></p>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-400 font-medium">Tannarx:</span>
+                                <span className="font-bold">{grandTotal.toLocaleString()} UZS</span>
+                            </div>
+                            {step >= 3 && Number(contractData.prepayment) > 0 && (
+                                <div className="flex justify-between text-sm text-emerald-400 border-t border-gray-700/50 pt-3">
+                                    <span className="font-medium">Oldindan to'lov:</span>
+                                    <span className="font-black">- {Number(contractData.prepayment).toLocaleString()} UZS</span>
+                                </div>
+                            )}
+                        </div>
+                        <div className="border-t border-gray-700/50 pt-4 mt-2">
+                            <p className="text-gray-400 text-[10px] font-black uppercase mb-1 tracking-widest">Qolgan qarz miqdori</p>
+                            <p className="text-3xl font-black text-white truncate" title={`${debtAmount.toLocaleString()} UZS`}>{debtAmount.toLocaleString()} <span className="text-sm font-bold text-gray-500">UZS</span></p>
+                        </div>
                     </div>
                 </div>
             )}
@@ -309,10 +375,10 @@ const AddContract = () => {
 
         {/* ASOSIY OYNA */}
         <div className="lg:col-span-8">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">
                 <div className="flex justify-between items-center relative">
-                    <div className="absolute top-1/2 left-6 right-6 h-1 bg-gray-100 -z-10 -translate-y-1/2"></div>
-                    <div className="absolute top-1/2 left-6 h-1 bg-blue-500 -z-10 -translate-y-1/2 transition-all duration-500" style={{ width: `${((step - 1) / 3) * 100}%` }}></div>
+                    <div className="absolute top-1/2 left-6 right-6 h-1.5 bg-gray-100 rounded-full -z-10 -translate-y-1/2"></div>
+                    <div className="absolute top-1/2 left-6 h-1.5 rounded-full bg-blue-500 -z-10 -translate-y-1/2 transition-all duration-500" style={{ width: `${((step - 1) / 3) * 100}%` }}></div>
                     
                     {[
                         { num: 1, icon: User, label: "Mijoz" },
@@ -321,44 +387,42 @@ const AddContract = () => {
                         { num: 4, icon: CheckCircle, label: "Tasdiq" }
                     ].map(s => (
                         <div key={s.num} className="flex flex-col items-center gap-2 bg-white px-2">
-                            <div className={`w-12 h-12 flex items-center justify-center rounded-xl text-sm font-bold border-2 transition-all duration-300 ${step === s.num ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200' : step > s.num ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-200 text-gray-400'}`}>
-                                {step > s.num ? <Check size={20} /> : <s.icon size={20} />}
+                            <div className={`w-12 h-12 flex items-center justify-center rounded-xl text-sm font-black border-4 transition-all duration-300 ${step === s.num ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100' : step > s.num ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-200 text-gray-400'}`}>
+                                {step > s.num ? <Check size={20} strokeWidth={3} /> : <s.icon size={20} />}
                             </div>
-                            <span className={`text-[11px] font-bold uppercase tracking-wider ${step >= s.num ? 'text-gray-800' : 'text-gray-400'}`}>{s.label}</span>
+                            <span className={`text-[10px] font-black uppercase tracking-widest ${step >= s.num ? 'text-gray-800' : 'text-gray-400'}`}>{s.label}</span>
                         </div>
                     ))}
                 </div>
             </div>
 
-            {/* QADAMLAR */}
+            {/* QADAM 1: MIJOZ TANLASH */}
             {step === 1 && (
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8">
-                    <h2 className="text-xl font-black text-gray-800 mb-6">Shartnoma subyektlari</h2>
-                    <div className="space-y-6">
+                <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8 duration-300">
+                    <h2 className="text-xl font-black text-gray-800 mb-6 tracking-tight">Shartnoma subyektlari</h2>
+                    <div className="space-y-8">
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">1. Asosiy mijozni tanlang *</label>
+                            <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-2">1. Asosiy mijozni tanlang <span className="text-red-500 text-base leading-none">*</span></label>
                             {!contractData.mainCustomer ? (
                                 <SearchableSelect placeholder="Ism yoki JSHSHIR bo'yicha qidiring..." onSelect={selectMainCustomer} excludeIds={contractData.coBorrowers.map(c => c.id)} customers={customers} />
                             ) : (
-                                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex justify-between items-center text-emerald-800 font-medium">
-                                    <div className="flex items-center gap-3"><CheckCircle className="text-emerald-500" size={20}/> Mijoz tanlandi</div>
-                                    <button onClick={() => setContractData(prev => ({...prev, mainCustomer: null}))} className="text-emerald-600 hover:text-emerald-800 text-sm font-bold underline">Boshqa tanlash</button>
+                                <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl flex justify-between items-center text-emerald-800 font-medium">
+                                    <div className="flex items-center gap-3 font-bold"><CheckCircle className="text-emerald-500" size={24}/> Mijoz tanlandi</div>
+                                    <button onClick={() => setContractData(prev => ({...prev, mainCustomer: null}))} className="text-emerald-600 hover:text-emerald-800 text-sm font-black underline transition-colors">Boshqa tanlash</button>
                                 </div>
                             )}
                         </div>
                         <div className="pt-6 border-t border-gray-100">
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">2. Birgalikda qarz oluvchilar (Ixtiyoriy)</label>
-                            <SearchableSelect placeholder="Qo'shimcha javobgarlarni qo'shish..." onSelect={addCoBorrower} excludeIds={[contractData.mainCustomer?.id, ...contractData.coBorrowers.map(c => c.id)].filter(Boolean)} customers={customers} />
+                            <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-2">2. Birgalikda qarz oluvchilar (Ixtiyoriy)</label>
+                            <SearchableSelect placeholder="Qo'shimcha javobgarlarni qidiring va qo'shing..." onSelect={addCoBorrower} excludeIds={[contractData.mainCustomer?.id, ...contractData.coBorrowers.map(c => c.id)].filter(Boolean)} customers={customers} />
                         </div>
                         <div className="pt-6 border-t border-gray-100">
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">3. Jalb qilgan xodim (Sotuvchi) *</label>
+                            <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-2">3. Jalb qilgan xodim (Sotuvchi) <span className="text-red-500 text-base leading-none">*</span></label>
                             <div className="relative">
-                                <Briefcase className="absolute left-4 top-3.5 text-gray-400" size={20}/>
-                                
-                                {/* YANGI: ROLGA QARAB DROPDOWN QULFLANADI */}
+                                <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
                                 <select 
                                     disabled={userRole !== 'director'}
-                                    className={`w-full pl-12 pr-4 py-3 border rounded-xl outline-none font-medium transition-colors ${contractData.staffId ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 bg-gray-50 text-gray-700 focus:bg-white focus:border-blue-500'} ${userRole !== 'director' ? 'opacity-80 cursor-not-allowed' : 'appearance-none'}`} 
+                                    className={`w-full pl-12 pr-4 py-4 border rounded-2xl outline-none font-bold transition-colors ${contractData.staffId ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 bg-gray-50 text-gray-700 focus:bg-white focus:border-blue-500 focus:ring-4 ring-blue-50'} ${userRole !== 'director' ? 'opacity-80 cursor-not-allowed' : 'appearance-none cursor-pointer'}`} 
                                     value={contractData.staffId} 
                                     onChange={(e) => setContractData(prev => ({...prev, staffId: e.target.value}))}
                                 >
@@ -371,59 +435,63 @@ const AddContract = () => {
                 </div>
             )}
 
+            {/* QADAM 2: TOVARLAR */}
             {step === 2 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[650px] animate-in slide-in-from-right-8">
+                <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[650px] animate-in slide-in-from-right-8 duration-300">
                     
-                    <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
-                        <div className="relative max-w-lg mx-auto">
-                            <ScanLine className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500" size={24}/>
+                    <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50/50 border-b border-gray-200">
+                        <div className="relative max-w-xl mx-auto">
+                            <ScanLine className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-500" size={24}/>
                             <input 
                                 ref={barcodeInputRef}
                                 type="text" 
                                 placeholder="Shtrix kodni skanerlang yoki yozing..." 
                                 onKeyDown={handleBarcodeScan}
-                                className="w-full pl-12 pr-4 py-4 bg-white border-2 border-blue-300 focus:border-blue-600 rounded-xl outline-none shadow-sm font-mono text-lg transition-colors"
+                                className="w-full pl-14 pr-6 py-4 bg-white border-2 border-blue-200 focus:border-blue-500 rounded-2xl outline-none shadow-sm font-mono font-bold text-xl text-gray-800 transition-colors placeholder:font-sans placeholder:text-base placeholder:font-medium"
                             />
                         </div>
                     </div>
 
-                    <div className="flex border-b border-gray-100 bg-white">
-                        <button onClick={() => setProductTab('catalog')} className={`flex-1 py-3 text-sm font-bold transition-colors ${productTab === 'catalog' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700 bg-gray-50'}`}>Katalog (Qidiruv)</button>
-                        <button onClick={() => setProductTab('cart')} className={`flex-1 py-3 text-sm font-bold transition-colors relative ${productTab === 'cart' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700 bg-gray-50'}`}>
-                            Savat <span className="ml-2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{contractData.items.length}</span>
+                    <div className="flex border-b border-gray-100 bg-slate-50/50">
+                        <button onClick={() => setProductTab('catalog')} className={`flex-1 py-4 text-sm font-black transition-colors ${productTab === 'catalog' ? 'text-blue-600 bg-white border-b-2 border-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>Katalog (Qidiruv)</button>
+                        <button onClick={() => setProductTab('cart')} className={`flex-1 py-4 text-sm font-black transition-colors relative ${productTab === 'cart' ? 'text-blue-600 bg-white border-b-2 border-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>
+                            Savat <span className="absolute ml-2 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm">{contractData.items.length}</span>
                         </button>
                     </div>
 
                     {productTab === 'catalog' && (
-                        <div className="p-4 flex flex-col flex-1 overflow-hidden bg-white">
-                            <div className="relative mb-4">
-                                <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
-                                <input type="text" placeholder="Nomi bo'yicha tezkor qidiruv..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm"/>
+                        <div className="p-6 flex flex-col flex-1 overflow-hidden bg-white">
+                            <div className="relative mb-6 shrink-0">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
+                                <input type="text" placeholder="Nomi bo'yicha tezkor qidiruv..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-700 transition-all"/>
                             </div>
-                            <div className="flex-1 overflow-y-auto custom-scrollbar border border-gray-100 rounded-xl">
+                            <div className="flex-1 overflow-y-auto custom-scrollbar border border-gray-100 rounded-2xl">
                                 <table className="w-full text-left text-sm">
-                                    <thead className="bg-gray-50 sticky top-0 text-[11px] text-gray-500 uppercase">
-                                        <tr><th className="p-3">Nomi va Kod</th><th className="p-3 text-center">Qoldiq</th><th className="p-3 text-right">Narxi (UZS)</th><th className="p-3 text-center"></th></tr>
+                                    <thead className="bg-gray-50 sticky top-0 text-[10px] text-gray-400 uppercase font-black tracking-widest z-10 shadow-sm border-b border-gray-100">
+                                        <tr><th className="p-4">Nomi va Kod</th><th className="p-4 text-center">Qoldiq</th><th className="p-4 text-right">Narxi (UZS)</th><th className="p-4 text-center">Amal</th></tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100">
+                                    <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
                                         {filteredProducts.map(p => {
                                             const isAdded = contractData.items.some(i => i.id === p.id);
                                             return (
-                                                <tr key={p.id} className={`hover:bg-blue-50 transition-colors ${isAdded ? 'bg-blue-50/30' : ''}`}>
-                                                    <td className="p-3">
-                                                        <div className="font-bold text-gray-800">{p.name}</div>
-                                                        <div className="text-[10px] font-mono text-gray-500 mt-0.5">#{p.customId}</div>
+                                                <tr key={p.id} className={`hover:bg-blue-50/50 transition-colors ${isAdded ? 'bg-blue-50/30' : ''}`}>
+                                                    <td className="p-4">
+                                                        <div className="text-gray-800">{p.name}</div>
+                                                        <div className="text-[10px] font-mono text-gray-400 mt-1 uppercase tracking-widest">#{p.customId ?? '-'}</div>
                                                     </td>
-                                                    <td className="p-3 text-center font-bold text-blue-600">{p.quantity}</td>
-                                                    <td className="p-3 text-right font-bold text-gray-800">{Number(p.salePrice).toLocaleString()}</td>
-                                                    <td className="p-3 text-center">
-                                                        <button disabled={p.quantity <= 0} onClick={() => addProductToCart(p)} className={`p-2 rounded-lg transition-colors ${isAdded ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white' : 'bg-gray-100 text-gray-600 hover:bg-blue-600 hover:text-white'} disabled:opacity-30 disabled:cursor-not-allowed`}>
-                                                            {isAdded ? <Check size={18}/> : <Plus size={18}/>}
+                                                    <td className="p-4 text-center">
+                                                        <span className={`px-2.5 py-1 rounded-md text-xs ${Number(p.quantity) > 0 ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-500'}`}>{Number(p.quantity || 0)}</span>
+                                                    </td>
+                                                    <td className="p-4 text-right text-gray-600">{Number(p.salePrice || 0).toLocaleString()}</td>
+                                                    <td className="p-4 text-center">
+                                                        <button disabled={p.quantity <= 0} onClick={() => addProductToCart(p)} className={`p-2 rounded-xl transition-all shadow-sm active:scale-95 ${isAdded ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-white border border-gray-200 text-gray-500 hover:border-blue-500 hover:text-blue-500'} disabled:opacity-30 disabled:cursor-not-allowed`}>
+                                                            {isAdded ? <Check size={18} strokeWidth={3}/> : <Plus size={18} strokeWidth={2.5}/>}
                                                         </button>
                                                     </td>
                                                 </tr>
                                             )
                                         })}
+                                        {filteredProducts.length === 0 && <tr><td colSpan="4" className="p-16 text-center text-gray-400 font-medium">Hech narsa topilmadi</td></tr>}
                                     </tbody>
                                 </table>
                             </div>
@@ -431,28 +499,29 @@ const AddContract = () => {
                     )}
 
                     {productTab === 'cart' && (
-                        <div className="p-4 flex flex-col flex-1 overflow-hidden bg-gray-50/50">
+                        <div className="p-6 flex flex-col flex-1 overflow-hidden bg-slate-50/50">
                             {contractData.items.length === 0 ? (
-                                <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-                                    <ShoppingCart size={48} className="mb-4 opacity-20"/>
-                                    <p className="font-medium text-lg">Savat bo'sh. Shtrix kod ishlating yoki katalogdan tanlang.</p>
+                                <div className="flex-1 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-3xl bg-white">
+                                    <ShoppingCart size={56} strokeWidth={1.5} className="mb-4 text-gray-300"/>
+                                    <p className="font-bold text-gray-500">Savat bo'sh</p>
+                                    <p className="text-sm mt-1">Shtrix kod ishlating yoki katalogdan tanlang.</p>
                                 </div>
                             ) : (
-                                <div className="flex-1 overflow-y-auto custom-scrollbar border bg-white border-gray-100 rounded-xl shadow-sm">
+                                <div className="flex-1 overflow-y-auto custom-scrollbar border bg-white border-gray-100 rounded-3xl shadow-sm">
                                     <table className="w-full text-left text-sm">
-                                        <thead className="bg-gray-50 sticky top-0 text-[10px] text-gray-500 uppercase">
-                                            <tr><th className="p-3">Nomi</th><th className="p-3 w-28 text-center">Soni</th><th className="p-3 text-right">Dona Narxi</th><th className="p-3 text-right">Jami (UZS)</th><th className="p-3 text-center"></th></tr>
+                                        <thead className="bg-gray-50 sticky top-0 text-[10px] text-gray-400 uppercase font-black tracking-widest border-b border-gray-100 z-10">
+                                            <tr><th className="p-4 pl-6">Nomi</th><th className="p-4 w-28 text-center">Soni</th><th className="p-4 text-right">Dona Narxi</th><th className="p-4 text-right">Jami (UZS)</th><th className="p-4 text-center w-16">X</th></tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-100">
+                                        <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
                                             {contractData.items.map(item => (
-                                                <tr key={item.id}>
-                                                    <td className="p-3 font-bold text-gray-800">{item.name}</td>
+                                                <tr key={item.id} className="hover:bg-rose-50/30 transition-colors">
+                                                    <td className="p-4 pl-6 text-gray-800">{item.name}</td>
                                                     <td className="p-3 text-center">
-                                                        <input type="number" min="1" max={item.quantity} value={item.qty} onChange={(e) => updateItemQty(item.id, Number(e.target.value))} className="w-full p-2 border border-gray-200 rounded-lg text-center outline-blue-500 font-bold bg-gray-50 focus:bg-white"/>
+                                                        <input type="number" min="1" max={item.quantity} value={item.qty} onChange={(e) => updateItemQty(item.id, Number(e.target.value))} className="w-full p-2.5 border border-gray-200 rounded-xl text-center outline-none focus:border-blue-500 focus:ring-2 ring-blue-100 font-black text-blue-600 bg-blue-50 focus:bg-white transition-all"/>
                                                     </td>
-                                                    <td className="p-3 text-right text-gray-600 font-medium">{Number(item.salePrice).toLocaleString()}</td>
-                                                    <td className="p-3 text-right font-black text-blue-600">{(Number(item.salePrice) * item.qty).toLocaleString()}</td>
-                                                    <td className="p-3 text-center"><button onClick={() => removeItem(item.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></td>
+                                                    <td className="p-4 text-right text-gray-500 font-medium">{Number(item.salePrice).toLocaleString()}</td>
+                                                    <td className="p-4 text-right font-black text-gray-800">{(Number(item.salePrice) * item.qty).toLocaleString()}</td>
+                                                    <td className="p-4 text-center"><button onClick={() => removeItem(item.id)} className="p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors"><Trash2 size={18}/></button></td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -464,37 +533,53 @@ const AddContract = () => {
                 </div>
             )}
 
+            {/* QADAM 3: MUDDAT VA TO'LOV */}
             {step === 3 && (
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8">
-                    <h2 className="text-xl font-black text-gray-800 mb-6">To'lov grafigi</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-6">
+                <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8 duration-300">
+                    <h2 className="text-xl font-black text-gray-800 mb-8 tracking-tight">To'lov grafigini sozlash</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                        <div className="space-y-8">
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-3">Necha oyga?</label>
+                                <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-3">Necha oy muddatga?</label>
                                 <div className="grid grid-cols-4 gap-3">
                                     {[3, 6, 9, 12, 15, 18].map(m => (
-                                        <button key={m} onClick={() => setContractData(prev => ({...prev, duration: m}))} className={`py-3 rounded-xl font-black transition-all ${contractData.duration === m ? 'bg-blue-600 text-white' : 'bg-gray-50 hover:bg-gray-100 border border-gray-200'}`}>{m}</button>
+                                        <button key={m} onClick={() => setContractData(prev => ({...prev, duration: m}))} className={`py-3 rounded-xl font-black transition-all ${contractData.duration === m ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600'}`}>{m}</button>
                                     ))}
-                                    <div className="col-span-2"><input type="number" placeholder="Boshqa" value={contractData.duration} onChange={(e) => setContractData(prev => ({...prev, duration: Number(e.target.value)}))} className="w-full h-full p-3 border border-gray-200 rounded-xl outline-blue-500 text-center font-bold bg-gray-50"/></div>
+                                    <div className="col-span-2"><input type="number" placeholder="Boshqa" value={contractData.duration} onChange={(e) => setContractData(prev => ({...prev, duration: Number(e.target.value)}))} className="w-full h-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-center font-black text-gray-700 bg-gray-50 focus:bg-white transition-all"/></div>
                                 </div>
                             </div>
-                            <div className="p-5 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
-                                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Boshlang'ich to'lov (UZS)</label><input type="number" value={contractData.prepayment} onChange={(e) => setContractData(prev => ({...prev, prepayment: Number(e.target.value)}))} className="w-full p-3 border rounded-xl outline-blue-500 font-bold text-lg text-emerald-600" /></div>
-                                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">To'lov sanasi (Har oyning)</label><div className="flex items-center gap-2"><input type="number" min="1" max="31" value={contractData.paymentDay} onChange={(e) => setContractData(prev => ({...prev, paymentDay: Number(e.target.value)}))} className="w-20 p-3 border rounded-xl outline-blue-500 font-bold text-center" /> <span>- sanasi</span></div></div>
+                            <div className="p-6 bg-emerald-50/50 rounded-2xl border border-emerald-100 space-y-6">
+                                <div>
+                                    <label className="block text-[11px] font-black tracking-widest text-emerald-600/70 uppercase mb-2">Boshlang'ich to'lov (UZS)</label>
+                                    <input type="number" min="0" max={grandTotal} value={contractData.prepayment} onChange={(e) => setContractData(prev => ({...prev, prepayment: Number(e.target.value)}))} className="w-full p-4 bg-white border border-emerald-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-4 ring-emerald-50 font-black text-xl text-emerald-600 transition-all shadow-sm" placeholder="0" />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-2">To'lov sanasi (Har oyning)</label>
+                                    <div className="flex items-center gap-3">
+                                        <input type="number" min="1" max="31" value={contractData.paymentDay} onChange={(e) => setContractData(prev => ({...prev, paymentDay: Number(e.target.value)}))} className="w-24 p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-black text-center text-gray-700 shadow-sm" /> 
+                                        <span className="font-bold text-gray-500">- sanasi</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="bg-gray-50 p-1 rounded-xl border border-gray-200 flex flex-col h-full max-h-[400px]">
-                            <div className="p-4 border-b border-gray-200 bg-white rounded-t-xl flex justify-between items-center">
-                                <span className="font-bold text-gray-700">Grafik</span>
-                                <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded">Oylik: {Math.round(monthlyPayment).toLocaleString()} UZS</span>
+                        <div className="bg-gray-50 p-1.5 rounded-3xl border border-gray-200 flex flex-col h-full max-h-[480px]">
+                            <div className="p-5 border-b border-gray-200 bg-white rounded-t-[20px] flex justify-between items-center shadow-sm">
+                                <span className="font-black text-gray-800 tracking-tight">Grafik</span>
+                                <span className="text-[11px] font-black uppercase tracking-widest bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200">Oylik: {Math.round(monthlyPayment).toLocaleString()} UZS</span>
                             </div>
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="text-[10px] text-gray-400 uppercase sticky top-0 bg-gray-50"><tr><th className="py-2 px-3">Oy</th><th className="py-2 px-3">Sana</th><th className="py-2 px-3 text-right">Summa</th></tr></thead>
-                                    <tbody className="divide-y divide-gray-100 font-medium">
+                                    <thead className="text-[10px] text-gray-400 font-black uppercase tracking-widest sticky top-0 bg-gray-50 z-10">
+                                        <tr><th className="py-3 px-4 border-b border-gray-200">Oy</th><th className="py-3 px-4 border-b border-gray-200">Sana</th><th className="py-3 px-4 text-right border-b border-gray-200">Summa</th></tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 font-bold text-gray-700">
                                         {generateSchedule().map(row => (
-                                            <tr key={row.month} className="hover:bg-white"><td className="py-2 px-3 text-gray-500">{row.month}</td><td className="py-2 px-3 text-gray-800">{row.date}</td><td className="py-2 px-3 text-right text-gray-800">{Math.round(row.amount).toLocaleString()}</td></tr>
+                                            <tr key={row.month} className="hover:bg-white transition-colors">
+                                                <td className="py-3 px-4 text-blue-500">{row.month}</td>
+                                                <td className="py-3 px-4">{row.date}</td>
+                                                <td className="py-3 px-4 text-right text-gray-800">{Math.round(row.amount).toLocaleString()}</td>
+                                            </tr>
                                         ))}
                                     </tbody>
                                 </table>
@@ -504,28 +589,41 @@ const AddContract = () => {
                 </div>
             )}
 
+            {/* QADAM 4: SAQLASH (YAKUNIY) */}
             {step === 4 && (
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8">
-                    <h2 className="text-xl font-black text-gray-800 mb-6 flex items-center gap-2"><CheckCircle className="text-emerald-500"/> Yakuniy tasdiq</h2>
-                    <div className="space-y-6 max-w-xl">
+                <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8 duration-300 text-center">
+                    <div className="w-24 h-24 bg-emerald-50 border border-emerald-100 rounded-[30px] flex items-center justify-center mx-auto mb-6 text-emerald-500 shadow-inner rotate-3">
+                        <CheckCircle size={48} strokeWidth={2.5}/>
+                    </div>
+                    <h2 className="text-3xl font-black text-gray-800 mb-3 tracking-tight">Yakuniy tasdiq</h2>
+                    <p className="text-gray-500 font-medium mb-8">Barcha ma'lumotlar, muddat va to'lov grafigi to'g'riligiga ishonch hosil qiling.</p>
+                    
+                    <div className="max-w-md mx-auto space-y-6 text-left">
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Maxsus izoh</label>
-                            <textarea value={contractData.note} onChange={(e) => setContractData(prev => ({...prev, note: e.target.value}))} rows="4" className="w-full p-4 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" placeholder="Izoh (ixtiyoriy)..."></textarea>
+                            <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-2 flex items-center gap-1.5"><MessageSquare size={14}/> Maxsus izoh (Ixtiyoriy)</label>
+                            <textarea 
+                                disabled={isLoading}
+                                value={contractData.note} 
+                                onChange={(e) => setContractData(prev => ({...prev, note: e.target.value}))} 
+                                rows="4" 
+                                className="w-full p-4 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white font-medium text-gray-700 resize-none transition-all disabled:opacity-50" 
+                                placeholder="Shartnoma yoki mijoz haqida eslatmalar..."
+                            ></textarea>
                         </div>
                     </div>
                 </div>
             )}
 
-            <div className="mt-6 flex justify-end gap-4">
+            <div className="mt-8 flex justify-end gap-4">
                 {step > 1 && (
-                    <button onClick={() => setStep(step - 1)} className="px-8 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-colors">Orqaga</button>
+                    <button disabled={isLoading} onClick={() => setStep(step - 1)} className="px-8 py-4 bg-white border border-gray-200 text-gray-600 rounded-2xl font-black hover:bg-gray-50 transition-colors disabled:opacity-50 uppercase tracking-widest text-sm">Orqaga</button>
                 )}
                 <button 
                     onClick={handleNext} 
                     disabled={isLoading}
-                    className={`px-10 py-3 rounded-xl font-black flex items-center gap-2 transition-all shadow-lg ${step === 4 ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`px-10 py-4 rounded-2xl font-black flex items-center justify-center min-w-[200px] gap-2 transition-all shadow-xl active:scale-95 uppercase tracking-widest text-sm ${step === 4 ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'} ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                 >
-                    {isLoading ? "Kuting..." : (step === 4 ? <><Save size={20}/> Saqlash</> : <>Davom etish <ChevronRight size={20}/></>)}
+                    {isLoading ? <Loader2 size={20} className="animate-spin"/> : (step === 4 ? <><Save size={20} strokeWidth={2.5}/> Shartnomani Saqlash</> : <>Davom etish <ChevronRight size={20} strokeWidth={3}/></>)}
                 </button>
             </div>
         </div>
