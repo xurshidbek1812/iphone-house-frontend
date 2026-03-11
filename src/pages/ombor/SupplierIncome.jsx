@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Plus, Trash2, Save, ArrowLeft, Check, Loader2, DollarSign, Package } from 'lucide-react';
+import { Search, Plus, Trash2, Save, ArrowLeft, Loader2, DollarSign, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -19,20 +19,29 @@ const SupplierIncome = () => {
   const currentUserName = sessionStorage.getItem('userName') || 'Hodim';
   const userRole = sessionStorage.getItem('userRole') || 'admin';
 
-  // --- STATE ---
-  const [activeTab, setActiveTab] = useState('products'); 
+  // --- STATES ---
   const [allProducts, setAllProducts] = useState([]);      
-  const [suppliersList, setSuppliersList] = useState([]); // Ta'minotchilar ro'yxati
-  const [searchTerm, setSearchTerm] = useState('');
+  const [suppliersList, setSuppliersList] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Faktura ma'lumotlari
+  // Asosiy ma'lumotlar
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [supplierName, setSupplierName] = useState('');   
+  const [invoiceNumber, setInvoiceNumber] = useState(''); 
+  const [currencyRate, setCurrencyRate] = useState(sessionStorage.getItem('globalExchangeRate') || '12500'); 
+  
+  // Faktura tovarlari
   const [invoiceItems, setInvoiceItems] = useState([]);   
-  const [supplierName, setSupplierName] = useState('');   // SELECT uchun
-  const [invoiceNumber, setInvoiceNumber] = useState(''); // Faqat RAQAM
-  const [currency, setCurrency] = useState('UZS');
-  const [currencyRate, setCurrencyRate] = useState('12500'); 
+  
+  // Qo'shish uchun darcha statelari
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [inputCount, setInputCount] = useState('');
+  const [inputPrice, setInputPrice] = useState(''); 
+  const [inputMarkup, setInputMarkup] = useState(''); 
+  const [inputSalePrice, setInputSalePrice] = useState(''); 
+  const [inputCurrency, setInputCurrency] = useState('UZS');
 
   // HELPER: Auth Headers
   const getAuthHeaders = useCallback(() => ({
@@ -44,42 +53,30 @@ const SupplierIncome = () => {
       'Content-Type': 'application/json'
   }), [getAuthHeaders]);
 
-  // --- 1. TOVARLAR VA TA'MINOTCHILARNI YUKLASH ---
+  // --- 1. YUKLASH ---
   const fetchData = useCallback(async (signal = undefined) => {
-      if (!token) {
-          toast.error("Tizimga kirish tokeni topilmadi!");
-          setLoading(false);
-          return;
-      }
-
+      if (!token) return;
       try {
           setLoading(true);
           const [prodRes, suppRes] = await Promise.allSettled([
               fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal }),
-              fetch(`${API_URL}/api/suppliers`, { headers: getAuthHeaders(), signal }) // Ta'minotchilar uchun API bor deb faraz qildim. Yo'q bo'lsa SessionStorage'dan o'qiymiz.
+              fetch(`${API_URL}/api/suppliers`, { headers: getAuthHeaders(), signal }) 
           ]);
 
-          // Products
           if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
               const data = await parseJsonSafe(prodRes.value);
               if (Array.isArray(data)) setAllProducts(data);
-              else toast.error("Mahsulotlar formati noto'g'ri keldi");
-          } else if (prodRes.reason?.name !== 'AbortError') {
-              toast.error("Mahsulotlarni yuklab bo'lmadi");
           }
 
-          // Suppliers (Agar API dan kelsa. Agar API yo'q bo'lsa pastdagi SessionStorage ishlaydi)
           if (suppRes.status === 'fulfilled' && suppRes.value.ok) {
               const data = await parseJsonSafe(suppRes.value);
               if (Array.isArray(data)) setSuppliersList(data);
           } else {
-             // Fallback to SessionStorage agar API bo'lmasa
              const savedSuppliers = JSON.parse(sessionStorage.getItem('suppliersList') || "[]");
              setSuppliersList(savedSuppliers);
           }
-
       } catch (error) {
-          if (error.name !== 'AbortError') toast.error("Tarmoq xatosi yuz berdi!");
+          console.error("Yuklashda xato", error);
       } finally {
           if (!signal?.aborted) setLoading(false);
       }
@@ -88,113 +85,178 @@ const SupplierIncome = () => {
   useEffect(() => {
       const controller = new AbortController();
       fetchData(controller.signal);
-      
-      // 🚨 FAQAT RAQAMLI Faktura raqami (INV olingan)
       setInvoiceNumber(Date.now().toString().slice(-6)); 
-      
       return () => controller.abort();
   }, [fetchData]);
 
-  // --- 2. FAKTURAGA QO'SHISH ---
-  const addToInvoice = (product) => {
-    if (invoiceItems.some(item => item.id === product.id)) {
-      return toast.error("Bu tovar fakturaga qo'shilgan! Uning miqdorini o'zgartiring.");
+  // --- NARXLARNI AVTOMAT HISOBLASH MANTIQI ---
+  const getCostInUZS = (price, currency, rate) => {
+      const numPrice = Number(price) || 0;
+      const numRate = Number(rate) || 12500;
+      return currency === 'USD' ? numPrice * numRate : numPrice;
+  };
+
+  const handlePriceChange = (val) => {
+      setInputPrice(val);
+      const costUZS = getCostInUZS(val, inputCurrency, currencyRate);
+      if (inputMarkup && val) {
+          const sale = costUZS + (costUZS * (Number(inputMarkup) / 100));
+          setInputSalePrice(Math.round(sale));
+      }
+  };
+
+  const handleMarkupChange = (val) => {
+      setInputMarkup(val);
+      const costUZS = getCostInUZS(inputPrice, inputCurrency, currencyRate);
+      if (inputPrice && val) {
+          const sale = costUZS + (costUZS * (Number(val) / 100));
+          setInputSalePrice(Math.round(sale));
+      } else if (!val) {
+          setInputSalePrice('');
+      }
+  };
+
+  const handleSalePriceChange = (val) => {
+      setInputSalePrice(val);
+      const costUZS = getCostInUZS(inputPrice, inputCurrency, currencyRate);
+      if (inputPrice && val && costUZS > 0) {
+          const markup = ((Number(val) - costUZS) / costUZS) * 100;
+          setInputMarkup(markup.toFixed(2));
+      } else if (!val) {
+          setInputMarkup('');
+      }
+  };
+
+  const handleCurrencyChange = (val) => {
+      setInputCurrency(val);
+      const costUZS = getCostInUZS(inputPrice, val, currencyRate);
+      if (inputPrice && inputMarkup) {
+          const sale = costUZS + (costUZS * (Number(inputMarkup) / 100));
+          setInputSalePrice(Math.round(sale));
+      }
+  };
+
+  const handleSelectProduct = (prod) => {
+    setSelectedProduct(prod);
+    setSearchTerm(prod.name || ''); 
+    setInputPrice(prod.buyPrice || '');
+    setInputCurrency(prod.buyCurrency || 'UZS'); 
+    
+    const costUZS = getCostInUZS(prod.buyPrice, prod.buyCurrency || 'UZS', currencyRate);
+
+    if (costUZS > 0 && prod.salePrice) {
+        setInputSalePrice(prod.salePrice);
+        const markup = ((prod.salePrice - costUZS) / costUZS) * 100;
+        setInputMarkup(markup.toFixed(2));
+    } else {
+        setInputSalePrice('');
+        setInputMarkup('');
+    }
+  };
+
+  // --- QO'SHISH VA O'CHIRISH ---
+  const handleAddItem = () => {
+    let productToAdd = selectedProduct;
+    if (!productToAdd && searchTerm) {
+        const cleanSearch = searchTerm.trim().toLowerCase();
+        productToAdd = allProducts.find(p => 
+            (p.name || '').toLowerCase() === cleanSearch || String(p.customId || '') === cleanSearch
+        );
+    }
+    
+    if (!productToAdd) return toast.error("Bazada topilmadi! To'g'ri tanlang.");
+    if (invoiceItems.some(item => item.id === productToAdd.id)) {
+        return toast.error("Bu tovar allaqachon qo'shilgan!");
+    }
+
+    const qty = Number(inputCount);
+    const price = Number(inputPrice);
+    const sale = Number(inputSalePrice);
+
+    if (!qty || qty <= 0) return toast.error("Sonini to'g'ri kiriting!");
+    if (!price || price <= 0) return toast.error("Kirim narxini to'g'ri kiriting!");
+    if (sale <= 0) return toast.error("Sotuv narxini to'g'ri kiriting!");
+    
+    if (productToAdd.unit === 'Dona' && !Number.isInteger(qty)) {
+        return toast.error("Dona o'lchov birligi uchun miqdor butun son bo'lishi shart!");
     }
 
     const newItem = {
-      ...product,
-      inputQty: 1,                 
-      inputPrice: Number(product.buyPrice) || 0, 
-      totalSum: Number(product.buyPrice) || 0    
+        id: productToAdd.id,
+        customId: productToAdd.customId,
+        name: productToAdd.name,
+        unit: productToAdd.unit || 'Dona',
+        count: qty,
+        price: price,
+        markup: Number(inputMarkup) || 0,
+        salePrice: sale, 
+        currency: inputCurrency,
+        total: qty * price
     };
 
     setInvoiceItems(prev => [...prev, newItem]);
-    toast.success(`${product.name} fakturaga qo'shildi`);
-  };
-
-  // --- 3. FAKTURADAGI TOVARNI O'ZGARTIRISH ---
-  const updateItem = (id, field, value) => {
-    setInvoiceItems(prev => prev.map(item => {
-      if (item.id === id) {
-        const updatedItem = { ...item, [field]: value };
-        const qty = Number(updatedItem.inputQty) || 0;
-        const price = Number(updatedItem.inputPrice) || 0;
-        updatedItem.totalSum = qty * price;
-        return updatedItem;
-      }
-      return item;
-    }));
+    
+    // Tozalash
+    setSelectedProduct(null);
+    setSearchTerm('');
+    setInputCount('');
+    setInputPrice('');
+    setInputMarkup('');
+    setInputSalePrice('');
   };
 
   const removeFromInvoice = (id) => {
     setInvoiceItems(prev => prev.filter(item => item.id !== id));
   };
 
-  // --- 4. HISOBLASH ---
-  const { grandTotal } = useMemo(() => {
-      return invoiceItems.reduce((acc, item) => {
-          acc.grandTotal += (Number(item.totalSum) || 0);
-          return acc;
-      }, { grandTotal: 0 });
-  }, [invoiceItems]);
+  // --- HISOBLASH VA QIDIRUV ---
+  const { grandTotalUZS } = useMemo(() => {
+    let totalUZS = 0; let totalUSD = 0;
+    invoiceItems.forEach(item => {
+        if (item.currency === 'USD') totalUSD += (Number(item.total) || 0);
+        else totalUZS += (Number(item.total) || 0);
+    });
+    const rate = Number(currencyRate) || 12500;
+    return { grandTotalUZS: totalUZS + (totalUSD * rate) };
+  }, [invoiceItems, currencyRate]);
 
   const filteredProducts = useMemo(() => {
-      if (!searchTerm) return allProducts;
-      const search = searchTerm.trim().toLowerCase();
+      if (!searchTerm) return [];
+      const cleanSearch = searchTerm.trim().toLowerCase();
       return allProducts.filter(p => 
-          (p.name || '').toLowerCase().includes(search) || 
-          (p.customId != null && p.customId.toString().includes(search))
+          (p.name || '').toLowerCase().includes(cleanSearch) || 
+          (p.customId != null && p.customId.toString().includes(cleanSearch))
       );
   }, [allProducts, searchTerm]);
 
-  // --- 5. SAQLASH (BACKENDGA YUBORISH) ---
+  // --- SAQLASH (Baza bilan ulanish) ---
   const handleSave = async () => {
     const cleanSupplier = supplierName.trim();
-    
     if (!cleanSupplier) return toast.error("Ta'minotchi nomini tanlang!");
     if (invoiceItems.length === 0) return toast.error("Fakturaga tovar qo'shing!");
-    if (!token) return toast.error("Sessiya xatosi! Qayta kiring.");
-
-    const exchangeRateVal = Number(currencyRate);
-    if (currency === 'USD' && (Number.isNaN(exchangeRateVal) || exchangeRateVal <= 0)) {
-        return toast.error("USD uchun valyuta kursini to'g'ri kiriting!");
-    }
-
-    const invalidItem = invoiceItems.find(item => {
-        const qty = Number(item.inputQty);
-        const price = Number(item.inputPrice);
-        if (Number.isNaN(qty) || qty <= 0) return true;
-        if (Number.isNaN(price) || price < 0) return true;
-        if (item.unit === 'Dona' && !Number.isInteger(qty)) return true;
-        return false;
-    });
-
-    if (invalidItem) {
-        return toast.error(`Xato: ${invalidItem.name} uchun miqdor yoki narx noto'g'ri!`);
-    }
+    if (!Number(currencyRate) || Number(currencyRate) <= 0) return toast.error("Valyuta kursini to'g'ri kiriting!");
 
     setIsSubmitting(true);
 
     try {
-      const finalExchangeRate = currency === 'USD' ? exchangeRateVal : 1;
-
-      // 🚨 STATUS "Jarayonda" BO'LDI. VA ENDPOINT /api/invoices GA QARATILDI
       const payload = {
         supplierName: cleanSupplier,
         invoiceNumber: invoiceNumber.trim() || Date.now().toString().slice(-6),
-        exchangeRate: finalExchangeRate,
-        totalSum: grandTotal,
+        exchangeRate: Number(currencyRate),
+        totalSum: grandTotalUZS,
         status: "Jarayonda", 
         userName: currentUserName,
         items: invoiceItems.map(item => ({
             productId: item.id,
-            customId: item.customId != null ? Number(item.customId) : null,
+            // 🚨 BAZA UCHUN HIMOYA: customId albatta raqam bo'lishi kerak. Yo'q bo'lsa 0
+            customId: Number(item.customId) || 0,
             name: item.name,
-            count: Number(item.inputQty),
-            price: Number(item.inputPrice),
+            count: Number(item.count),
+            price: Number(item.price),
+            markup: Number(item.markup) || 0,
             salePrice: Number(item.salePrice) || 0, 
-            currency: currency, 
-            total: Number(item.totalSum)
+            currency: item.currency || 'UZS', 
+            total: Number(item.total)
         }))
       };
 
@@ -208,7 +270,7 @@ const SupplierIncome = () => {
 
       if (response.ok) {
           toast.success("Kirim 'Jarayonda' holatida saqlandi!");
-          navigate('/ombor/taminotchi-kirim'); // Ro'yxatga qaytish
+          navigate('/ombor/taminotchi-kirim'); 
       } else {
           toast.error(data?.error || `Saqlashda xatolik (${response.status})`);
       }
@@ -222,13 +284,12 @@ const SupplierIncome = () => {
   return (
     <div className="p-6 bg-slate-50 min-h-screen animate-in fade-in duration-300">
       
-      {/* --- HEADER --- */}
       <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div className="flex items-center gap-3">
             <button disabled={isSubmitting} onClick={() => navigate(-1)} className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors disabled:opacity-50">
                 <ArrowLeft size={20}/>
             </button>
-            <h1 className="text-xl font-black text-slate-800">Ta'minotchidan tovar kirim</h1>
+            <h1 className="text-xl font-black text-slate-800">Yangi Kirim (Faktura)</h1>
         </div>
         <div className="flex gap-3">
             <button disabled={isSubmitting} onClick={() => navigate(-1)} className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors disabled:opacity-50">
@@ -244,44 +305,99 @@ const SupplierIncome = () => {
         </div>
       </div>
 
-      {/* --- TEPADAGI FORMALAR --- */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-         <div className="lg:col-span-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <div className="mb-6">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Ta'minotchi nomi <span className="text-red-500">*</span></label>
-                {/* 🚨 TA'MINOTCHI FAQAT TANLANADIGAN QILINDI */}
-                <select 
-                    disabled={isSubmitting}
-                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-800 transition-all disabled:opacity-50 disabled:bg-gray-100 cursor-pointer"
-                    value={supplierName}
-                    onChange={(e) => setSupplierName(e.target.value)}
-                >
-                    <option value="" disabled>Ro'yxatdan ta'minotchi tanlang...</option>
-                    {suppliersList.map((s, i) => (
-                        <option key={s.id || i} value={s.name}>{s.name}</option>
-                    ))}
-                    {/* Fallback qator, agar api ishlamasa */}
-                    {suppliersList.length === 0 && <option value="Samsung Dealer Tashkent">Samsung Dealer Tashkent</option>}
-                </select>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-5">
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Faktura Raqami</label>
-                    <input type="number" disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" value={invoiceNumber} onChange={(e)=>setInvoiceNumber(e.target.value)} placeholder="Misol: 981293" />
+         {/* TEPADAGI ASOSIY FORMALAR */}
+         <div className="lg:col-span-8 space-y-6">
+             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Asosiy ma'lumotlar</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Faktura Raqami</label>
+                        <input type="number" disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" value={invoiceNumber} onChange={(e)=>setInvoiceNumber(e.target.value)} placeholder="123456" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Ta'minotchi <span className="text-red-500">*</span></label>
+                        <select 
+                            disabled={isSubmitting}
+                            className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-800 transition-all disabled:opacity-50 cursor-pointer"
+                            value={supplierName}
+                            onChange={(e) => setSupplierName(e.target.value)}
+                        >
+                            <option value="" disabled>Tanlang...</option>
+                            {suppliersList.map((s, i) => <option key={s.id || i} value={s.name}>{s.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Valyuta kursi (1 USD)</label>
+                        <input type="number" disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" value={currencyRate} onChange={(e)=>setCurrencyRate(e.target.value)} />
+                    </div>
                 </div>
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Valyuta turi</label>
-                    <select disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 cursor-pointer" value={currency} onChange={(e)=>setCurrency(e.target.value)}>
-                        <option value="UZS">UZS</option>
-                        <option value="USD">USD</option>
-                    </select>
+             </div>
+
+             {/* TOVAR QO'SHISH (FOIZ VA NARXLASH) */}
+             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Tovarni tanlash va Narxlash</h3>
+                
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-wrap md:flex-nowrap gap-4 items-start">
+                        <div className="flex-1 relative min-w-[200px]">
+                            <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Tovar nomi / Kod</label>
+                            <input 
+                                type="text" disabled={isSubmitting} 
+                                className="w-full p-3 border rounded-xl outline-blue-500 font-bold text-sm disabled:bg-gray-50" 
+                                placeholder="Qidirish..." 
+                                value={searchTerm} 
+                                onChange={e => { setSearchTerm(e.target.value); setSelectedProduct(null); }} 
+                            />
+                            {searchTerm && !selectedProduct && filteredProducts.length > 0 && (
+                                <ul className="absolute z-50 w-full bg-white border rounded-xl shadow-xl mt-1 max-h-60 overflow-y-auto custom-scrollbar">
+                                    {filteredProducts.map(p => (
+                                        <li key={p.id} onClick={() => handleSelectProduct(p)} className="p-3 hover:bg-blue-50 cursor-pointer text-sm border-b transition-colors">
+                                            <div className="font-bold text-gray-800">{p.name}</div>
+                                            <div className="text-blue-600 font-mono font-bold text-xs mt-1">ID: #{p.customId ?? '-'} | Narx: {p.buyPrice} {p.buyCurrency}</div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        
+                        <div className="w-24">
+                            <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Soni</label>
+                            <input type="number" min="0" disabled={isSubmitting} className="w-full p-3 border rounded-xl outline-blue-500 text-center font-bold text-sm disabled:bg-gray-50" value={inputCount} onChange={e => setInputCount(e.target.value)} />
+                        </div>
+
+                        <div className="w-28">
+                            <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Valyuta</label>
+                            <select disabled={isSubmitting} className="w-full p-3 border rounded-xl outline-blue-500 text-sm font-bold bg-white disabled:bg-gray-50 cursor-pointer" value={inputCurrency} onChange={e=>handleCurrencyChange(e.target.value)}>
+                                <option value="UZS">UZS</option>
+                                <option value="USD">USD</option>
+                            </select>
+                        </div>
+
+                        <div className="w-36">
+                            <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Kirim Narx</label>
+                            <input type="number" min="0" disabled={isSubmitting} className="w-full p-3 border rounded-xl outline-blue-500 font-bold text-sm disabled:bg-gray-50" value={inputPrice} onChange={e => handlePriceChange(e.target.value)} />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap md:flex-nowrap gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200 mt-2">
+                        <div className="w-28">
+                            <label className="text-[11px] font-bold text-amber-600 uppercase mb-1 block">Ustama (%)</label>
+                            <input type="number" disabled={isSubmitting} className="w-full p-3 border border-amber-200 bg-amber-50 rounded-xl outline-amber-500 font-bold text-amber-700 text-sm text-center disabled:opacity-50" placeholder="10" value={inputMarkup} onChange={e => handleMarkupChange(e.target.value)} />
+                        </div>
+
+                        <div className="flex-1">
+                            <label className="text-[11px] font-bold text-emerald-600 uppercase mb-1 block">Sotuv Narx <span className="text-gray-400 font-normal">(UZS)</span></label>
+                            <input type="number" disabled={isSubmitting} className="w-full p-3 border border-emerald-200 bg-emerald-50 rounded-xl outline-emerald-500 font-bold text-emerald-700 text-sm disabled:opacity-50" placeholder="Avtomat hisoblanadi" value={inputSalePrice} onChange={e => handleSalePriceChange(e.target.value)} />
+                        </div>
+
+                        <div className="w-40">
+                            <button disabled={isSubmitting} onClick={handleAddItem} className="w-full h-[46px] bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all flex justify-center items-center shadow-md font-bold gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <Plus size={20}/> Qo'shish
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Valyuta kursi</label>
-                    <input type="number" disabled={isSubmitting || currency === 'UZS'} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" value={currencyRate} onChange={(e)=>setCurrencyRate(e.target.value)} />
-                </div>
-            </div>
          </div>
 
          {/* O'ng tomon: Statistika */}
@@ -294,167 +410,69 @@ const SupplierIncome = () => {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center relative overflow-hidden">
                 <div className="absolute right-[-20px] top-[-20px] opacity-5"><DollarSign size={120}/></div>
                 <div className="text-slate-400 text-[11px] font-black uppercase tracking-widest mb-1">Jami Summasi</div>
-                <div className="text-3xl font-black text-emerald-500 relative z-10 truncate" title={`${grandTotal.toLocaleString()} ${currency}`}>
-                    {grandTotal.toLocaleString()} <span className="text-base text-emerald-600/50 font-bold ml-1">{currency}</span>
+                <div className="text-3xl font-black text-emerald-500 relative z-10 truncate" title={`${grandTotalUZS.toLocaleString()} UZS`}>
+                    {grandTotalUZS.toLocaleString()} <span className="text-base text-emerald-600/50 font-bold ml-1">UZS</span>
                 </div>
             </div>
          </div>
       </div>
 
-      {/* --- TABLAR --- */}
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[500px] flex flex-col overflow-hidden">
-        <div className="flex border-b border-slate-100 bg-slate-50/50">
-            <button 
-                disabled={isSubmitting}
-                onClick={() => setActiveTab('products')}
-                className={`flex-1 py-4 font-black text-sm transition-all disabled:opacity-50 ${activeTab === 'products' ? 'border-b-2 border-blue-600 text-blue-600 bg-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-            >
-                Bazada bor tovarlar
-            </button>
-            <button 
-                disabled={isSubmitting}
-                onClick={() => setActiveTab('invoice')}
-                className={`flex-1 py-4 font-black text-sm transition-all relative disabled:opacity-50 ${activeTab === 'invoice' ? 'border-b-2 border-blue-600 text-blue-600 bg-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-            >
-                Faktura qilinganlar 
-                {invoiceItems.length > 0 && <span className="ml-2 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm">{invoiceItems.length}</span>}
-            </button>
-        </div>
+      {/* --- FAKTURA JADVALI --- */}
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[400px] flex flex-col overflow-hidden">
+         <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+             <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                 <Package size={18} className="text-blue-500"/> Qo'shilgan tovarlar ro'yxati
+             </h3>
+         </div>
 
-        {/* 1. TOVARLAR RO'YXATI */}
-        {activeTab === 'products' && (
-            <div className="flex flex-col h-full flex-1 p-6 bg-white animate-in fade-in duration-300">
-                <div className="relative mb-6 shrink-0">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
-                    <input 
-                        type="text" 
-                        className="w-full pl-12 p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-bold text-slate-700 disabled:opacity-50"
-                        placeholder="Qidirish: Tovar nomi yoki ID raqami..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        disabled={isSubmitting}
-                    />
+         <div className="flex flex-col h-full flex-1 p-6 animate-in fade-in duration-300">
+            {invoiceItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center flex-1 text-slate-400">
+                    <Package size={64} className="mb-4 opacity-20"/>
+                    <p className="font-bold text-lg text-slate-500 mb-1">Faktura hozircha bo'sh</p>
+                    <p className="text-sm font-medium">Yuqoridagi formadan mahsulot qo'shing</p>
                 </div>
-
-                <div className="overflow-y-auto flex-1 border border-slate-100 rounded-2xl custom-scrollbar max-h-[500px]">
-                    <table className="w-full text-left">
-                        <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest sticky top-0 z-10">
+            ) : (
+                <div className="overflow-auto border border-slate-200 rounded-2xl custom-scrollbar max-h-[500px]">
+                    <table className="w-full text-left whitespace-nowrap">
+                        <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest sticky top-0 z-10 shadow-sm">
                             <tr>
-                                <th className="p-4 border-b border-slate-100">ID</th>
-                                <th className="p-4 border-b border-slate-100">Nomi</th>
-                                <th className="p-4 text-center border-b border-slate-100">Joriy Qoldiq</th>
-                                <th className="p-4 text-right border-b border-slate-100">Kirim narxi (Asl)</th>
-                                <th className="p-4 text-center border-b border-slate-100">Amal</th>
+                                <th className="p-4 border-b border-slate-200">ID</th>
+                                <th className="p-4 border-b border-slate-200">Nomi</th>
+                                <th className="p-4 w-24 text-center border-b border-slate-200">Soni</th>
+                                <th className="p-4 w-32 text-right border-b border-slate-200">Kirim Narx</th>
+                                <th className="p-4 w-24 text-center border-b border-slate-200">Valyuta</th>
+                                <th className="p-4 w-24 text-center text-amber-600 border-b border-slate-200">Ustama %</th>
+                                <th className="p-4 w-36 text-right text-emerald-600 border-b border-slate-200">Sotuv (UZS)</th>
+                                <th className="p-4 w-32 text-right border-b border-slate-200">Jami Kirim</th>
+                                <th className="p-4 w-16 border-b border-slate-200"></th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-50 text-sm font-bold">
-                            {loading ? (
-                                <tr><td colSpan="5" className="p-10 text-center text-slate-400"><Loader2 className="animate-spin mx-auto" size={24}/></td></tr>
-                            ) : filteredProducts.length === 0 ? (
-                                <tr><td colSpan="5" className="p-10 text-center text-slate-400">Hech qanday tovar topilmadi</td></tr>
-                            ) : (
-                                filteredProducts.map(item => {
-                                    const isAdded = invoiceItems.some(i => i.id === item.id);
-                                    return (
-                                        <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
-                                            <td className="p-4 font-mono text-slate-400">#{item.customId ?? '-'}</td>
-                                            <td className="p-4 text-slate-700">{item.name || 'Nomsiz tovar'}</td>
-                                            <td className="p-4 text-center">
-                                                <span className={`px-2 py-1 rounded-md text-xs ${item.quantity > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'}`}>
-                                                    {Number(item.quantity || 0)} {item.unit}
-                                                </span>
-                                            </td>
-                                            <td className="p-4 text-right text-slate-600">{Number(item.buyPrice || 0).toLocaleString()} <span className="text-[10px] text-slate-400">{item.buyCurrency || 'UZS'}</span></td>
-                                            <td className="p-4 text-center">
-                                                {isAdded ? (
-                                                    <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl text-[11px] uppercase font-black tracking-wider border border-emerald-100">
-                                                        <Check size={14} strokeWidth={3}/> Qo'shilgan
-                                                    </span>
-                                                ) : (
-                                                    <button disabled={isSubmitting} onClick={() => addToInvoice(item)} className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-blue-600 hover:text-white hover:shadow-md transition-all active:scale-95 disabled:opacity-50">
-                                                        <Plus size={18} strokeWidth={3}/>
-                                                    </button>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            )}
+                        <tbody className="divide-y divide-slate-100 text-sm font-bold">
+                            {invoiceItems.map((item) => (
+                                <tr key={item.id} className="hover:bg-blue-50/20 transition-colors">
+                                    <td className="p-4 font-mono text-slate-400">#{item.customId ?? '-'}</td>
+                                    <td className="p-4 text-slate-800">{item.name}</td>
+                                    <td className="p-4 text-center text-blue-600">{item.count} {item.unit}</td>
+                                    <td className="p-4 text-right">{item.price.toLocaleString()}</td>
+                                    <td className="p-4 text-center text-slate-400">{item.currency}</td>
+                                    <td className="p-4 text-center text-amber-600">{item.markup}%</td>
+                                    <td className="p-4 text-right text-emerald-600">{item.salePrice.toLocaleString()}</td>
+                                    <td className="p-4 text-right font-black text-slate-800">
+                                        {(Number(item.total) || 0).toLocaleString()}
+                                    </td>
+                                    <td className="p-4 text-center">
+                                        <button disabled={isSubmitting} onClick={() => removeFromInvoice(item.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50" title="O'chirish">
+                                            <Trash2 size={20}/>
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
-            </div>
-        )}
-
-        {/* 2. FAKTURA TOVARLARI */}
-        {activeTab === 'invoice' && (
-             <div className="flex flex-col h-full flex-1 p-6 bg-slate-50/50 animate-in fade-in duration-300">
-                {invoiceItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center flex-1 text-slate-400">
-                        <Package size={64} className="mb-4 opacity-20"/>
-                        <p className="font-bold text-lg text-slate-500 mb-1">Faktura hozircha bo'sh</p>
-                        <p className="text-sm font-medium">"Bazada bor tovarlar" ro'yxatidan mahsulot qo'shing</p>
-                        <button disabled={isSubmitting} onClick={() => setActiveTab('products')} className="mt-4 px-6 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">Qo'shishga o'tish</button>
-                    </div>
-                ) : (
-                    <div className="overflow-y-auto flex-1 border border-slate-200 bg-white rounded-2xl custom-scrollbar max-h-[500px]">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest sticky top-0 z-10 shadow-sm">
-                                <tr>
-                                    <th className="p-4 border-b border-slate-200">ID</th>
-                                    <th className="p-4 border-b border-slate-200">Nomi</th>
-                                    <th className="p-4 w-32 text-center border-b border-slate-200">Kirim Miqdori</th>
-                                    <th className="p-4 w-48 text-right border-b border-slate-200">Kirim Narxi ({currency})</th>
-                                    <th className="p-4 w-48 text-right border-b border-slate-200">Jami Summa</th>
-                                    <th className="p-4 w-16 border-b border-slate-200"></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 text-sm font-bold">
-                                {invoiceItems.map(item => (
-                                    <tr key={item.id} className="hover:bg-blue-50/20 transition-colors">
-                                        <td className="p-4 font-mono text-slate-400">#{item.customId ?? '-'}</td>
-                                        <td className="p-4 text-slate-800">{item.name}</td>
-                                        
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-2">
-                                                <input 
-                                                    type="number" min="0" step={item.unit === 'Dona' ? "1" : "0.01"}
-                                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-center font-black text-blue-600 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all disabled:opacity-50"
-                                                    value={item.inputQty}
-                                                    disabled={isSubmitting}
-                                                    onChange={(e) => updateItem(item.id, 'inputQty', e.target.value)}
-                                                />
-                                                <span className="text-[10px] text-slate-400 font-bold uppercase">{item.unit}</span>
-                                            </div>
-                                        </td>
-                                        
-                                        <td className="p-4">
-                                            <input 
-                                                type="number" min="0" step="0.01"
-                                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-right font-black text-slate-700 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all disabled:opacity-50"
-                                                value={item.inputPrice}
-                                                disabled={isSubmitting}
-                                                onChange={(e) => updateItem(item.id, 'inputPrice', e.target.value)}
-                                            />
-                                        </td>
-                                        
-                                        <td className="p-4 text-right">
-                                            <span className="text-lg font-black text-emerald-500">{(Number(item.totalSum) || 0).toLocaleString()}</span>
-                                        </td>
-
-                                        <td className="p-4 text-center">
-                                            <button disabled={isSubmitting} onClick={() => removeFromInvoice(item.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50" title="Fakturadan o'chirish">
-                                                <Trash2 size={20}/>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-             </div>
-        )}
+            )}
+         </div>
       </div>
     </div>
   );
