@@ -283,6 +283,7 @@ const SupplierIncome = () => {
   return (
     <div className="p-6 bg-slate-50 min-h-screen animate-in fade-in duration-300">
       
+      {/* HEADER */}
       <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div className="flex items-center gap-3">
             <button disabled={isSubmitting} onClick={() => navigate(-1)} className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors disabled:opacity-50">
@@ -304,8 +305,9 @@ const SupplierIncome = () => {
         </div>
       </div>
 
+      {/* FORM VA STATISTIKA */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-         {/* TEPADAGI ASOSIY FORMALAR */}
+         
          <div className="lg:col-span-8 space-y-6">
              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Asosiy ma'lumotlar</h3>
@@ -333,7 +335,6 @@ const SupplierIncome = () => {
                 </div>
              </div>
 
-             {/* TOVAR QO'SHISH (FOIZ VA NARXLASH) */}
              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Tovarni tanlash va Narxlash</h3>
                 
@@ -399,7 +400,7 @@ const SupplierIncome = () => {
                 </div>
              </div>
 
-             {/* O'ng tomon: Statistika */}
+             {/* STATISTIKA */}
              <div className="lg:col-span-4 grid grid-rows-2 gap-4">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center relative overflow-hidden">
                     <div className="absolute right-[-20px] top-[-20px] opacity-5"><Package size={120}/></div>
@@ -416,7 +417,7 @@ const SupplierIncome = () => {
              </div>
           </div>
 
-          {/* --- FAKTURA JADVALI --- */}
+          {/* JADVAL QISMI */}
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[400px] flex flex-col overflow-hidden">
              <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                  <h3 className="font-bold text-slate-700 flex items-center gap-2">
@@ -473,8 +474,8 @@ const SupplierIncome = () => {
                 )}
              </div>
           </div>
-        </div>
-      );
-    };
+    </div>
+  );
+};
 
 export default SupplierIncome;
