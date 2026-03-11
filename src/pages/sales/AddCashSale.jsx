@@ -1,7 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronRight, Search, User, X, ShoppingCart, Save, ScanLine, Trash2, Plus, Clock, Tag, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Search, User, X, ShoppingCart, Save, ScanLine, Trash2, Plus, Clock, Tag, MessageSquare, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
+
+const parseJsonSafe = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+};
 
 const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -16,10 +26,14 @@ const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [wrapperRef]);
 
-    const filteredCustomers = customers.filter(c => {
-        const text = `${c.firstName} ${c.lastName} ${c.pinfl} ${c.document?.number || ''}`.toLowerCase();
-        return text.includes(search.toLowerCase());
-    });
+    const filteredCustomers = useMemo(() => {
+        if (!search) return customers;
+        const lowerSearch = search.toLowerCase();
+        return customers.filter(c => {
+            const text = `${c.firstName} ${c.lastName} ${c.pinfl} ${c.document?.number || ''}`.toLowerCase();
+            return text.includes(lowerSearch);
+        });
+    }, [customers, search]);
 
     return (
         <div className="relative" ref={wrapperRef}>
@@ -32,14 +46,14 @@ const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
                     {filteredCustomers.length > 0 ? (
                         filteredCustomers.map(customer => (
                             <div key={customer.id} onClick={() => { onSelect(customer); setIsOpen(false); setSearch(''); }} className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors">
-                                <div className="font-bold text-gray-800 uppercase text-sm">{customer.lastName} {customer.firstName} {customer.middleName}</div>
+                                <div className="font-bold text-gray-800 uppercase text-sm">{customer.lastName} {customer.firstName} {customer.middleName || ''}</div>
                                 <div className="text-[11px] font-mono text-gray-500 flex gap-3 mt-1">
-                                    <span>JSHSHIR: {customer.pinfl}</span>
+                                    <span>JSHSHIR: {customer.pinfl ?? '-'}</span>
                                     <span>Tel: {customer.phones?.[0]?.phone || customer.phone || '-'}</span>
                                 </div>
                             </div>
                         ))
-                    ) : (<div className="p-4 text-center text-gray-400 text-sm">Mijoz topilmadi</div>)}
+                    ) : (<div className="p-4 text-center text-gray-400 text-sm font-medium">Mijoz topilmadi</div>)}
                 </div>
             )}
         </div>
@@ -50,6 +64,7 @@ const AddCashSale = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
   
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
@@ -69,24 +84,52 @@ const AddCashSale = () => {
   const [productTab, setProductTab] = useState('catalog'); 
   const [productSearch, setProductSearch] = useState('');
 
-  useEffect(() => {
-      const fetchData = async () => {
-          try {
-              const [custRes, prodRes] = await Promise.all([
-                  fetch('https://iphone-house-api.onrender.com/api/customers', { headers: { 'Authorization': `Bearer ${token}` } }),
-                  fetch('https://iphone-house-api.onrender.com/api/products', { headers: { 'Authorization': `Bearer ${token}` } })
-              ]);
-              if (custRes.ok) setCustomers(await custRes.json());
-              if (prodRes.ok) setProducts(await prodRes.json());
-          } catch (err) { toast.error("Ma'lumotlarni yuklashda xatolik"); }
-      };
-      fetchData();
-  }, [token]);
+  const getAuthHeaders = useCallback(() => ({
+      'Authorization': `Bearer ${token}`
+  }), [token]);
 
+  const getJsonAuthHeaders = useCallback(() => ({
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+  }), [getAuthHeaders]);
+
+  // --- YUKLASH (XAVFSIZ) ---
+  const fetchData = useCallback(async (signal = undefined) => {
+      if (!token) return;
+      try {
+          setDataLoading(true);
+          const [custRes, prodRes] = await Promise.allSettled([
+              fetch(`${API_URL}/api/customers`, { headers: getAuthHeaders(), signal }),
+              fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal })
+          ]);
+
+          if (custRes.status === 'fulfilled' && custRes.value.ok) {
+              const data = await parseJsonSafe(custRes.value);
+              if (Array.isArray(data)) setCustomers(data);
+          }
+
+          if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
+              const data = await parseJsonSafe(prodRes.value);
+              if (Array.isArray(data)) setProducts(data);
+          }
+      } catch (err) { 
+          if (err.name !== 'AbortError') toast.error("Ma'lumotlarni yuklashda xatolik yuz berdi"); 
+      } finally {
+          if (!signal?.aborted) setDataLoading(false);
+      }
+  }, [token, getAuthHeaders]);
+
+  useEffect(() => {
+      const controller = new AbortController();
+      fetchData(controller.signal);
+      return () => controller.abort();
+  }, [fetchData]);
+
+  // --- SHTRIX KOD ---
   const handleBarcodeScan = (e) => {
       if (e.key === 'Enter' && e.target.value.trim() !== '') {
           const code = e.target.value.trim();
-          const foundProduct = products.find(p => p.customId.toString() === code || p.id.toString() === code);
+          const foundProduct = products.find(p => String(p.customId) === code || String(p.id) === code);
           
           if (foundProduct) addProductToCart(foundProduct);
           else toast.error(`Kod [${code}] bo'yicha tovar topilmadi!`);
@@ -96,11 +139,18 @@ const AddCashSale = () => {
       }
   };
 
-  const grandTotal = saleData.items.reduce((sum, item) => sum + ((Number(item.salePrice) || 0) * item.qty), 0);
-  const finalAmount = Math.max(0, grandTotal - Number(saleData.discount || 0)); 
+  // --- HISOBLASH ---
+  const grandTotal = useMemo(() => {
+      return saleData.items.reduce((sum, item) => sum + ((Number(item.salePrice) || 0) * (Number(item.qty) || 1)), 0);
+  }, [saleData.items]);
 
+  const finalAmount = useMemo(() => {
+      return Math.max(0, grandTotal - (Number(saleData.discount) || 0)); 
+  }, [grandTotal, saleData.discount]);
+
+  // --- SAVAT ---
   const addProductToCart = (product) => {
-      if (product.quantity <= 0) return toast.error("Omborda qoldiq yo'q!");
+      if (Number(product.quantity) <= 0) return toast.error("Omborda qoldiq yo'q!");
       
       const existingItem = saleData.items.find(i => i.id === product.id);
       if (existingItem) {
@@ -118,16 +168,17 @@ const AddCashSale = () => {
 
   const updateItemQty = (id, newQty) => {
       const product = products.find(p => p.id === id);
-      if (newQty > product.quantity) return toast.error(`Faqat ${product.quantity} ta qoldi!`);
+      if (newQty > product.quantity) return toast.error(`Omborda faqat ${product.quantity} ta qolgan!`);
       if (newQty < 1) return;
       setSaleData(prev => ({ ...prev, items: prev.items.map(item => item.id === id ? { ...item, qty: newQty } : item) }));
   };
 
   const removeItem = (id) => setSaleData(prev => ({ ...prev, items: prev.items.filter(i => i.id !== id) }));
 
+  // --- QADAMLAR LOGIKASI ---
   const handleNext = () => {
       if (step === 1 && !saleData.isAnonymous && !saleData.mainCustomer) return toast.error("Mijozni tanlang yoki 'Boshqa shaxs' ni tanlang!");
-      if (step === 1 && saleData.isAnonymous && !saleData.otherName) return toast.error("Xaridor ismini yozing!");
+      if (step === 1 && saleData.isAnonymous && !saleData.otherName.trim()) return toast.error("Xaridor ismini yozing!");
       if (step === 2 && saleData.items.length === 0) return toast.error("Savat bo'sh! Tovar qo'shing.");
       
       if (step < 3) {
@@ -138,12 +189,13 @@ const AddCashSale = () => {
       }
   };
 
+  // --- SAQLASH ---
   const submitSale = async () => {
-      // 🚨 HIMOYA: Agar chegirma berilgan bo'lsa, izoh majburiy!
-      if (Number(saleData.discount) > 0 && (!saleData.note || saleData.note.trim() === '')) {
+      const disc = Number(saleData.discount) || 0;
+      if (disc > 0 && (!saleData.note || saleData.note.trim() === '')) {
           return toast.error("Chegirma berilganda sababini (izoh) yozish majburiy!");
       }
-      if (Number(saleData.discount) > grandTotal) {
+      if (disc > grandTotal) {
           return toast.error("Chegirma summasi tovarlar narxidan ko'p bo'lishi mumkin emas!");
       }
 
@@ -152,100 +204,116 @@ const AddCashSale = () => {
           const payload = {
               isAnonymous: saleData.isAnonymous,
               customerId: saleData.isAnonymous ? null : (saleData.mainCustomer?.id || null),
-              otherName: saleData.otherName || null,
-              otherPhone: saleData.otherPhone || null,
+              otherName: saleData.isAnonymous ? saleData.otherName.trim() : null,
+              otherPhone: saleData.isAnonymous ? saleData.otherPhone.trim() : null,
               totalAmount: grandTotal,
-              discount: Number(saleData.discount || 0),
+              discount: disc,
               finalAmount: finalAmount,
-              note: saleData.note || null,
+              note: saleData.note.trim() || null,
               items: saleData.items.map(item => ({
-                  id: item.id,
+                  id: item.id, // Yoki backend talabiga qarab productId
                   name: item.name,
                   qty: Number(item.qty),
                   salePrice: Number(item.salePrice)
               }))
           };
 
-          const res = await fetch('https://iphone-house-api.onrender.com/api/cash-sales', {
+          const res = await fetch(`${API_URL}/api/cash-sales`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              headers: getJsonAuthHeaders(),
               body: JSON.stringify(payload)
           });
           
+          const data = await parseJsonSafe(res);
+
           if (res.ok) {
               toast.success("Savdo saqlandi (Jarayonda)");
               navigate('/savdo'); 
           } else {
-              const errData = await res.json();
-              toast.error(errData.error || "Saqlashda xatolik");
+              toast.error(data?.error || `Saqlashda xatolik (${res.status})`);
           }
-      } catch (err) { toast.error("Server xatosi"); } 
-      finally { setIsLoading(false); }
+      } catch (err) { 
+          toast.error("Server bilan aloqa yo'q!"); 
+      } finally { 
+          setIsLoading(false); 
+      }
   };
 
-  const filteredProducts = products.filter(p => 
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
-      p.customId.toString().includes(productSearch)
-  );
+  const filteredProducts = useMemo(() => {
+      if (!productSearch) return products;
+      const search = productSearch.trim().toLowerCase();
+      return products.filter(p => 
+          (p.name || '').toLowerCase().includes(search) || 
+          (p.customId != null && String(p.customId).includes(search))
+      );
+  }, [products, productSearch]);
 
-  // Telefon raqamni to'g'ri ko'rsatish mantig'i
   const getCustomerPhone = (customer) => {
       if (!customer) return 'Tel kiritilmagan';
-      if (customer.phones && customer.phones.length > 0) return customer.phones[0].phone;
+      if (Array.isArray(customer.phones) && customer.phones.length > 0) return customer.phones[0].phone;
       if (customer.phone) return customer.phone;
       return 'Tel kiritilmagan';
   };
 
+  if (dataLoading) {
+      return <div className="min-h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-blue-500" size={48}/></div>;
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gray-50 pb-24 animate-in fade-in duration-300">
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
          <div className="flex items-center gap-4">
-            <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full"><ArrowLeft size={20} className="text-gray-600"/></button>
-            <h1 className="text-xl font-bold text-gray-800">Naqd savdo yaratish</h1>
+            <button disabled={isLoading} onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50 transition-colors"><ArrowLeft size={20} className="text-gray-600"/></button>
+            <h1 className="text-xl font-black text-gray-800 tracking-tight">Naqd savdo yaratish</h1>
          </div>
-         <button onClick={() => navigate(-1)} className="px-5 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Bekor qilish</button>
+         <button disabled={isLoading} onClick={() => navigate(-1)} className="px-5 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50">Bekor qilish</button>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
         {/* SIDEBAR */}
         <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-24">
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-100">
-                <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-wider mb-4">
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-blue-100/50 relative overflow-hidden">
+                <div className="absolute -right-4 -top-4 text-blue-50 opacity-50"><User size={100}/></div>
+                <div className="flex items-center gap-2 text-blue-600 font-bold text-[11px] uppercase tracking-widest mb-4 relative z-10">
                     <User size={14}/> Xaridor
                 </div>
                 {saleData.isAnonymous ? (
-                    <div>
-                        <h3 className="font-black text-gray-800 text-lg uppercase mb-1">{saleData.otherName || 'Kiritilmagan'}</h3>
-                        <p className="text-sm font-mono text-gray-500">{saleData.otherPhone}</p>
+                    <div className="relative z-10">
+                        <h3 className="font-black text-gray-800 text-xl tracking-tight mb-1">{saleData.otherName || 'Kiritilmagan'}</h3>
+                        <p className="text-sm font-bold text-gray-400">{saleData.otherPhone}</p>
                     </div>
                 ) : saleData.mainCustomer ? (
-                    <div>
-                        <h3 className="font-black text-gray-800 text-lg leading-tight uppercase mb-2">{saleData.mainCustomer.lastName} <br/> {saleData.mainCustomer.firstName}</h3>
-                        <p className="text-sm font-mono text-gray-500">{getCustomerPhone(saleData.mainCustomer)}</p>
+                    <div className="relative z-10">
+                        <h3 className="font-black text-gray-800 text-xl tracking-tight leading-tight mb-2">{saleData.mainCustomer.lastName} <br/> {saleData.mainCustomer.firstName}</h3>
+                        <p className="text-sm font-bold text-gray-400">{getCustomerPhone(saleData.mainCustomer)}</p>
                     </div>
                 ) : (
-                    <p className="text-sm text-gray-400 italic">Mijoz tanlanmagan</p>
+                    <p className="text-sm text-gray-400 font-medium italic relative z-10">Mijoz tanlanmagan</p>
                 )}
             </div>
 
             {saleData.items.length > 0 && (
-                <div className="bg-gray-800 p-6 rounded-2xl shadow-lg text-white">
-                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2"><ShoppingCart size={14}/> Jami Savdo</h3>
-                    <div className="flex justify-between text-sm mb-3">
-                        <span className="text-gray-300">Tovarlar soni:</span>
-                        <span className="font-bold">{saleData.items.reduce((s, i) => s + i.qty, 0)} ta</span>
-                    </div>
-                    
-                    {Number(saleData.discount) > 0 && (
-                        <div className="flex justify-between text-sm mb-3 text-amber-400 border-t border-gray-600 pt-3">
-                            <span>Chegirma:</span>
-                            <span className="font-bold">- {Number(saleData.discount).toLocaleString()} UZS</span>
+                <div className="bg-gray-900 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden">
+                    <div className="absolute -right-4 -bottom-4 text-gray-800"><ShoppingCart size={120}/></div>
+                    <div className="relative z-10">
+                        <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2"><ShoppingCart size={14}/> Jami Savdo</h3>
+                        <div className="flex justify-between text-sm mb-3">
+                            <span className="text-gray-400 font-medium">Tovarlar soni:</span>
+                            <span className="font-black text-white">{saleData.items.reduce((s, i) => s + i.qty, 0)} ta</span>
                         </div>
-                    )}
+                        
+                        {Number(saleData.discount) > 0 && (
+                            <div className="flex justify-between text-sm mb-3 text-amber-400 border-t border-gray-700/50 pt-3">
+                                <span className="font-medium">Chegirma:</span>
+                                <span className="font-black">- {Number(saleData.discount).toLocaleString()} UZS</span>
+                            </div>
+                        )}
 
-                    <div className="border-t border-gray-600 pt-4 mt-2">
-                        <p className="text-gray-400 text-[11px] uppercase mb-1">To'lanadigan summa</p>
-                        <p className="text-3xl font-black text-emerald-400">{finalAmount.toLocaleString()} <span className="text-sm font-normal text-emerald-600">UZS</span></p>
+                        <div className="border-t border-gray-700/50 pt-4 mt-2">
+                            <p className="text-gray-400 text-[10px] font-black uppercase mb-1 tracking-widest">To'lanadigan summa</p>
+                            <p className="text-3xl font-black text-emerald-400 tracking-tight">{finalAmount.toLocaleString()} <span className="text-sm font-bold text-emerald-600/50">UZS</span></p>
+                        </div>
                     </div>
                 </div>
             )}
@@ -253,13 +321,13 @@ const AddCashSale = () => {
 
         {/* ASOSIY OYNA */}
         <div className="lg:col-span-8">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">
                 <div className="flex justify-center items-center relative max-w-sm mx-auto">
-                    <div className="absolute top-1/2 left-4 right-4 h-1 bg-gray-100 -z-10 -translate-y-1/2"></div>
-                    <div className="absolute top-1/2 left-4 h-1 bg-blue-500 -z-10 -translate-y-1/2 transition-all duration-500" style={{ width: `${((step - 1) / 2) * 100}%` }}></div>
+                    <div className="absolute top-1/2 left-4 right-4 h-1.5 bg-gray-100 rounded-full -z-10 -translate-y-1/2"></div>
+                    <div className="absolute top-1/2 left-4 h-1.5 rounded-full bg-blue-500 -z-10 -translate-y-1/2 transition-all duration-500" style={{ width: `${((step - 1) / 2) * 100}%` }}></div>
                     {[1, 2, 3].map(s => (
-                        <div key={s} className={`w-10 h-10 flex items-center justify-center rounded-full text-sm font-bold border-2 transition-all mx-auto bg-white ${step >= s ? 'border-blue-600 text-blue-600' : 'border-gray-200 text-gray-400'}`}>
-                            {step > s ? <Check size={16} /> : s}
+                        <div key={s} className={`w-10 h-10 flex items-center justify-center rounded-full text-sm font-black border-4 transition-all mx-auto bg-white ${step >= s ? 'border-blue-600 text-blue-600 shadow-md shadow-blue-100' : 'border-gray-200 text-gray-400'}`}>
+                            {step > s ? <Check size={16} strokeWidth={3} /> : s}
                         </div>
                     ))}
                 </div>
@@ -267,21 +335,27 @@ const AddCashSale = () => {
 
             {/* QADAM 1: MIJOZ TANLASH */}
             {step === 1 && (
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8">
-                    <div className="flex gap-6 p-2 bg-gray-50 rounded-xl mb-6 w-fit">
-                        <button onClick={() => setSaleData(prev => ({...prev, isAnonymous: false}))} className={`px-6 py-2.5 rounded-lg font-bold transition-all ${!saleData.isAnonymous ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>Bazada bor Mijoz</button>
-                        <button onClick={() => setSaleData(prev => ({...prev, isAnonymous: true}))} className={`px-6 py-2.5 rounded-lg font-bold transition-all ${saleData.isAnonymous ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>Boshqa shaxs (Anonim)</button>
+                <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8 duration-300">
+                    <div className="flex gap-4 p-1.5 bg-gray-50 border border-gray-200/50 rounded-2xl mb-8 w-fit">
+                        <button onClick={() => setSaleData(prev => ({...prev, isAnonymous: false}))} className={`px-6 py-3 rounded-xl font-bold transition-all text-sm ${!saleData.isAnonymous ? 'bg-white text-blue-600 shadow-sm border border-gray-200/50' : 'text-gray-500 hover:text-gray-700'}`}>Bazada bor Mijoz</button>
+                        <button onClick={() => setSaleData(prev => ({...prev, isAnonymous: true}))} className={`px-6 py-3 rounded-xl font-bold transition-all text-sm ${saleData.isAnonymous ? 'bg-white text-blue-600 shadow-sm border border-gray-200/50' : 'text-gray-500 hover:text-gray-700'}`}>Boshqa shaxs (Anonim)</button>
                     </div>
 
                     {!saleData.isAnonymous ? (
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Bazada bor mijozni qidiring</label>
-                            <SearchableSelect placeholder="Ism, familiya yoki pasport..." onSelect={(c) => setSaleData(prev => ({...prev, mainCustomer: c}))} customers={customers} />
+                            <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-2">Bazada bor mijozni qidiring</label>
+                            <SearchableSelect placeholder="Ism, familiya yoki pasport yozing..." onSelect={(c) => setSaleData(prev => ({...prev, mainCustomer: c}))} customers={customers} />
                         </div>
                     ) : (
-                        <div className="space-y-4">
-                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Xaridor ism-familiyasi</label><input type="text" value={saleData.otherName} onChange={(e) => setSaleData(prev => ({...prev, otherName: e.target.value}))} className="w-full p-3 border rounded-xl outline-blue-500 bg-white" placeholder="Masalan: Alisher"/></div>
-                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Telefon raqami (Ixtiyoriy)</label><input type="text" value={saleData.otherPhone} onChange={(e) => setSaleData(prev => ({...prev, otherPhone: e.target.value}))} className="w-full p-3 border rounded-xl outline-blue-500 bg-white font-mono" placeholder="+998"/></div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div>
+                                <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-2">Xaridor ism-familiyasi <span className="text-red-500">*</span></label>
+                                <input type="text" value={saleData.otherName} onChange={(e) => setSaleData(prev => ({...prev, otherName: e.target.value}))} className="w-full p-4 border border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 ring-blue-50 font-bold text-gray-700 transition-all" placeholder="Masalan: Alisher"/>
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-2">Telefon raqami (Ixtiyoriy)</label>
+                                <input type="text" value={saleData.otherPhone} onChange={(e) => setSaleData(prev => ({...prev, otherPhone: e.target.value}))} className="w-full p-4 border border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 ring-blue-50 font-bold font-mono text-gray-700 transition-all" placeholder="+998"/>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -289,58 +363,61 @@ const AddCashSale = () => {
 
             {/* QADAM 2: TOVARLAR */}
             {step === 2 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[650px] animate-in slide-in-from-right-8">
-                    <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
-                        <div className="relative max-w-lg mx-auto">
-                            <ScanLine className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500" size={24}/>
+                <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[650px] animate-in slide-in-from-right-8 duration-300">
+                    <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50/50 border-b border-gray-100">
+                        <div className="relative max-w-xl mx-auto">
+                            <ScanLine className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-500" size={24}/>
                             <input 
                                 ref={barcodeInputRef}
                                 type="text" 
                                 placeholder="Shtrix kodni skanerlang yoki yozing..." 
                                 onKeyDown={handleBarcodeScan}
-                                className="w-full pl-12 pr-4 py-4 bg-white border-2 border-blue-300 focus:border-blue-600 rounded-xl outline-none shadow-sm font-mono text-lg transition-colors"
+                                className="w-full pl-14 pr-6 py-4 bg-white border-2 border-blue-200 focus:border-blue-500 rounded-2xl outline-none shadow-sm font-mono font-bold text-xl text-gray-800 transition-colors placeholder:font-sans placeholder:text-base placeholder:font-medium"
                             />
                         </div>
                     </div>
 
-                    <div className="flex border-b border-gray-100 bg-white">
-                        <button onClick={() => setProductTab('catalog')} className={`flex-1 py-3 text-sm font-bold transition-colors ${productTab === 'catalog' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700 bg-gray-50'}`}>Katalog (Qidiruv)</button>
-                        <button onClick={() => setProductTab('cart')} className={`flex-1 py-3 text-sm font-bold transition-colors relative ${productTab === 'cart' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700 bg-gray-50'}`}>
+                    <div className="flex border-b border-gray-100 bg-slate-50/50">
+                        <button onClick={() => setProductTab('catalog')} className={`flex-1 py-4 text-sm font-black transition-all ${productTab === 'catalog' ? 'text-blue-600 bg-white border-b-2 border-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>Katalog (Qidiruv)</button>
+                        <button onClick={() => setProductTab('cart')} className={`flex-1 py-4 text-sm font-black transition-all relative ${productTab === 'cart' ? 'text-blue-600 bg-white border-b-2 border-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>
                             Tanlangan tovarlar
-                            {saleData.items.length > 0 && <span className="ml-2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{saleData.items.length}</span>}
+                            {saleData.items.length > 0 && <span className="absolute ml-2 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm">{saleData.items.length}</span>}
                         </button>
                     </div>
 
                     {productTab === 'catalog' && (
-                        <div className="p-4 flex flex-col flex-1 overflow-hidden bg-white">
-                            <div className="relative mb-4">
-                                <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
-                                <input type="text" placeholder="Nomi bo'yicha tezkor qidiruv..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm"/>
+                        <div className="p-6 flex flex-col flex-1 overflow-hidden bg-white">
+                            <div className="relative mb-6 shrink-0">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
+                                <input type="text" placeholder="Nomi bo'yicha tezkor qidiruv..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-700 transition-all"/>
                             </div>
-                            <div className="flex-1 overflow-y-auto custom-scrollbar border border-gray-100 rounded-xl">
+                            <div className="flex-1 overflow-y-auto custom-scrollbar border border-gray-100 rounded-2xl">
                                 <table className="w-full text-left text-sm">
-                                    <thead className="bg-gray-50 sticky top-0 text-[11px] text-gray-500 uppercase">
-                                        <tr><th className="p-3">Nomi va Kod</th><th className="p-3 text-center">Qoldiq</th><th className="p-3 text-right">Narxi (UZS)</th><th className="p-3 text-center"></th></tr>
+                                    <thead className="bg-gray-50 sticky top-0 text-[10px] text-gray-400 uppercase font-black tracking-widest z-10 shadow-sm border-b border-gray-100">
+                                        <tr><th className="p-4">Nomi va Kod</th><th className="p-4 text-center">Qoldiq</th><th className="p-4 text-right">Narxi (UZS)</th><th className="p-4 text-center">Amal</th></tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100">
+                                    <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
                                         {filteredProducts.map(p => {
                                             const isAdded = saleData.items.some(i => i.id === p.id);
                                             return (
-                                                <tr key={p.id} className={`hover:bg-blue-50 transition-colors ${isAdded ? 'bg-blue-50/30' : ''}`}>
-                                                    <td className="p-3">
-                                                        <div className="font-bold text-gray-800">{p.name}</div>
-                                                        <div className="text-[10px] font-mono text-gray-500 mt-0.5">#{p.customId}</div>
+                                                <tr key={p.id} className={`hover:bg-blue-50/50 transition-colors ${isAdded ? 'bg-blue-50/30' : ''}`}>
+                                                    <td className="p-4">
+                                                        <div className="text-gray-800">{p.name}</div>
+                                                        <div className="text-[10px] font-mono text-gray-400 mt-1 uppercase tracking-widest">#{p.customId ?? '-'}</div>
                                                     </td>
-                                                    <td className="p-3 text-center font-bold text-blue-600">{p.quantity}</td>
-                                                    <td className="p-3 text-right font-bold text-gray-800">{Number(p.salePrice).toLocaleString()}</td>
-                                                    <td className="p-3 text-center">
-                                                        <button disabled={p.quantity <= 0} onClick={() => addProductToCart(p)} className={`p-2 rounded-lg transition-colors ${isAdded ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white' : 'bg-gray-100 text-gray-600 hover:bg-blue-600 hover:text-white'} disabled:opacity-30 disabled:cursor-not-allowed`}>
-                                                            {isAdded ? <Check size={18}/> : <Plus size={18}/>}
+                                                    <td className="p-4 text-center">
+                                                        <span className={`px-2.5 py-1 rounded-md text-xs ${Number(p.quantity) > 0 ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-500'}`}>{Number(p.quantity || 0)}</span>
+                                                    </td>
+                                                    <td className="p-4 text-right text-gray-600">{Number(p.salePrice || 0).toLocaleString()}</td>
+                                                    <td className="p-4 text-center">
+                                                        <button disabled={p.quantity <= 0} onClick={() => addProductToCart(p)} className={`p-2 rounded-xl transition-all shadow-sm active:scale-95 ${isAdded ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-white border border-gray-200 text-gray-500 hover:border-blue-500 hover:text-blue-500'} disabled:opacity-30 disabled:cursor-not-allowed`}>
+                                                            {isAdded ? <Check size={18} strokeWidth={3}/> : <Plus size={18} strokeWidth={2.5}/>}
                                                         </button>
                                                     </td>
                                                 </tr>
                                             )
                                         })}
+                                        {filteredProducts.length === 0 && <tr><td colSpan="4" className="p-16 text-center text-gray-400 font-medium">Hech narsa topilmadi</td></tr>}
                                     </tbody>
                                 </table>
                             </div>
@@ -348,28 +425,29 @@ const AddCashSale = () => {
                     )}
 
                     {productTab === 'cart' && (
-                        <div className="p-4 flex flex-col flex-1 overflow-hidden bg-gray-50/50">
+                        <div className="p-6 flex flex-col flex-1 overflow-hidden bg-slate-50/50">
                             {saleData.items.length === 0 ? (
-                                <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-                                    <ShoppingCart size={48} className="mb-4 opacity-20"/>
-                                    <p className="font-medium text-lg">Savat bo'sh. Shtrix kod ishlating yoki katalogdan tanlang.</p>
+                                <div className="flex-1 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-3xl bg-white">
+                                    <ShoppingCart size={56} strokeWidth={1.5} className="mb-4 text-gray-300"/>
+                                    <p className="font-bold text-gray-500">Savat bo'sh</p>
+                                    <p className="text-sm mt-1">Shtrix kod ishlating yoki katalogdan tanlang.</p>
                                 </div>
                             ) : (
-                                <div className="flex-1 overflow-y-auto custom-scrollbar border bg-white border-gray-100 rounded-xl shadow-sm">
+                                <div className="flex-1 overflow-y-auto custom-scrollbar border bg-white border-gray-100 rounded-3xl shadow-sm">
                                     <table className="w-full text-left text-sm">
-                                        <thead className="bg-gray-50 sticky top-0 text-[10px] text-gray-500 uppercase">
-                                            <tr><th className="p-3">Nomi</th><th className="p-3 w-28 text-center">Soni</th><th className="p-3 text-right">Dona Narxi</th><th className="p-3 text-right">Jami (UZS)</th><th className="p-3 text-center"></th></tr>
+                                        <thead className="bg-gray-50 sticky top-0 text-[10px] text-gray-400 uppercase font-black tracking-widest border-b border-gray-100 z-10">
+                                            <tr><th className="p-4 pl-6">Nomi</th><th className="p-4 w-28 text-center">Soni</th><th className="p-4 text-right">Dona Narxi</th><th className="p-4 text-right">Jami (UZS)</th><th className="p-4 text-center w-16">X</th></tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-100">
+                                        <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
                                             {saleData.items.map(item => (
-                                                <tr key={item.id}>
-                                                    <td className="p-3 font-bold text-gray-800">{item.name}</td>
+                                                <tr key={item.id} className="hover:bg-rose-50/30 transition-colors">
+                                                    <td className="p-4 pl-6 text-gray-800">{item.name}</td>
                                                     <td className="p-3 text-center">
-                                                        <input type="number" min="1" max={item.quantity} value={item.qty} onChange={(e) => updateItemQty(item.id, Number(e.target.value))} className="w-full p-2 border border-gray-200 rounded-lg text-center outline-blue-500 font-bold bg-gray-50 focus:bg-white"/>
+                                                        <input type="number" min="1" max={item.quantity} value={item.qty} onChange={(e) => updateItemQty(item.id, Number(e.target.value))} className="w-full p-2.5 border border-gray-200 rounded-xl text-center outline-none focus:border-blue-500 focus:ring-2 ring-blue-100 font-black text-blue-600 bg-blue-50 focus:bg-white transition-all"/>
                                                     </td>
-                                                    <td className="p-3 text-right text-gray-600 font-medium">{Number(item.salePrice).toLocaleString()}</td>
-                                                    <td className="p-3 text-right font-black text-blue-600">{(Number(item.salePrice) * item.qty).toLocaleString()}</td>
-                                                    <td className="p-3 text-center"><button onClick={() => removeItem(item.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></td>
+                                                    <td className="p-4 text-right text-gray-500 font-medium">{Number(item.salePrice).toLocaleString()}</td>
+                                                    <td className="p-4 text-right font-black text-gray-800">{(Number(item.salePrice) * item.qty).toLocaleString()}</td>
+                                                    <td className="p-4 text-center"><button onClick={() => removeItem(item.id)} className="p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors"><Trash2 size={18}/></button></td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -383,76 +461,79 @@ const AddCashSale = () => {
 
             {/* QADAM 3: SAQLASH (KUTISH HOLATI VA CHEGIRMA) */}
             {step === 3 && (
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8">
+                <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8 duration-300">
                     <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-100">
-                        <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
-                                <Clock size={32} />
+                        <div className="flex items-center gap-5">
+                            <div className="w-16 h-16 bg-blue-50 border border-blue-100 text-blue-600 rounded-[20px] flex items-center justify-center shadow-inner">
+                                <Clock size={32} strokeWidth={2.5} />
                             </div>
                             <div>
-                                <h2 className="text-2xl font-black text-gray-800 mb-1">Qo'shimcha va Saqlash</h2>
-                                <p className="text-gray-500 text-sm">Savdoni "Jarayonda" qilib saqlashdan oldin chegirma kiritishingiz mumkin.</p>
+                                <h2 className="text-2xl font-black text-gray-800 mb-1 tracking-tight">Qo'shimcha va Saqlash</h2>
+                                <p className="text-gray-400 text-sm font-medium">Savdoni "Jarayonda" qilib saqlashdan oldin chegirma kiritishingiz mumkin.</p>
                             </div>
                         </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
                         {/* Chegirma va Izoh */}
                         <div className="space-y-6">
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><Tag size={14}/> Chegirma berish (UZS)</label>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><Tag size={12}/> Chegirma berish (UZS)</label>
                                 <input 
                                     type="number" 
                                     min="0"
                                     max={grandTotal}
+                                    disabled={isLoading}
                                     value={saleData.discount} 
                                     onChange={(e) => setSaleData({...saleData, discount: e.target.value})} 
-                                    className="w-full p-4 bg-amber-50 border-2 border-amber-100 rounded-xl outline-none focus:border-amber-400 font-black text-amber-700 text-lg" 
-                                    placeholder="Masalan: 50000"
+                                    className="w-full p-4 bg-amber-50 border-2 border-amber-100 rounded-2xl outline-none focus:border-amber-400 font-black text-amber-600 text-xl transition-colors disabled:opacity-50" 
+                                    placeholder="0"
                                 />
                             </div>
                             
-                            {/* 🚨 DIQQAT: Agar chegirma bo'lsa izoh majburiy (qizil) bo'ladi */}
+                            {/* 🚨 DIQQAT: Agar chegirma bo'lsa izoh majburiy bo'ladi */}
                             {Number(saleData.discount) > 0 ? (
                                 <div className="animate-in fade-in slide-in-from-top-2">
-                                    <label className="block text-xs font-bold text-rose-500 uppercase mb-2 flex items-center gap-1"><MessageSquare size={14}/> Chegirma sababi (Izoh) *</label>
+                                    <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><MessageSquare size={12}/> Chegirma sababi (Izoh) <span className="text-rose-500 text-base leading-none">*</span></label>
                                     <textarea 
+                                        disabled={isLoading}
                                         value={saleData.note} 
                                         onChange={(e) => setSaleData({...saleData, note: e.target.value})} 
-                                        className="w-full p-4 bg-rose-50 border border-rose-200 rounded-xl outline-none focus:border-rose-500 text-rose-900 resize-none h-24" 
-                                        placeholder="Chegirma nima sababdan berilganini yozing (majburiy)..."
+                                        className="w-full p-4 bg-rose-50/50 border border-rose-200 rounded-2xl outline-none focus:border-rose-400 focus:ring-4 ring-rose-50 text-rose-800 font-bold resize-none h-28 transition-all disabled:opacity-50" 
+                                        placeholder="Nima uchun chegirma qilinganini yozish majburiy..."
                                     ></textarea>
                                 </div>
                             ) : (
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><MessageSquare size={14}/> Savdo uchun izoh (ixtiyoriy)</label>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><MessageSquare size={12}/> Savdo uchun izoh (ixtiyoriy)</label>
                                     <textarea 
+                                        disabled={isLoading}
                                         value={saleData.note} 
                                         onChange={(e) => setSaleData({...saleData, note: e.target.value})} 
-                                        className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 resize-none h-24" 
-                                        placeholder="Eslatma yoki izoh qoldirishingiz mumkin..."
+                                        className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-blue-400 focus:ring-4 ring-blue-50 text-gray-700 font-medium resize-none h-28 transition-all disabled:opacity-50" 
+                                        placeholder="Eslatma qoldirishingiz mumkin..."
                                     ></textarea>
                                 </div>
                             )}
                         </div>
 
                         {/* YAKUNIY HISOB */}
-                        <div className="bg-gray-800 rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
-                            <div className="absolute -right-10 -top-10 text-gray-700 opacity-20"><ShoppingCart size={150}/></div>
-                            <div className="relative z-10 space-y-4">
-                                <div className="flex justify-between text-gray-400 text-sm">
-                                    <span>Tovarlar ({saleData.items.reduce((s, i) => s + i.qty, 0)} ta):</span>
-                                    <span className="font-bold text-white">{grandTotal.toLocaleString()} UZS</span>
+                        <div className="bg-gray-900 rounded-[32px] p-8 flex flex-col justify-center relative overflow-hidden shadow-2xl">
+                            <div className="absolute -right-8 -top-8 text-gray-800"><ShoppingCart size={180}/></div>
+                            <div className="relative z-10 space-y-6">
+                                <div className="flex justify-between items-center text-gray-400 text-sm">
+                                    <span className="font-bold">Tovarlar ({saleData.items.reduce((s, i) => s + i.qty, 0)} ta):</span>
+                                    <span className="font-black text-white text-lg">{grandTotal.toLocaleString()} UZS</span>
                                 </div>
                                 {Number(saleData.discount) > 0 && (
-                                    <div className="flex justify-between text-amber-400 text-sm border-b border-gray-600 pb-4">
-                                        <span>Chegirma:</span>
-                                        <span className="font-bold">- {Number(saleData.discount).toLocaleString()} UZS</span>
+                                    <div className="flex justify-between items-center text-amber-400 text-sm border-b border-gray-700/50 pb-5">
+                                        <span className="font-bold">Chegirma:</span>
+                                        <span className="font-black text-lg">- {Number(saleData.discount).toLocaleString()} UZS</span>
                                     </div>
                                 )}
                                 <div className="pt-2">
-                                    <p className="text-gray-400 text-[10px] uppercase mb-1 tracking-widest">Mijoz to'laydigan summa</p>
-                                    <p className="text-4xl font-black text-emerald-400">{finalAmount.toLocaleString()} <span className="text-base font-normal">UZS</span></p>
+                                    <p className="text-gray-500 text-[10px] font-black uppercase mb-1 tracking-widest">Jami To'lanadigan Summa</p>
+                                    <p className="text-4xl lg:text-5xl font-black text-emerald-400 tracking-tighter truncate" title={`${finalAmount.toLocaleString()} UZS`}>{finalAmount.toLocaleString()} <span className="text-lg font-bold text-emerald-600">UZS</span></p>
                                 </div>
                             </div>
                         </div>
@@ -460,16 +541,16 @@ const AddCashSale = () => {
                 </div>
             )}
 
-            <div className="mt-6 flex justify-end gap-4">
+            <div className="mt-8 flex justify-end gap-4">
                 {step > 1 && (
-                    <button onClick={() => setStep(step - 1)} className="px-8 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-colors">Orqaga</button>
+                    <button disabled={isLoading} onClick={() => setStep(step - 1)} className="px-8 py-4 bg-white border border-gray-200 text-gray-600 rounded-2xl font-black hover:bg-gray-50 transition-colors disabled:opacity-50">ORQAGA</button>
                 )}
                 <button 
                     onClick={handleNext} 
                     disabled={isLoading}
-                    className={`px-10 py-3 rounded-xl font-black flex items-center gap-2 transition-all shadow-lg ${step === 3 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`px-10 py-4 rounded-2xl font-black flex items-center justify-center min-w-[200px] gap-2 transition-all shadow-xl active:scale-95 uppercase tracking-widest ${step === 3 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200' : 'bg-gray-800 hover:bg-black text-white shadow-gray-300'} ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                 >
-                    {isLoading ? "Kuting..." : (step === 3 ? <><Save size={20}/> Saqlash</> : <>Davom etish <ChevronRight size={20}/></>)}
+                    {isLoading ? <Loader2 size={20} className="animate-spin"/> : (step === 3 ? <><Save size={20} strokeWidth={2.5}/> Saqlash</> : <>Davom etish <ChevronRight size={20} strokeWidth={3}/></>)}
                 </button>
             </div>
         </div>
