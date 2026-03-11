@@ -5,7 +5,10 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-// --- YANGI: Katta raqamlarni chiroyli qisqartirish (mln, mlrd) ---
+// --- API URL DINAMIK QILINDI ---
+const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
+
+// --- Katta raqamlarni chiroyli qisqartirish (mln, mlrd) ---
 const formatLargeNumber = (num) => {
     if (num >= 1000000000) {
         return (num / 1000000000).toFixed(2) + ' mlrd';
@@ -13,7 +16,6 @@ const formatLargeNumber = (num) => {
     if (num >= 1000000) {
         return (num / 1000000).toFixed(2) + ' mln';
     }
-    // 1 milliondan kichiklarni shunchaki probel bilan yozadi: 150,000
     return num.toLocaleString();
 };
 
@@ -23,10 +25,11 @@ const Dashboard = () => {
   
   const userRole = (sessionStorage.getItem('userRole') || 'admin').toLowerCase();
   const token = sessionStorage.getItem('token'); 
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); 
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); // Xabarlar paneli ochiq tursin
 
+  // --- HAQIQIY BACKENDDAN YUKLASH ---
   useEffect(() => {
-    fetch('https://iphone-house-api.onrender.com/api/dashboard', {
+    fetch(`${API_URL}/api/dashboard`, {
         headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => {
@@ -37,24 +40,10 @@ const Dashboard = () => {
           setStats(data.stats || { inventoryValue: 0, totalIncome: 0, totalDebt: 0, productCount: 0 });
           setNotifications(data.notifications || []); 
       })
-      .catch(err => console.error(err));
+      .catch(err => console.error("Dashboard yuklashda xatolik:", err));
   }, [token]);
 
-  const loadNotifications = () => {
-    const returns = JSON.parse(sessionStorage.getItem('supplierReturns') || "[]");
-    const incomes = JSON.parse(sessionStorage.getItem('supplierInvoices') || "[]");
-    
-    const filteredReturns = returns.filter(r => r.status !== 'Jarayonda');
-    const filteredIncomes = incomes.filter(i => i.status !== 'Jarayonda');
-
-    const allLogs = [
-      ...filteredReturns.map(r => ({ ...r, type: 'Qaytarish', sender: r.userName || r.createdBy || 'Bekchonov Azomat' })),
-      ...filteredIncomes.map(i => ({ ...i, type: 'Kirim', sender: i.userName || i.createdBy || 'Bekchonov Azomat' }))
-    ].sort((a, b) => b.id - a.id);
-
-    setNotifications(allLogs.slice(0, 10)); 
-  };
-
+  // Bildirishnomani o'qilgan qilish
   const markAsRead = (id) => {
     setNotifications(prev => prev.map(note => 
         note.id === id ? { ...note, isRead: true } : note
@@ -73,11 +62,11 @@ const Dashboard = () => {
   const unreadCount = notifications.filter(n => !n.isRead && n.status !== 'Tasdiqlandi').length;
 
   return (
-    <div className="flex p-6 bg-slate-100 min-h-screen font-sans gap-6">
+    <div className="flex p-6 bg-slate-100 min-h-screen font-sans gap-6 animate-in fade-in duration-300">
       
       {/* 1. BILDIRISHNOMALAR (FAQAT DIREKTOR UCHUN) */}
       {userRole === 'director' && (
-        <div className={`flex flex-col gap-3 transition-all duration-500 ${isSidebarCollapsed ? 'w-[340px] opacity-100 flex-shrink-0' : 'w-0 opacity-0 overflow-hidden'}`}>
+        <div className={`flex flex-col gap-3 transition-all duration-500 ${isSidebarCollapsed ? 'w-0 opacity-0 overflow-hidden' : 'w-[340px] opacity-100 flex-shrink-0'}`}>
           
           <div className="flex items-center justify-between px-1 mb-1">
               <h2 className="text-[13px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
@@ -142,7 +131,7 @@ const Dashboard = () => {
                           
                           {isNew && (
                               <button 
-                                onClick={() => markAsRead(note.id, note.type)}
+                                onClick={() => markAsRead(note.id)}
                                 className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white p-1.5 rounded-lg transition-all shadow-sm"
                                 title="O'qilgan qilib belgilash"
                               >
@@ -177,7 +166,7 @@ const Dashboard = () => {
         {/* 🚨 KARTALAR QISMI */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <StatCard title="Ombor qiymati" value={stats.inventoryValue} unit="UZS" icon={<Package />} colors={{ bg: 'bg-blue-50', iconBg: 'bg-blue-600', text: 'text-blue-600', border: 'border-blue-100' }} />
-          <StatCard title="Kassa (Tushum)" value={stats.totalIncome} unit="UZS" icon={<DollarSign />} colors={{ bg: 'bg-emerald-50', iconBg: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-emerald-100' }} />
+          <StatCard title="Kassa (Qoldiq)" value={stats.totalIncome} unit="UZS" icon={<DollarSign />} colors={{ bg: 'bg-emerald-50', iconBg: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-emerald-100' }} />
           <StatCard title="Undiruv (Qarz)" value={stats.totalDebt} unit="UZS" icon={<TrendingUp />} colors={{ bg: 'bg-rose-50', iconBg: 'bg-rose-500', text: 'text-rose-600', border: 'border-rose-100' }} />
           <StatCard title="Mahsulot turi" value={stats.productCount} unit="ta" icon={<Users />} colors={{ bg: 'bg-amber-50', iconBg: 'bg-amber-500', text: 'text-amber-600', border: 'border-amber-100' }} />
         </div>
@@ -218,15 +207,14 @@ const Dashboard = () => {
   );
 };
 
-// 🚨 YANGILANGAN VERTIKAL KARTA KOMPONENTI (Sig'ish va chiroyli ko'rinish uchun)
+// KARTA KOMPONENTI
 const StatCard = ({ title, value, unit, icon, colors }) => {
-    // Qisqartirilgan va to'liq qiymatlar
     const displayValue = typeof value === 'number' ? formatLargeNumber(value) : value;
     const fullValue = typeof value === 'number' ? value.toLocaleString() + ' ' + unit : value;
 
     return (
       <div 
-        title={fullValue} // Ustiga sichqoncha borganda to'liq summa chiqadi
+        title={fullValue} 
         className={`bg-white p-6 rounded-[24px] shadow-sm border border-slate-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group cursor-pointer flex flex-col justify-between h-[150px]`}
       >
         <div className="flex justify-between items-start">
