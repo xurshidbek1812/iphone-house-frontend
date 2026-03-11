@@ -5,7 +5,6 @@ import toast from 'react-hot-toast';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
 
-// HELPER: Xavfsiz JSON parsing
 const parseJsonSafe = async (response) => {
     try {
         return await response.json();
@@ -17,18 +16,21 @@ const parseJsonSafe = async (response) => {
 const SupplierIncome = () => {
   const navigate = useNavigate();
   const token = sessionStorage.getItem('token');
+  const currentUserName = sessionStorage.getItem('userName') || 'Hodim';
+  const userRole = sessionStorage.getItem('userRole') || 'admin';
 
   // --- STATE ---
-  const [activeTab, setActiveTab] = useState('products'); // 'products' | 'invoice'
+  const [activeTab, setActiveTab] = useState('products'); 
   const [allProducts, setAllProducts] = useState([]);      
+  const [suppliersList, setSuppliersList] = useState([]); // Ta'minotchilar ro'yxati
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Faktura ma'lumotlari
   const [invoiceItems, setInvoiceItems] = useState([]);   
-  const [supplierName, setSupplierName] = useState('');   
-  const [invoiceNumber, setInvoiceNumber] = useState(''); 
+  const [supplierName, setSupplierName] = useState('');   // SELECT uchun
+  const [invoiceNumber, setInvoiceNumber] = useState(''); // Faqat RAQAM
   const [currency, setCurrency] = useState('UZS');
   const [currencyRate, setCurrencyRate] = useState('12500'); 
 
@@ -42,8 +44,8 @@ const SupplierIncome = () => {
       'Content-Type': 'application/json'
   }), [getAuthHeaders]);
 
-  // --- 1. TOVARLARNI YUKLASH ---
-  const fetchProducts = useCallback(async (signal = undefined) => {
+  // --- 1. TOVARLAR VA TA'MINOTCHILARNI YUKLASH ---
+  const fetchData = useCallback(async (signal = undefined) => {
       if (!token) {
           toast.error("Tizimga kirish tokeni topilmadi!");
           setLoading(false);
@@ -52,50 +54,51 @@ const SupplierIncome = () => {
 
       try {
           setLoading(true);
-          const res = await fetch(`${API_URL}/api/products`, { 
-              headers: getAuthHeaders(),
-              signal 
-          });
+          const [prodRes, suppRes] = await Promise.allSettled([
+              fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal }),
+              fetch(`${API_URL}/api/suppliers`, { headers: getAuthHeaders(), signal }) // Ta'minotchilar uchun API bor deb faraz qildim. Yo'q bo'lsa SessionStorage'dan o'qiymiz.
+          ]);
 
-          if (res.ok) {
-              const data = await parseJsonSafe(res);
-              if (Array.isArray(data)) {
-                  setAllProducts(data);
-              } else {
-                  setAllProducts([]);
-                  toast.error("Mahsulotlar ro'yxati noto'g'ri formatda keldi");
-              }
+          // Products
+          if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
+              const data = await parseJsonSafe(prodRes.value);
+              if (Array.isArray(data)) setAllProducts(data);
+              else toast.error("Mahsulotlar formati noto'g'ri keldi");
+          } else if (prodRes.reason?.name !== 'AbortError') {
+              toast.error("Mahsulotlarni yuklab bo'lmadi");
+          }
+
+          // Suppliers (Agar API dan kelsa. Agar API yo'q bo'lsa pastdagi SessionStorage ishlaydi)
+          if (suppRes.status === 'fulfilled' && suppRes.value.ok) {
+              const data = await parseJsonSafe(suppRes.value);
+              if (Array.isArray(data)) setSuppliersList(data);
           } else {
-              const errText = await res.text();
-              console.error('Products fetch error:', res.status, errText);
-              toast.error(`Mahsulotlarni yuklab bo'lmadi (${res.status})`);
+             // Fallback to SessionStorage agar API bo'lmasa
+             const savedSuppliers = JSON.parse(sessionStorage.getItem('suppliersList') || "[]");
+             setSuppliersList(savedSuppliers);
           }
+
       } catch (error) {
-          if (error.name !== 'AbortError') {
-              console.error("Fetch error:", error);
-              toast.error("Tarmoq xatosi yuz berdi!");
-          }
+          if (error.name !== 'AbortError') toast.error("Tarmoq xatosi yuz berdi!");
       } finally {
-          if (!signal?.aborted) {
-              setLoading(false);
-          }
+          if (!signal?.aborted) setLoading(false);
       }
   }, [token, getAuthHeaders]);
 
   useEffect(() => {
       const controller = new AbortController();
-      fetchProducts(controller.signal);
+      fetchData(controller.signal);
       
-      // Vaqtinchalik frontend ID. Kelajakda backend o'zi bersa yaxshiroq bo'ladi
-      setInvoiceNumber(`INV-${Date.now().toString().slice(-6)}`);
+      // 🚨 FAQAT RAQAMLI Faktura raqami (INV olingan)
+      setInvoiceNumber(Date.now().toString().slice(-6)); 
       
       return () => controller.abort();
-  }, [fetchProducts]);
+  }, [fetchData]);
 
   // --- 2. FAKTURAGA QO'SHISH ---
   const addToInvoice = (product) => {
     if (invoiceItems.some(item => item.id === product.id)) {
-      return toast.error("Bu tovar fakturaga qo'shilgan! Uning miqdorini faktura bo'limidan o'zgartiring.");
+      return toast.error("Bu tovar fakturaga qo'shilgan! Uning miqdorini o'zgartiring.");
     }
 
     const newItem = {
@@ -109,16 +112,14 @@ const SupplierIncome = () => {
     toast.success(`${product.name} fakturaga qo'shildi`);
   };
 
-  // --- 3. FAKTURADAGI TOVARNI O'ZGARTIRISH (NaN Himoyasi bilan) ---
+  // --- 3. FAKTURADAGI TOVARNI O'ZGARTIRISH ---
   const updateItem = (id, field, value) => {
     setInvoiceItems(prev => prev.map(item => {
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
-        
         const qty = Number(updatedItem.inputQty) || 0;
         const price = Number(updatedItem.inputPrice) || 0;
         updatedItem.totalSum = qty * price;
-        
         return updatedItem;
       }
       return item;
@@ -137,7 +138,6 @@ const SupplierIncome = () => {
       }, { grandTotal: 0 });
   }, [invoiceItems]);
 
-  // Qidiruv (Trim & Safe)
   const filteredProducts = useMemo(() => {
       if (!searchTerm) return allProducts;
       const search = searchTerm.trim().toLowerCase();
@@ -151,58 +151,54 @@ const SupplierIncome = () => {
   const handleSave = async () => {
     const cleanSupplier = supplierName.trim();
     
-    if (!cleanSupplier) return toast.error("Ta'minotchi nomini kiriting!");
-    if (invoiceItems.length === 0) return toast.error("Fakturaga hech bo'lmasa bitta tovar qo'shing!");
-    if (!token) return toast.error("Sessiya xatosi! Qayta tizimga kiring.");
+    if (!cleanSupplier) return toast.error("Ta'minotchi nomini tanlang!");
+    if (invoiceItems.length === 0) return toast.error("Fakturaga tovar qo'shing!");
+    if (!token) return toast.error("Sessiya xatosi! Qayta kiring.");
 
-    // 🚨 BIZNES LOGIKA: Qat'iy Valyuta kursi tekshiruvi
     const exchangeRateVal = Number(currencyRate);
     if (currency === 'USD' && (Number.isNaN(exchangeRateVal) || exchangeRateVal <= 0)) {
         return toast.error("USD uchun valyuta kursini to'g'ri kiriting!");
     }
 
-    // 🚨 BIZNES LOGIKA VA ITEM VALIDATSIYASI
     const invalidItem = invoiceItems.find(item => {
         const qty = Number(item.inputQty);
         const price = Number(item.inputPrice);
-
         if (Number.isNaN(qty) || qty <= 0) return true;
         if (Number.isNaN(price) || price < 0) return true;
         if (item.unit === 'Dona' && !Number.isInteger(qty)) return true;
-
         return false;
     });
 
     if (invalidItem) {
-        return toast.error(`Xato ma'lumot: ${invalidItem.name} uchun miqdor yoki narx noto'g'ri kiritilgan!`);
+        return toast.error(`Xato: ${invalidItem.name} uchun miqdor yoki narx noto'g'ri!`);
     }
 
     setIsSubmitting(true);
 
     try {
-      // UZS bo'lsa kurs = 1, aks holda kiritilgan kurs
       const finalExchangeRate = currency === 'USD' ? exchangeRateVal : 1;
 
+      // 🚨 STATUS "Jarayonda" BO'LDI. VA ENDPOINT /api/invoices GA QARATILDI
       const payload = {
         supplierName: cleanSupplier,
-        invoiceNumber: invoiceNumber.trim() || `INV-${Date.now()}`,
+        invoiceNumber: invoiceNumber.trim() || Date.now().toString().slice(-6),
         exchangeRate: finalExchangeRate,
         totalSum: grandTotal,
-        status: "Tasdiqlandi", 
-        
+        status: "Jarayonda", 
+        userName: currentUserName,
         items: invoiceItems.map(item => ({
             productId: item.id,
             customId: item.customId != null ? Number(item.customId) : null,
             name: item.name,
             count: Number(item.inputQty),
             price: Number(item.inputPrice),
-            salePrice: Number(item.salePrice) || 0, // Backend'da eski narxni yuborish kerak bo'lsa
+            salePrice: Number(item.salePrice) || 0, 
             currency: currency, 
             total: Number(item.totalSum)
         }))
       };
 
-      const response = await fetch(`${API_URL}/api/supplier-invoices`, {
+      const response = await fetch(`${API_URL}/api/invoices`, {
           method: 'POST',
           headers: getJsonAuthHeaders(),
           body: JSON.stringify(payload)
@@ -211,13 +207,12 @@ const SupplierIncome = () => {
       const data = await parseJsonSafe(response);
 
       if (response.ok) {
-          toast.success("Kirim muvaffaqiyatli saqlandi!");
-          navigate(-1);
+          toast.success("Kirim 'Jarayonda' holatida saqlandi!");
+          navigate('/ombor/taminotchi-kirim'); // Ro'yxatga qaytish
       } else {
           toast.error(data?.error || `Saqlashda xatolik (${response.status})`);
       }
     } catch (error) {
-        console.error("Save error:", error);
         toast.error("Server bilan aloqa yo'q!");
     } finally {
         setIsSubmitting(false);
@@ -251,34 +246,33 @@ const SupplierIncome = () => {
 
       {/* --- TEPADAGI FORMALAR --- */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-         {/* Chap tomon: Ta'minotchi va Valyuta */}
          <div className="lg:col-span-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
             <div className="mb-6">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Ta'minotchi nomi <span className="text-red-500">*</span></label>
-                <input 
-                    type="text" 
-                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-800 transition-all disabled:opacity-50"
-                    placeholder="Ta'minotchi nomini yozing yoki tanlang..."
-                    list="suppliers-list"
+                {/* 🚨 TA'MINOTCHI FAQAT TANLANADIGAN QILINDI */}
+                <select 
+                    disabled={isSubmitting}
+                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-800 transition-all disabled:opacity-50 disabled:bg-gray-100 cursor-pointer"
                     value={supplierName}
                     onChange={(e) => setSupplierName(e.target.value)}
-                    disabled={isSubmitting}
-                />
-                <datalist id="suppliers-list">
-                    <option value="Abror shina Shovot 'K'" />
-                    <option value="Samsung Dealer Tashkent" />
-                    <option value="Artel Zavod" />
-                </datalist>
+                >
+                    <option value="" disabled>Ro'yxatdan ta'minotchi tanlang...</option>
+                    {suppliersList.map((s, i) => (
+                        <option key={s.id || i} value={s.name}>{s.name}</option>
+                    ))}
+                    {/* Fallback qator, agar api ishlamasa */}
+                    {suppliersList.length === 0 && <option value="Samsung Dealer Tashkent">Samsung Dealer Tashkent</option>}
+                </select>
             </div>
             
             <div className="grid grid-cols-3 gap-5">
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Faktura Raqami</label>
-                    <input type="text" disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" value={invoiceNumber} onChange={(e)=>setInvoiceNumber(e.target.value)} />
+                    <input type="number" disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" value={invoiceNumber} onChange={(e)=>setInvoiceNumber(e.target.value)} placeholder="Misol: 981293" />
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Valyuta turi</label>
-                    <select disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" value={currency} onChange={(e)=>setCurrency(e.target.value)}>
+                    <select disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 cursor-pointer" value={currency} onChange={(e)=>setCurrency(e.target.value)}>
                         <option value="UZS">UZS</option>
                         <option value="USD">USD</option>
                     </select>
@@ -295,7 +289,6 @@ const SupplierIncome = () => {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center relative overflow-hidden">
                 <div className="absolute right-[-20px] top-[-20px] opacity-5"><Package size={120}/></div>
                 <div className="text-slate-400 text-[11px] font-black uppercase tracking-widest mb-1">Faktura pozitsiyalari</div>
-                {/* 🚨 Tahrirlangan mantiq: Necha xil tovar borligini ko'rsatadi */}
                 <div className="text-4xl font-black text-blue-600 relative z-10">{invoiceItems.length} <span className="text-base text-slate-400 font-bold ml-1">xil tovar</span></div>
             </div>
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center relative overflow-hidden">
@@ -308,10 +301,8 @@ const SupplierIncome = () => {
          </div>
       </div>
 
-      {/* --- TABLAR (Tovarlar ro'yxati / Faktura tovarlari) --- */}
+      {/* --- TABLAR --- */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[500px] flex flex-col overflow-hidden">
-        
-        {/* Tab Headers */}
         <div className="flex border-b border-slate-100 bg-slate-50/50">
             <button 
                 disabled={isSubmitting}
@@ -330,7 +321,7 @@ const SupplierIncome = () => {
             </button>
         </div>
 
-        {/* --- 1. TAB: TOVARLAR RO'YXATI (SEARCH) --- */}
+        {/* 1. TOVARLAR RO'YXATI */}
         {activeTab === 'products' && (
             <div className="flex flex-col h-full flex-1 p-6 bg-white animate-in fade-in duration-300">
                 <div className="relative mb-6 shrink-0">
@@ -395,7 +386,7 @@ const SupplierIncome = () => {
             </div>
         )}
 
-        {/* --- 2. TAB: FAKTURA TOVARLARI (EDIT) --- */}
+        {/* 2. FAKTURA TOVARLARI */}
         {activeTab === 'invoice' && (
              <div className="flex flex-col h-full flex-1 p-6 bg-slate-50/50 animate-in fade-in duration-300">
                 {invoiceItems.length === 0 ? (
@@ -403,7 +394,6 @@ const SupplierIncome = () => {
                         <Package size={64} className="mb-4 opacity-20"/>
                         <p className="font-bold text-lg text-slate-500 mb-1">Faktura hozircha bo'sh</p>
                         <p className="text-sm font-medium">"Bazada bor tovarlar" ro'yxatidan mahsulot qo'shing</p>
-                        {/* 🚨 Empty state tugmasiga ham disabled ulandi */}
                         <button disabled={isSubmitting} onClick={() => setActiveTab('products')} className="mt-4 px-6 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">Qo'shishga o'tish</button>
                     </div>
                 ) : (
@@ -425,7 +415,6 @@ const SupplierIncome = () => {
                                         <td className="p-4 font-mono text-slate-400">#{item.customId ?? '-'}</td>
                                         <td className="p-4 text-slate-800">{item.name}</td>
                                         
-                                        {/* INPUT: MIQDOR */}
                                         <td className="p-4">
                                             <div className="flex items-center gap-2">
                                                 <input 
@@ -439,7 +428,6 @@ const SupplierIncome = () => {
                                             </div>
                                         </td>
                                         
-                                        {/* INPUT: NARX */}
                                         <td className="p-4">
                                             <input 
                                                 type="number" min="0" step="0.01"
@@ -450,7 +438,6 @@ const SupplierIncome = () => {
                                             />
                                         </td>
                                         
-                                        {/* JAMI SUMMA (Avtomatik) */}
                                         <td className="p-4 text-right">
                                             <span className="text-lg font-black text-emerald-500">{(Number(item.totalSum) || 0).toLocaleString()}</span>
                                         </td>
@@ -468,7 +455,6 @@ const SupplierIncome = () => {
                 )}
              </div>
         )}
-
       </div>
     </div>
   );
