@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Filter, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Search, Filter, Image as ImageIcon, Loader2, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
@@ -30,7 +30,7 @@ const Discounts = () => {
       'Authorization': `Bearer ${token}`
   }), [token]);
 
-  // --- BAZADAN CHEGIRMALARNI YUKLASH ---
+  // --- BAZADAN SAVDOLARNI YUKLASH VA CHEGIRMALARNI SARALASH ---
   const fetchDiscounts = useCallback(async (signal = undefined) => {
       if (!token) {
           toast.error("Tizimga kirish tokeni topilmadi!");
@@ -40,8 +40,8 @@ const Discounts = () => {
 
       try {
           setLoading(true);
-          // 🚨 BACKEND ENDPOINT: Agar backendda endpoint nomi boshqacha bo'lsa shuni o'zgartirasiz
-          const res = await fetch(`${API_URL}/api/discounts`, { 
+          // 🚨 ENDPOINT O'ZGARDI: Barcha Naqd Savdolarni chaqiramiz
+          const res = await fetch(`${API_URL}/api/cash-sales`, { 
               headers: getAuthHeaders(),
               signal
           });
@@ -49,15 +49,41 @@ const Discounts = () => {
           if (res.ok) {
               const data = await parseJsonSafe(res);
               if (Array.isArray(data)) {
-                  setDiscounts(data);
+                  // Faqatgina chegirmasi 0 dan katta bo'lganlarini saralab olamiz
+                  const discountedSales = data
+                      .filter(sale => Number(sale.discount) > 0)
+                      .map(sale => {
+                          // Savdodagi barcha tovarlar nomini vergul bilan birlashtiramiz
+                          const productNames = Array.isArray(sale.items) && sale.items.length > 0 
+                              ? sale.items.map(i => i.name).join(', ') 
+                              : 'Noma\'lum tovar';
+                          
+                          // Savdodagi barcha tovarlar sonini qo'shamiz
+                          const totalQty = Array.isArray(sale.items) 
+                              ? sale.items.reduce((sum, i) => sum + (Number(i.qty) || 1), 0) 
+                              : 1;
+
+                          return {
+                              id: sale.id, // Aslida bu yerda chegirma ID si bo'lishi mumkin, hozircha savdo ID sini beramiz
+                              saleId: sale.id,
+                              date: sale.createdAt || sale.date,
+                              productName: productNames,
+                              qty: totalQty,
+                              salePrice: Number(sale.totalAmount), // Chegirmasiz jami narx
+                              discountAmount: Number(sale.discount),
+                              userName: sale.userName || sale.staff?.fullName || 'Noma\'lum xodim',
+                              note: sale.note || 'Naqd savdo'
+                          };
+                      });
+
+                  setDiscounts(discountedSales);
               } else {
                   setDiscounts([]);
-                  // Agar bo'sh kelsa xato emas, prosto hali chegirma yo'q degani
               }
           } else {
               const errText = await res.text();
               console.error('Discounts fetch error:', res.status, errText);
-              toast.error(`Chegirmalarni yuklab bo'lmadi (${res.status})`);
+              toast.error(`Ma'lumotlarni yuklab bo'lmadi (${res.status})`);
           }
       } catch (error) {
           if (error.name !== 'AbortError') {
@@ -94,7 +120,9 @@ const Discounts = () => {
 
   return (
     <div className="space-y-6 p-6 bg-slate-50 min-h-screen animate-in fade-in duration-300">
-      <h1 className="text-2xl font-black text-slate-800 tracking-tight">Berilgan chegirmalar</h1>
+      <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+          <Tag className="text-amber-500" /> Berilgan chegirmalar
+      </h1>
       
       {/* TEPADAGI QIDIRUV VA FILTR PANELI */}
       <div className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
@@ -102,7 +130,7 @@ const Discounts = () => {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
             <input 
                 type="text" 
-                placeholder="ID, Tovar nomi, yoki xodim ismi bo'yicha qidirish..." 
+                placeholder="Savdo ID, Tovar nomi, yoki xodim ismi bo'yicha qidirish..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700" 
@@ -119,58 +147,54 @@ const Discounts = () => {
             <table className="w-full text-left whitespace-nowrap">
             <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10 border-b border-slate-100">
                 <tr>
-                <th className="p-5">ID</th>
                 <th className="p-5 text-center">Savdo ID</th>
                 <th className="p-5">Sanasi</th>
-                <th className="p-5">Tovar nomi</th>
-                {/* TASHKILOT NOMI OLIB TASHALNDI */}
+                <th className="p-5 min-w-[250px]">Tovar nomi (Savat)</th>
                 <th className="p-5 text-center">Miqdori</th>
                 <th className="p-5 text-right">Sotish narxi</th>
-                <th className="p-5 text-right text-amber-600">Chegirma</th>
+                <th className="p-5 text-right text-amber-600">Chegirma summasi</th>
                 <th className="p-5">Chegirma qilgan xodim</th>
-                <th className="p-5">Izoh</th>
+                <th className="p-5">Izoh (Sabab)</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 text-sm font-bold text-slate-700">
                 {loading ? (
-                    <tr><td colSpan="9" className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-500" size={32}/></td></tr>
+                    <tr><td colSpan="8" className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-500" size={32}/></td></tr>
                 ) : filteredDiscounts.length === 0 ? (
                     <tr>
-                        <td colSpan="9" className="p-20 text-center text-slate-400">
-                            <Filter size={48} className="mx-auto mb-4 opacity-20"/>
-                            <p className="font-medium text-sm">Hech qanday chegirma ma'lumoti topilmadi.</p>
+                        <td colSpan="8" className="p-20 text-center text-slate-400">
+                            <Tag size={48} className="mx-auto mb-4 opacity-20"/>
+                            <p className="font-medium text-sm">Hozircha hech qanday chegirma qilinmagan.</p>
                         </td>
                     </tr>
                 ) : (
                     filteredDiscounts.map((item, index) => {
-                        // Agar foiz backenddan kelmasa, o'zimiz hisoblaymiz (Chegirma / (Narx * Soni) * 100)
-                        const itemTotalOriginalPrice = (Number(item.salePrice) || 0) * (Number(item.qty) || 1);
-                        const discountAmt = Number(item.discountAmount) || 0;
-                        const percent = itemTotalOriginalPrice > 0 ? ((discountAmt / itemTotalOriginalPrice) * 100).toFixed(2) : 0;
+                        const discountAmt = item.discountAmount;
+                        // Necha foiz chegirma qilinganini avtomat hisoblaymiz:
+                        const percent = item.salePrice > 0 ? ((discountAmt / item.salePrice) * 100).toFixed(2) : 0;
 
                         return (
                             <tr key={item.id || index} className="hover:bg-blue-50/30 transition-colors">
-                                <td className="p-5 text-slate-400 font-mono">#{item.id}</td>
                                 <td className="p-5 text-center font-black text-blue-600">#{item.saleId || '-'}</td>
-                                <td className="p-5 text-slate-500 font-medium">{formatDate(item.createdAt || item.date)}</td>
+                                <td className="p-5 text-slate-500 font-medium">{formatDate(item.date)}</td>
                                 <td className="p-5 flex items-center gap-3">
                                     <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 border border-slate-100 shrink-0">
                                         <ImageIcon size={18}/>
                                     </div>
-                                    <span className="truncate w-48 text-slate-800" title={item.productName || item.product}>{item.productName || item.product || 'Noma\'lum tovar'}</span>
+                                    <span className="truncate w-56 text-slate-800" title={item.productName}>{item.productName}</span>
                                 </td>
-                                <td className="p-5 text-center bg-slate-50/50">{Number(item.qty || 1)} dona</td>
+                                <td className="p-5 text-center bg-slate-50/50">{item.qty} dona</td>
                                 <td className="p-5 text-right font-black text-slate-800">
-                                    {Number(item.salePrice || 0).toLocaleString()} <span className="text-[10px] text-slate-400 font-bold">UZS</span>
+                                    {item.salePrice.toLocaleString()} <span className="text-[10px] text-slate-400 font-bold">UZS</span>
                                 </td>
                                 <td className="p-5 text-right">
                                     <div className="text-amber-600 font-black">{discountAmt.toLocaleString()} <span className="text-[10px]">UZS</span></div>
                                     <div className="text-[10px] text-amber-500 bg-amber-50 px-2 py-0.5 rounded inline-block mt-1">{percent}%</div>
                                 </td>
                                 <td className="p-5">
-                                    <span className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs tracking-wide">{item.userName || item.user || 'Noma\'lum xodim'}</span>
+                                    <span className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs tracking-wide">{item.userName}</span>
                                 </td>
-                                <td className="p-5 text-slate-500 font-medium max-w-[200px] truncate" title={item.note || 'Izohsiz'}>
+                                <td className="p-5 text-rose-500 font-bold max-w-[200px] truncate" title={item.note}>
                                     {item.note || '-'}
                                 </td>
                             </tr>
@@ -181,7 +205,7 @@ const Discounts = () => {
             </table>
         </div>
         
-        {/* PAGINATION QISMI (Hozircha statik dizayn, keyinchalik backend pagination qo'shish mumkin) */}
+        {/* PAGINATION QISMI */}
         {!loading && filteredDiscounts.length > 0 && (
             <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex justify-between items-center z-20 text-sm font-bold text-slate-500">
                 <div>
