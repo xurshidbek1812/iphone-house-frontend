@@ -43,6 +43,7 @@ const SupplierIncome = () => {
   const [inputSalePrice, setInputSalePrice] = useState(''); 
   const [inputCurrency, setInputCurrency] = useState('UZS');
 
+  // HELPER: Auth Headers
   const getAuthHeaders = useCallback(() => ({
       'Authorization': `Bearer ${token}`
   }), [token]);
@@ -52,6 +53,7 @@ const SupplierIncome = () => {
       'Content-Type': 'application/json'
   }), [getAuthHeaders]);
 
+  // --- 1. YUKLASH ---
   const fetchData = useCallback(async (signal = undefined) => {
       if (!token) return;
       try {
@@ -61,18 +63,26 @@ const SupplierIncome = () => {
               fetch(`${API_URL}/api/suppliers`, { headers: getAuthHeaders(), signal }) 
           ]);
 
+          // TOVARLAR
           if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
               const data = await parseJsonSafe(prodRes.value);
               if (Array.isArray(data)) setAllProducts(data);
           }
 
+          // 🚨 TA'MINOTCHILAR (Faqat Serverdan! SessionStorage olib tashlandi)
           if (suppRes.status === 'fulfilled' && suppRes.value.ok) {
               const data = await parseJsonSafe(suppRes.value);
-              if (Array.isArray(data)) setSuppliersList(data);
+              if (Array.isArray(data)) {
+                  setSuppliersList(data);
+              } else {
+                  setSuppliersList([]);
+                  toast.error("Ta'minotchilar ro'yxati noto'g'ri keldi");
+              }
           } else {
-             const savedSuppliers = JSON.parse(sessionStorage.getItem('suppliersList') || "[]");
-             setSuppliersList(savedSuppliers);
+              setSuppliersList([]);
+              toast.error("Ta'minotchilarni serverdan yuklab bo'lmadi!");
           }
+
       } catch (error) {
           console.error("Yuklashda xato", error);
       } finally {
@@ -87,6 +97,7 @@ const SupplierIncome = () => {
       return () => controller.abort();
   }, [fetchData]);
 
+  // --- NARXLARNI AVTOMAT HISOBLASH MANTIQI ---
   const getCostInUZS = (price, currency, rate) => {
       const numPrice = Number(price) || 0;
       const numRate = Number(rate) || 12500;
@@ -151,6 +162,7 @@ const SupplierIncome = () => {
     }
   };
 
+  // --- QO'SHISH VA O'CHIRISH ---
   const handleAddItem = () => {
     let productToAdd = selectedProduct;
     if (!productToAdd && searchTerm) {
@@ -191,6 +203,7 @@ const SupplierIncome = () => {
 
     setInvoiceItems(prev => [...prev, newItem]);
     
+    // Tozalash
     setSelectedProduct(null);
     setSearchTerm('');
     setInputCount('');
@@ -232,19 +245,18 @@ const SupplierIncome = () => {
     setIsSubmitting(true);
 
     try {
-      const finalExchangeRate = currencyRate;
+      const finalExchangeRate = Number(currencyRate);
 
-      // 🚨 BAZA KUTAYOTGAN ANIQ FORMAT (500 ERROR FIX)
       const payload = {
-        date: date, // <--- Baza so'rashi mumkin
-        supplier: cleanSupplier, // <--- supplierName emas, aynan supplier bo'lishi shart!
+        date: date, 
+        supplier: cleanSupplier, 
         invoiceNumber: invoiceNumber.trim() || Date.now().toString().slice(-6),
         exchangeRate: finalExchangeRate,
         totalSum: grandTotalUZS,
         status: "Jarayonda", 
         userName: currentUserName,
         items: invoiceItems.map(item => ({
-            id: item.id, // <--- productId emas, aynan id bo'lishi shart!
+            id: item.id, 
             customId: Number(item.customId) || 0,
             name: item.name,
             count: Number(item.count),
@@ -384,12 +396,12 @@ const SupplierIncome = () => {
                     <div className="flex flex-wrap md:flex-nowrap gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200 mt-2">
                         <div className="w-28">
                             <label className="text-[11px] font-bold text-amber-600 uppercase mb-1 block">Ustama (%)</label>
-                            <input type="number" disabled={isSubmitting} className="w-full p-3 border border-amber-200 bg-amber-50 rounded-xl outline-amber-500 font-bold text-amber-700 text-sm text-center disabled:opacity-50" placeholder="10" value={inputMarkup} onChange={e => handleMarkupChange(e.target.value)} />
+                            <input type="number" disabled={isSubmitting} className="w-full p-3 border border-amber-200 bg-white rounded-xl outline-amber-500 font-bold text-amber-700 text-sm text-center disabled:opacity-50" placeholder="10" value={inputMarkup} onChange={e => handleMarkupChange(e.target.value)} />
                         </div>
 
                         <div className="flex-1">
                             <label className="text-[11px] font-bold text-emerald-600 uppercase mb-1 block">Sotuv Narx <span className="text-gray-400 font-normal">(UZS)</span></label>
-                            <input type="number" disabled={isSubmitting} className="w-full p-3 border border-emerald-200 bg-emerald-50 rounded-xl outline-emerald-500 font-bold text-emerald-700 text-sm disabled:opacity-50" placeholder="Avtomat hisoblanadi" value={inputSalePrice} onChange={e => handleSalePriceChange(e.target.value)} />
+                            <input type="number" disabled={isSubmitting} className="w-full p-3 border border-emerald-200 bg-white rounded-xl outline-emerald-500 font-bold text-emerald-700 text-sm disabled:opacity-50" placeholder="Avtomat hisoblanadi" value={inputSalePrice} onChange={e => handleSalePriceChange(e.target.value)} />
                         </div>
 
                         <div className="w-40">
@@ -413,7 +425,7 @@ const SupplierIncome = () => {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col justify-center relative overflow-hidden">
                 <div className="absolute right-[-20px] top-[-20px] opacity-5"><DollarSign size={140}/></div>
                 <div className="text-slate-400 text-[11px] font-black uppercase tracking-widest mb-1">Jami Summasi</div>
-                <div className="text-3xl font-black text-emerald-500 relative z-10 truncate" title={`${grandTotalUZS.toLocaleString()} UZS`}>
+                <div className="text-3xl lg:text-4xl font-black text-emerald-500 relative z-10 truncate" title={`${grandTotalUZS.toLocaleString()} UZS`}>
                     {grandTotalUZS.toLocaleString()} <span className="text-base text-emerald-600/50 font-bold ml-1">UZS</span>
                 </div>
             </div>
@@ -421,8 +433,9 @@ const SupplierIncome = () => {
          {/* --- O'NG TOMON TUGADI --- */}
 
       </div> 
+      {/* 🚨 GRID CONTAINER SHU YERDA YOPILADI 🚨 */}
 
-      {/* 3. FAKTURA JADVALI */}
+      {/* 3. FAKTURA JADVALI (To'liq kenglikda) */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[300px] flex flex-col overflow-hidden">
          <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
              <h3 className="font-bold text-slate-700 flex items-center gap-2">
