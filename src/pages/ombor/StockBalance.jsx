@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Plus, X, Package } from 'lucide-react';
+import toast from 'react-hot-toast'; // Xabarlar uchun qo'shildi
 
 const StockBalance = () => {
   // --- STATE ---
@@ -8,15 +9,19 @@ const StockBalance = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Form State (For adding new product)
+  const token = sessionStorage.getItem('token');
+
+  // Form State (Backend kutayotgan to'g'ri maydonlar nomi bilan)
   const [formData, setFormData] = useState({
+    customId: '',    // Backend 'customId' (Shtrix kod yoki maxsus ID) kutadi
     name: '',
-    categoryId: '',
-    barcode: '',
-    measureUnit: 'dona',
-    costPrice: '',
-    sellPrice: '',
-    stockQuantity: ''
+    category: '',    // Backend 'category' string kutadi (ID emas)
+    unit: 'Dona',    // Backend 'unit' kutadi ('measureUnit' emas)
+    buyPrice: '',    // Backend 'buyPrice' kutadi
+    salePrice: '',   // Backend 'salePrice' kutadi
+    quantity: '',    // Backend 'quantity' kutadi
+    buyCurrency: 'USD',
+    saleCurrency: 'UZS'
   });
 
   // --- FETCH DATA ---
@@ -24,21 +29,22 @@ const StockBalance = () => {
     try {
       setLoading(true);
       // 1. Get Products
-      const prodRes = await fetch('https://iphone-house-api.onrender.com/api/products');
+      const prodRes = await fetch('https://iphone-house-api.onrender.com/api/products', {
+          headers: { 'Authorization': `Bearer ${token}` }
+      });
       const prodData = await prodRes.json();
-      setProducts(prodData);
+      if(prodRes.ok) setProducts(prodData);
 
       // 2. Get Categories (for the dropdown)
-      const catRes = await fetch('https://iphone-house-api.onrender.com/api/categories');
+      const catRes = await fetch('https://iphone-house-api.onrender.com/api/categories', {
+          headers: { 'Authorization': `Bearer ${token}` }
+      });
       const catData = await catRes.json();
-      setCategories(catData);
+      if(catRes.ok) setCategories(catData);
       
-      // Set default category if available
-      if (catData.length > 0) {
-        setFormData(prev => ({ ...prev, categoryId: catData[0].id }));
-      }
     } catch (error) {
       console.error("Data fetching error:", error);
+      toast.error("Ma'lumotlarni yuklashda xatolik!");
     } finally {
       setLoading(false);
     }
@@ -56,32 +62,59 @@ const StockBalance = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if(!formData.name || !formData.category || !formData.customId) {
+        return toast.error("Nomi, Kategoriya va Shtrix kod kiritilishi shart!");
+    }
+
     try {
+      // Backend aynan shu formatdagi payload ni qabul qiladi
+      const payload = {
+          customId: Number(formData.customId),
+          name: formData.name,
+          category: formData.category,
+          unit: formData.unit,
+          buyPrice: Number(formData.buyPrice),
+          salePrice: Number(formData.salePrice),
+          quantity: Number(formData.quantity) || 0,
+          buyCurrency: formData.buyCurrency,
+          saleCurrency: formData.saleCurrency
+      };
+
       const response = await fetch('https://iphone-house-api.onrender.com/api/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
       });
+
+      const data = await response.json();
 
       if (response.ok) {
         setIsModalOpen(false);
-        fetchData(); // Refresh the table
-        // Reset form
+        fetchData(); // Jadvalni yangilash
+        
+        // Formni tozalash
         setFormData({
+            customId: '',
             name: '',
-            categoryId: categories[0]?.id || '',
-            barcode: '',
-            measureUnit: 'dona',
-            costPrice: '',
-            sellPrice: '',
-            stockQuantity: ''
+            category: '',
+            unit: 'Dona',
+            buyPrice: '',
+            salePrice: '',
+            quantity: '',
+            buyCurrency: 'USD',
+            saleCurrency: 'UZS'
         });
-        alert("Mahsulot muvaffaqiyatli qo'shildi!");
+        toast.success("Mahsulot muvaffaqiyatli qo'shildi!");
       } else {
-        alert("Xatolik yuz berdi");
+        toast.error(data.error || "Xatolik yuz berdi");
       }
     } catch (error) {
       console.error("Submit error:", error);
+      toast.error("Server bilan aloqa yo'q!");
     }
   };
 
@@ -123,11 +156,11 @@ const StockBalance = () => {
             <thead className="bg-gray-50 text-gray-500 text-sm">
                 <tr>
                     <th className="p-4 font-medium">Mahsulot nomi</th>
-                    <th className="p-4 font-medium">Kategoriya</th>
-                    <th className="p-4 font-medium">Shtrix kod</th>
-                    <th className="p-4 font-medium">Kirim narxi</th>
-                    <th className="p-4 font-medium">Sotuv narxi</th>
-                    <th className="p-4 font-medium">Qoldiq</th>
+                    <th className="p-4 font-medium text-center">Kategoriya</th>
+                    <th className="p-4 font-medium text-center">Shtrix kod</th>
+                    <th className="p-4 font-medium text-right">Kirim narxi</th>
+                    <th className="p-4 font-medium text-right">Sotuv narxi</th>
+                    <th className="p-4 font-medium text-center">Qoldiq</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -146,16 +179,16 @@ const StockBalance = () => {
                     products.map((item) => (
                         <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                             <td className="p-4 font-medium text-gray-800">{item.name}</td>
-                            <td className="p-4 text-gray-600">
-                                <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs">
-                                    {item.category?.name || '-'}
+                            <td className="p-4 text-gray-600 text-center">
+                                <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider">
+                                    {item.category || '-'}
                                 </span>
                             </td>
-                            <td className="p-4 text-gray-500 font-mono text-sm">{item.barcode || '-'}</td>
-                            <td className="p-4 text-gray-600">{Number(item.costPrice).toLocaleString()} $</td>
-                            <td className="p-4 font-medium text-blue-600">{Number(item.sellPrice).toLocaleString()} UZS</td>
-                            <td className={`p-4 font-bold ${item.stockQuantity < 5 ? 'text-red-500' : 'text-green-600'}`}>
-                                {item.stockQuantity} {item.measureUnit}
+                            <td className="p-4 text-gray-500 font-mono text-sm text-center">#{item.customId || '-'}</td>
+                            <td className="p-4 text-gray-600 text-right">{Number(item.buyPrice).toLocaleString()} <span className="text-xs">{item.buyCurrency}</span></td>
+                            <td className="p-4 font-medium text-blue-600 text-right">{Number(item.salePrice).toLocaleString()} <span className="text-xs">{item.saleCurrency}</span></td>
+                            <td className={`p-4 font-bold text-center ${item.quantity < 5 ? 'text-red-500' : 'text-green-600'}`}>
+                                {item.quantity} <span className="text-xs font-normal text-gray-500">{item.unit}</span>
                             </td>
                         </tr>
                     ))
@@ -178,7 +211,7 @@ const StockBalance = () => {
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Mahsulot nomi</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Mahsulot nomi *</label>
                             <input 
                                 name="name" required
                                 value={formData.name} onChange={handleInputChange}
@@ -188,53 +221,66 @@ const StockBalance = () => {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Kategoriya</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Kategoriya *</label>
                             <select 
-                                name="categoryId" 
-                                value={formData.categoryId} onChange={handleInputChange}
+                                name="category" required
+                                value={formData.category} onChange={handleInputChange}
                                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-100 outline-none bg-white"
                             >
-                                {categories.map(cat => (
-                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                <option value="">Tanlang...</option>
+                                {categories.map((cat, i) => (
+                                    <option key={cat.id || i} value={cat.name}>{cat.name}</option>
                                 ))}
                             </select>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Shtrix kod (ixtiyoriy)</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Shtrix kod / ID *</label>
                             <input 
-                                name="barcode"
-                                value={formData.barcode} onChange={handleInputChange}
+                                type="number" name="customId" required
+                                value={formData.customId} onChange={handleInputChange}
                                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-100 outline-none" 
-                                placeholder="|||||||||||"
+                                placeholder="12345"
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Kirim narxi (USD)</label>
-                            <input 
-                                type="number" name="costPrice" required
-                                value={formData.costPrice} onChange={handleInputChange}
-                                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-100 outline-none" 
-                                placeholder="0.00"
-                            />
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Kirim narxi</label>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="number" name="buyPrice" required
+                                    value={formData.buyPrice} onChange={handleInputChange}
+                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-100 outline-none" 
+                                    placeholder="0"
+                                />
+                                <select name="buyCurrency" value={formData.buyCurrency} onChange={handleInputChange} className="border rounded-lg p-2 bg-gray-50 outline-none">
+                                    <option value="USD">USD</option>
+                                    <option value="UZS">UZS</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Sotuv narxi (UZS)</label>
-                            <input 
-                                type="number" name="sellPrice" required
-                                value={formData.sellPrice} onChange={handleInputChange}
-                                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-100 outline-none" 
-                                placeholder="0"
-                            />
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Sotuv narxi</label>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="number" name="salePrice" required
+                                    value={formData.salePrice} onChange={handleInputChange}
+                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-100 outline-none" 
+                                    placeholder="0"
+                                />
+                                <select name="saleCurrency" value={formData.saleCurrency} onChange={handleInputChange} className="border rounded-lg p-2 bg-gray-50 outline-none">
+                                    <option value="USD">USD</option>
+                                    <option value="UZS">UZS</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Boshlang'ich qoldiq</label>
                             <input 
-                                type="number" name="stockQuantity" required
-                                value={formData.stockQuantity} onChange={handleInputChange}
+                                type="number" name="quantity" required
+                                value={formData.quantity} onChange={handleInputChange}
                                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-100 outline-none" 
                                 placeholder="0"
                             />
@@ -243,14 +289,14 @@ const StockBalance = () => {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">O'lchov birligi</label>
                             <select 
-                                name="measureUnit"
-                                value={formData.measureUnit} onChange={handleInputChange}
+                                name="unit"
+                                value={formData.unit} onChange={handleInputChange}
                                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-100 outline-none bg-white"
                             >
-                                <option value="dona">Dona</option>
-                                <option value="kg">Kg</option>
-                                <option value="metr">Metr</option>
-                                <option value="litr">Litr</option>
+                                <option value="Dona">Dona</option>
+                                <option value="Kg">Kg</option>
+                                <option value="Metr">Metr</option>
+                                <option value="Litr">Litr</option>
                             </select>
                         </div>
                     </div>
