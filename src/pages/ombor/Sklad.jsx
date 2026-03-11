@@ -1,9 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Plus, Trash2, X, Package, Printer, Calculator as CalcIcon, Filter, Info, AlertTriangle, Layers, EyeOff, CheckCircle, Save, Edit2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, Plus, Trash2, X, Package, Printer, Calculator as CalcIcon, Filter, Info, AlertTriangle, Layers, EyeOff, CheckCircle, Save, Edit2, Loader2 } from 'lucide-react';
 import ReactDOMServer from 'react-dom/server';
 import QRCode from "react-qr-code";
 import Calculator from '../../components/Calculator';
 import toast from 'react-hot-toast';
+
+const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
+
+// HELPER: Xavfsiz JSON parsing
+const parseJsonSafe = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+};
 
 const Sklad = () => {
   const userRole = sessionStorage.getItem('userRole');
@@ -13,16 +24,21 @@ const Sklad = () => {
   const [categories, setCategories] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Yuklanish holatlari
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false); // Edit, Delete, Archive uchun
+
   // Modallar
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCalcOpen, setIsCalcOpen] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(false); // 🚨 Filtr modali uchun
+  const [isFilterOpen, setIsFilterOpen] = useState(false); 
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, productId: null });
   const [archiveModal, setArchiveModal] = useState({ isOpen: false, batchId: null }); 
   
-  // Tahrirlash modali uchun
+  // Tahrirlash modali
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editData, setEditData] = useState({
       id: null, name: '', category: '', unit: 'Dona', buyPrice: '', salePrice: ''
@@ -31,7 +47,7 @@ const Sklad = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const token = sessionStorage.getItem('token');
 
-  // QR Print uchun state-lar
+  // QR Print
   const [printProduct, setPrintProduct] = useState(null); 
   const [selectedBatch, setSelectedBatch] = useState(null); 
 
@@ -42,104 +58,147 @@ const Sklad = () => {
     name: '', category: '', buyPrice: '', salePrice: '', quantity: '0', unit: 'Dona', buyCurrency: 'USD', saleCurrency: 'UZS'
   });
 
-  // 🚨 FILTR QIYMATLARI
+  // FILTR QIYMATLARI
   const [filterValues, setFilterValues] = useState({
     id: '', category: '', buyPriceFrom: '', buyPriceTo: '', salePriceFrom: '', salePriceTo: '', stockStatus: ''
   });
 
-  // API YUKLASH
-  const fetchProducts = async () => {
-    try {
-      const res = await fetch('https://iphone-house-api.onrender.com/api/products', {
-          headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error("Server xatosi");
-      const data = await res.json();
-      setProducts(data);
-    } catch (err) { console.error("Xatolik:", err); }
-  };
+  // HELPER: Auth Headers
+  const getAuthHeaders = useCallback(() => ({
+      'Authorization': `Bearer ${token}`
+  }), [token]);
+
+  const getJsonAuthHeaders = useCallback(() => ({
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+  }), [getAuthHeaders]);
+
+  // --- API YUKLASH (Xavfsiz) ---
+  const fetchData = useCallback(async (signal = undefined) => {
+      if (!token) return;
+      try {
+          setLoading(true);
+          const [prodRes, catRes] = await Promise.allSettled([
+              fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal }),
+              fetch(`${API_URL}/api/categories`, { headers: getAuthHeaders(), signal })
+          ]);
+
+          if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
+              const data = await parseJsonSafe(prodRes.value);
+              if (Array.isArray(data)) setProducts(data);
+              else {
+                  setProducts([]);
+                  toast.error("Mahsulotlar formati noto'g'ri keldi");
+              }
+          }
+
+          if (catRes.status === 'fulfilled' && catRes.value.ok) {
+              const data = await parseJsonSafe(catRes.value);
+              if (Array.isArray(data)) {
+                  setCategories(data);
+                  sessionStorage.setItem('categoryList', JSON.stringify(data));
+              } else {
+                  setCategories([]);
+              }
+          } else {
+              try {
+                  const savedCats = JSON.parse(sessionStorage.getItem('categoryList') || "[]");
+                  setCategories(savedCats);
+              } catch (e) { setCategories([]); }
+          }
+      } catch (error) {
+          if (error.name !== 'AbortError') toast.error("Tarmoq xatosi yuz berdi!");
+      } finally {
+          if (!signal?.aborted) setLoading(false);
+      }
+  }, [token, getAuthHeaders]);
 
   useEffect(() => { 
-      fetchProducts(); 
-      
-      const fetchCategories = async () => {
-          try {
-              const res = await fetch('https://iphone-house-api.onrender.com/api/categories', {
-                  headers: { 'Authorization': `Bearer ${token}` }
-              });
-              if (res.ok) {
-                  const data = await res.json();
-                  const safeData = Array.isArray(data) ? data : []; 
-                  setCategories(safeData); 
-                  sessionStorage.setItem('categoryList', JSON.stringify(safeData)); 
-              }
-          } catch (err) {
-              console.error("Kategoriyalarni yuklashda xatolik:", err);
-          }
-      };
-      
-      fetchCategories();
-  }, [token]);
+      const controller = new AbortController();
+      fetchData(controller.signal);
+      return () => controller.abort();
+  }, [fetchData]);
 
+  // --- TOVAR QO'SHISH ---
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.category) return toast.error("Nomi va kategoriyasini kiriting!");
+    if (!formData.name.trim() || !formData.category) return toast.error("Nomi va kategoriyasini kiriting!");
+    
+    // Qoldiq himoyasi (Dona bo'lsa butun son)
+    const qoldiq = Number(formData.quantity) || 0;
+    if (formData.unit === 'Dona' && !Number.isInteger(qoldiq)) {
+        return toast.error("Dona o'lchov birligi uchun qoldiq butun son bo'lishi shart!");
+    }
+
     const avtomatikId = Math.floor(10000 + Math.random() * 90000).toString();
     
-    const newProduct = {
-        id: Date.now().toString(), 
+    const payload = {
+        id: Date.now().toString(), // Agar bazaga kerak bo'lsa
         customId: avtomatikId, 
-        name: formData.name,
+        name: formData.name.trim(),
         category: formData.category, 
-        quantity: Number(formData.quantity), 
-        buyPrice: Number(formData.buyPrice),
-        salePrice: Number(formData.salePrice), 
+        quantity: qoldiq, 
+        buyPrice: Number(formData.buyPrice) || 0,
+        salePrice: Number(formData.salePrice) || 0, 
         unit: formData.unit, 
         buyCurrency: formData.buyCurrency, 
         saleCurrency: formData.saleCurrency
     };
 
+    setIsSubmitting(true);
     try {
-      const res = await fetch('https://iphone-house-api.onrender.com/api/products', {
+      const res = await fetch(`${API_URL}/api/products`, {
         method: 'POST', 
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` 
-        }, 
-        body: JSON.stringify(newProduct)
+        headers: getJsonAuthHeaders(), 
+        body: JSON.stringify(payload)
       });
       
-      const responseData = await res.json();
+      const data = await parseJsonSafe(res);
 
       if (res.ok) {
         setIsModalOpen(false); 
         setIsSuccessOpen(true); 
-        fetchProducts(); 
+        await fetchData(); 
+        
         setTimeout(() => {
           setIsSuccessOpen(false); 
           setFormData({ name: '', category: '', buyPrice: '', salePrice: '', quantity: '0', unit: 'Dona', buyCurrency: 'USD', saleCurrency: 'UZS' });
         }, 2500);
       } else {
-        toast.error(responseData.error || "Saqlashda xatolik yuz berdi");
+        toast.error(data?.error || `Saqlashda xatolik (${res.status})`);
       }
     } catch (err) { 
-        console.error(err); 
         toast.error("Server bilan aloqa yo'q!"); 
+    } finally {
+        setIsSubmitting(false);
     }
   };
   
+  // --- O'CHIRISH ---
   const executeDelete = async (id) => {
+      setIsActionLoading(true);
       try {
-          const res = await fetch(`https://iphone-house-api.onrender.com/api/products/${id}`, { 
+          const res = await fetch(`${API_URL}/api/products/${id}`, { 
               method: 'DELETE',
-              headers: { 'Authorization': `Bearer ${token}` }
+              headers: getAuthHeaders()
           });
-          if (res.ok) { toast.success("Tovar o'chirildi!"); fetchProducts(); } 
-          else { toast.error("O'chirib bo'lmaydi!"); }
-      } catch (err) { toast.error("Xatolik!"); } 
-      finally { setDeleteModal({ isOpen: false, productId: null }); }
+
+          if (res.ok) { 
+              toast.success("Tovar o'chirildi!"); 
+              await fetchData(); 
+          } else { 
+              const data = await parseJsonSafe(res);
+              toast.error(data?.error || "O'chirib bo'lmaydi! (Bog'langan ma'lumotlar mavjud)"); 
+          }
+      } catch (err) { 
+          toast.error("Tarmoq xatosi!"); 
+      } finally { 
+          setIsActionLoading(false);
+          setDeleteModal({ isOpen: false, productId: null }); 
+      }
   };
 
+  // --- TAHRIRLASH ---
   const handleEditClick = (product) => {
       setEditData({
           id: product.id,
@@ -154,49 +213,65 @@ const Sklad = () => {
 
   const handleUpdateProduct = async (e) => {
       e.preventDefault();
+      
+      if (!editData.name.trim() || !editData.category) return toast.error("Nomi va Kategoriyasi shart!");
+
+      setIsActionLoading(true);
       try {
-          const res = await fetch(`https://iphone-house-api.onrender.com/api/products/${editData.id}`, {
+          const payload = {
+              ...editData,
+              buyPrice: Number(editData.buyPrice) || 0,
+              salePrice: Number(editData.salePrice) || 0
+          };
+
+          const res = await fetch(`${API_URL}/api/products/${editData.id}`, {
               method: 'PUT',
-              headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}` 
-              },
-              body: JSON.stringify(editData)
+              headers: getJsonAuthHeaders(),
+              body: JSON.stringify(payload)
           });
+
+          const data = await parseJsonSafe(res);
 
           if (res.ok) {
               toast.success("Tovar muvaffaqiyatli tahrirlandi!");
               setIsEditModalOpen(false);
-              fetchProducts(); 
+              await fetchData(); 
           } else {
-              toast.error("Tahrirlashda xatolik yuz berdi");
+              toast.error(data?.error || `Tahrirlashda xatolik (${res.status})`);
           }
       } catch (error) {
           toast.error("Server bilan aloqa yo'q");
+      } finally {
+          setIsActionLoading(false);
       }
   };
 
+  // --- BATCH (PARTIYA) ARXIVLASH ---
   const executeArchiveBatch = async () => {
       const batchId = archiveModal.batchId;
+      setIsActionLoading(true);
       try {
-          const res = await fetch(`https://iphone-house-api.onrender.com/api/products/batches/${batchId}/archive`, {
+          const res = await fetch(`${API_URL}/api/products/batches/${batchId}/archive`, {
               method: 'PATCH',
-              headers: { 'Authorization': `Bearer ${token}` }
+              headers: getAuthHeaders()
           });
+
           if (res.ok) {
               toast.success("Partiya muvaffaqiyatli yashirildi!");
-              fetchProducts(); 
+              await fetchData(); 
               
               setSelectedProduct(prev => {
                   if(!prev) return prev;
                   return { ...prev, batches: prev.batches.map(b => b.id === batchId ? { ...b, isArchived: true } : b) };
               });
           } else {
-              toast.error("Xatolik yuz berdi");
+              const data = await parseJsonSafe(res);
+              toast.error(data?.error || "Xatolik yuz berdi");
           }
       } catch (error) {
           toast.error("Server bilan aloqa yo'q");
       } finally {
+          setIsActionLoading(false);
           setArchiveModal({ isOpen: false, batchId: null }); 
       }
   };
@@ -212,7 +287,13 @@ const Sklad = () => {
 
   const handleFinalPrint = () => {
     if (!printProduct || !selectedBatch) return toast.error("Partiyani tanlang!");
+    
+    // Popup Blocker himoyasi
     const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        return toast.error("Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!");
+    }
+
     const qrValue = `ID:${printProduct.customId}|BATCH:${selectedBatch.id}|NAME:${printProduct.name}`;
     const qrCodeSvg = ReactDOMServer.renderToString(<QRCode value={qrValue} size={80} level="H"/>);
     const bgUrl = `data:image/svg+xml;base64,${btoa(qrCodeSvg)}`;
@@ -238,56 +319,61 @@ const Sklad = () => {
     setPrintProduct(null);
   };
 
-  // 🚨 HIMOYA QILINGAN VA MUKAMMAL FILTRLASh MANTIQI
-  const filteredProducts = products.filter(p => {
-    // 1. Qidiruv paneli (Nomi yoki ID)
-    const search = searchTerm.toLowerCase();
-    const matchesSearch = p.name.toLowerCase().includes(search) || (p.customId && p.customId.toString().includes(search));
-    
-    // 2. Tovar ID bo'yicha aniq filtr
-    const matchesId = filterValues.id ? p.customId.toString().includes(filterValues.id) : true;
-    
-    // 3. Kategoriya filtri
-    const matchesCategory = filterValues.category ? p.category === filterValues.category : true;
-    
-    // 4. Qoldiq holati filtri
-    let matchesStock = true;
-    if (filterValues.stockStatus === 'available') matchesStock = p.quantity > 0;
-    if (filterValues.stockStatus === 'unavailable') matchesStock = p.quantity === 0;
+  // --- FILTRLASH MANTIQI ---
+  const filteredProducts = useMemo(() => {
+      return products.filter(p => {
+          const search = searchTerm.trim().toLowerCase();
+          const matchesSearch = (p.name || '').toLowerCase().includes(search) || 
+                                (p.customId != null && String(p.customId).includes(search));
+          
+          const matchesId = filterValues.id ? String(p.customId || '').includes(filterValues.id) : true;
+          const matchesCategory = filterValues.category ? p.category === filterValues.category : true;
+          
+          let matchesStock = true;
+          if (filterValues.stockStatus === 'available') matchesStock = Number(p.quantity || 0) > 0;
+          if (filterValues.stockStatus === 'unavailable') matchesStock = Number(p.quantity || 0) <= 0;
 
-    // 5. Kirim narxi oraliqlari
-    const buyFrom = filterValues.buyPriceFrom ? Number(filterValues.buyPriceFrom) : null;
-    const buyTo = filterValues.buyPriceTo ? Number(filterValues.buyPriceTo) : null;
-    let matchesBuyPrice = true;
-    if (buyFrom !== null && Number(p.buyPrice) < buyFrom) matchesBuyPrice = false;
-    if (buyTo !== null && Number(p.buyPrice) > buyTo) matchesBuyPrice = false;
+          const buyFrom = filterValues.buyPriceFrom ? Number(filterValues.buyPriceFrom) : null;
+          const buyTo = filterValues.buyPriceTo ? Number(filterValues.buyPriceTo) : null;
+          let matchesBuyPrice = true;
+          if (buyFrom !== null && Number(p.buyPrice || 0) < buyFrom) matchesBuyPrice = false;
+          if (buyTo !== null && Number(p.buyPrice || 0) > buyTo) matchesBuyPrice = false;
 
-    // 6. Sotuv narxi oraliqlari
-    const saleFrom = filterValues.salePriceFrom ? Number(filterValues.salePriceFrom) : null;
-    const saleTo = filterValues.salePriceTo ? Number(filterValues.salePriceTo) : null;
-    let matchesSalePrice = true;
-    if (saleFrom !== null && Number(p.salePrice) < saleFrom) matchesSalePrice = false;
-    if (saleTo !== null && Number(p.salePrice) > saleTo) matchesSalePrice = false;
+          const saleFrom = filterValues.salePriceFrom ? Number(filterValues.salePriceFrom) : null;
+          const saleTo = filterValues.salePriceTo ? Number(filterValues.salePriceTo) : null;
+          let matchesSalePrice = true;
+          if (saleFrom !== null && Number(p.salePrice || 0) < saleFrom) matchesSalePrice = false;
+          if (saleTo !== null && Number(p.salePrice || 0) > saleTo) matchesSalePrice = false;
 
-    return matchesSearch && matchesId && matchesCategory && matchesStock && matchesBuyPrice && matchesSalePrice;
-  });
+          return matchesSearch && matchesId && matchesCategory && matchesStock && matchesBuyPrice && matchesSalePrice;
+      });
+  }, [products, searchTerm, filterValues]);
 
   return (
-    <div className="p-6 relative min-h-screen bg-gray-50/50">
+    <div className="p-6 relative min-h-screen bg-gray-50/50 animate-in fade-in duration-300">
+      
+      {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-black text-slate-800 tracking-tight">Tovarlar qoldig'i</h1>
         <div className="flex items-center gap-4">
             <div className="bg-white px-5 py-2.5 rounded-xl shadow-sm border border-slate-100 text-sm font-bold text-slate-500">Jami: <span className="text-blue-600">{products.length}</span> ta</div>
-            {isDirector && (<button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all"><Plus size={20} strokeWidth={3}/> Tovar qo'shish</button>)}
+            {isDirector && (
+                <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all">
+                    <Plus size={20} strokeWidth={3}/> Tovar qo'shish
+                </button>
+            )}
         </div>
       </div>
 
+      {/* SEARCH & FILTER TUGMASI */}
       <div className="flex gap-3 mb-6">
         <div className="flex-1 bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
             <Search className="text-slate-400" size={20} />
             <input type="text" placeholder="Nomi yoki ID bo'yicha qidirish..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full outline-none text-slate-700 font-medium" />
         </div>
-        <button onClick={() => setIsFilterOpen(true)} className={`px-6 rounded-2xl border font-bold flex items-center gap-2 transition-all ${Object.values(filterValues).some(v => v !== '') ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}><Filter size={20} /> Filtr</button>
+        <button onClick={() => setIsFilterOpen(true)} className={`px-6 rounded-2xl border font-bold flex items-center gap-2 transition-all ${Object.values(filterValues).some(v => v !== '') ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+            <Filter size={20} /> Filtr
+        </button>
       </div>
 
       {/* --- ASOSIY JADVAL --- */}
@@ -306,10 +392,12 @@ const Sklad = () => {
                 </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 text-sm font-bold">
-                {filteredProducts.length > 0 ? (
+                {loading ? (
+                    <tr><td colSpan={isDirector ? "8" : "7"} className="p-20 text-center text-slate-400"><Loader2 className="animate-spin mx-auto" size={32}/></td></tr>
+                ) : filteredProducts.length > 0 ? (
                     filteredProducts.map((p) => (
                         <tr key={p.id} className="hover:bg-blue-50/30 transition-colors group">
-                            <td className="p-5 font-mono text-blue-600">#{p.customId}</td>
+                            <td className="p-5 font-mono text-blue-600">#{p.customId ?? '-'}</td>
                             <td className="p-5 text-slate-800">{p.name}</td>
                             <td className="p-5 text-center text-slate-500 font-medium">
                                 <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-[11px] uppercase tracking-wider">
@@ -319,14 +407,14 @@ const Sklad = () => {
                             <td className="p-5 text-center text-slate-400">{p.unit}</td>
                             {isDirector && (
                                 <td className="p-5 text-right text-slate-600 bg-amber-50/20">
-                                    {Number(p.buyPrice).toLocaleString()} <span className="text-[10px] text-slate-400">{p.buyCurrency}</span>
+                                    {Number(p.buyPrice || 0).toLocaleString()} <span className="text-[10px] text-slate-400">{p.buyCurrency}</span>
                                 </td>
                             )}
                             <td className="p-5 text-right text-emerald-600">
-                                {Number(p.salePrice).toLocaleString()} <span className="text-[10px] text-emerald-400">{p.saleCurrency}</span>
+                                {Number(p.salePrice || 0).toLocaleString()} <span className="text-[10px] text-emerald-400">{p.saleCurrency}</span>
                             </td>
-                            <td className={`p-5 text-center ${p.quantity === 0 ? 'text-rose-500' : 'text-slate-700'}`}>
-                                <span className={`px-3 py-1 rounded-lg ${p.quantity === 0 ? 'bg-rose-50' : 'bg-slate-100'}`}>{p.quantity}</span>
+                            <td className={`p-5 text-center ${Number(p.quantity || 0) <= 0 ? 'text-rose-500' : 'text-slate-700'}`}>
+                                <span className={`px-3 py-1 rounded-lg ${Number(p.quantity || 0) <= 0 ? 'bg-rose-50' : 'bg-slate-100'}`}>{Number(p.quantity || 0)}</span>
                             </td>
                             <td className="p-5">
                                 <div className="flex justify-center gap-1.5">
@@ -334,8 +422,8 @@ const Sklad = () => {
                                     <button onClick={() => handleOpenPrintModal(p)} className="p-2 text-slate-500 bg-slate-100 hover:bg-slate-800 hover:text-white rounded-xl transition-all" title="QR Kod chiqarish"><Printer size={16}/></button>
                                     {isDirector && (
                                         <>
-                                            <button onClick={() => handleEditClick(p)} className="p-2 text-amber-500 bg-amber-50 hover:bg-amber-500 hover:text-white rounded-xl transition-all" title="Tahrirlash"><Edit2 size={16}/></button>
-                                            <button onClick={() => setDeleteModal({ isOpen: true, productId: p.id })} className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-500 hover:text-white rounded-xl transition-all" title="O'chirish"><Trash2 size={16}/></button>
+                                            <button disabled={isActionLoading} onClick={() => handleEditClick(p)} className="p-2 text-amber-500 bg-amber-50 hover:bg-amber-500 hover:text-white rounded-xl transition-all disabled:opacity-50" title="Tahrirlash"><Edit2 size={16}/></button>
+                                            <button disabled={isActionLoading} onClick={() => setDeleteModal({ isOpen: true, productId: p.id })} className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-500 hover:text-white rounded-xl transition-all disabled:opacity-50" title="O'chirish"><Trash2 size={16}/></button>
                                         </>
                                     )}
                                     <button onClick={() => { setSelectedProduct(p); setIsDetailsOpen(true); }} className="p-2 text-indigo-500 bg-indigo-50 hover:bg-indigo-500 hover:text-white rounded-xl transition-all" title="Batafsil ma'lumot"><Info size={16}/></button>
@@ -344,15 +432,15 @@ const Sklad = () => {
                         </tr>
                     ))
                 ) : (
-                    <tr><td colSpan={isDirector ? "8" : "7"} className="p-20 text-center text-slate-300 font-bold">Mahsulot topilmadi</td></tr>
+                    <tr><td colSpan={isDirector ? "8" : "7"} className="p-20 text-center text-slate-300 font-bold uppercase tracking-widest text-sm">Mahsulot topilmadi</td></tr>
                 )}
             </tbody>
         </table>
       </div>
 
-      {/* 🚨 YANGI: MUKAMMAL FILTR MODALI (SLIDE-OVER KO'RINISHIDA) */}
+      {/* 🚨 FILTR MODALI (SLIDE-OVER) */}
       {isFilterOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[200] flex justify-end">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[200] flex justify-end" onClick={(e) => {if(e.target===e.currentTarget) setIsFilterOpen(false)}}>
             <div className="bg-white w-full max-w-[450px] h-full shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col">
                 <div className="flex justify-between items-center p-6 border-b border-slate-100">
                     <h2 className="text-xl font-black text-slate-800">Ma'lumotlarni filtrlash</h2>
@@ -362,7 +450,7 @@ const Sklad = () => {
                 <div className="p-6 flex-1 overflow-y-auto space-y-6 custom-scrollbar">
                     {/* Tovar ID */}
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tovar ID</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tovar ID (Kod)</label>
                         <input 
                             type="text" 
                             value={filterValues.id} 
@@ -466,11 +554,9 @@ const Sklad = () => {
         </div>
       )}
 
-      {/* Qolgan Modallar: Details, Print, Edit, Delete... (Asl kod bilan bir xil, qisqartirildi) */}
-      
       {/* --- BATAFSIL (KIRIM TARIXI) MODALI --- */}
       {isDetailsOpen && selectedProduct && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[999] p-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[999] p-4" onClick={(e) => {if(e.target===e.currentTarget) setIsDetailsOpen(false)}}>
             <div className="bg-white w-full max-w-3xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95">
                 <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center">
                     <div>
@@ -483,18 +569,18 @@ const Sklad = () => {
                     <h3 className="font-black text-slate-700 mb-4 uppercase text-xs tracking-widest">Aktiv Kirim Partiyalari:</h3>
                     <div className="border-2 border-slate-100 rounded-2xl overflow-hidden">
                         <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase">
+                            <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase sticky top-0">
                                 <tr>
                                     <th className="p-4">Sana</th>
                                     <th className="p-4">Ta'minotchi / Faktura</th>
                                     <th className="p-4 text-center">Boshlang'ich</th>
                                     <th className="p-4 text-center">Qoldiq</th>
                                     {isDirector && <th className="p-4 text-right text-amber-600">Kirim Narxi</th>}
-                                    {isDirector && <th className="p-4 text-right">Amal</th>}
+                                    {isDirector && <th className="p-4 text-center">Amal</th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50 font-bold">
-                                {selectedProduct.batches && selectedProduct.batches.filter(b => !b.isArchived).length > 0 ? (
+                                {Array.isArray(selectedProduct.batches) && selectedProduct.batches.filter(b => !b.isArchived).length > 0 ? (
                                     selectedProduct.batches.filter(b => !b.isArchived).map((batch) => (
                                         <tr key={batch.id} className="hover:bg-slate-50/50">
                                             <td className="p-4 text-slate-500">{new Date(batch.createdAt).toLocaleDateString('uz-UZ')}</td>
@@ -509,15 +595,16 @@ const Sklad = () => {
                                             
                                             {isDirector && (
                                                 <td className="p-4 text-right text-amber-700 bg-amber-50/20">
-                                                    {Number(batch.buyPrice).toLocaleString()} <span className="text-[10px] text-amber-400">{batch.buyCurrency || 'UZS'}</span>
+                                                    {Number(batch.buyPrice || 0).toLocaleString()} <span className="text-[10px] text-amber-400">{batch.buyCurrency || 'UZS'}</span>
                                                 </td>
                                             )}
                                             
                                             {isDirector && (
-                                              <td className="p-4 text-right">
+                                              <td className="p-4 text-center">
                                                   <button 
+                                                      disabled={isActionLoading}
                                                       onClick={() => setArchiveModal({ isOpen: true, batchId: batch.id })} 
-                                                      className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors"
+                                                      className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors disabled:opacity-50"
                                                       title="Ro'yxatdan yashirish"
                                                   >
                                                       <EyeOff size={18}/>
@@ -533,14 +620,16 @@ const Sklad = () => {
                         </table>
                     </div>
                 </div>
-                <div className="p-6 border-t border-slate-100 bg-slate-50/50"><button onClick={() => setIsDetailsOpen(false)} className="w-full py-4 bg-white border-2 border-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-100 transition-all">YOPISH</button></div>
+                <div className="p-6 border-t border-slate-100 bg-slate-50/50">
+                    <button onClick={() => setIsDetailsOpen(false)} className="w-full py-4 bg-white border-2 border-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-100 transition-all">YOPISH</button>
+                </div>
             </div>
         </div>
       )}
 
       {/* --- QR PRINT MODAL --- */}
       {printProduct && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4" onClick={(e) => {if(e.target===e.currentTarget) setPrintProduct(null)}}>
             <div className="bg-white w-full max-w-lg rounded-[32px] shadow-2xl p-8 animate-in zoom-in-95">
                 <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-5">
                     <div>
@@ -551,7 +640,7 @@ const Sklad = () => {
                 </div>
 
                 <div className="space-y-3 max-h-80 overflow-y-auto mb-8 pr-2 custom-scrollbar">
-                    {printProduct.batches && printProduct.batches.filter(b => b.quantity > 0 && !b.isArchived).length > 0 ? (
+                    {Array.isArray(printProduct.batches) && printProduct.batches.filter(b => b.quantity > 0 && !b.isArchived).length > 0 ? (
                         printProduct.batches.filter(b => b.quantity > 0 && !b.isArchived).map(batch => (
                             <div 
                                 key={batch.id} 
@@ -566,7 +655,7 @@ const Sklad = () => {
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-lg font-black text-blue-600">{batch.quantity} {printProduct.unit}</div>
+                                    <div className="text-lg font-black text-blue-600">{batch.quantity} <span className="text-xs">{printProduct.unit}</span></div>
                                     <div className="text-[10px] text-slate-300 font-black uppercase tracking-tighter">Hozir bor</div>
                                 </div>
                             </div>
@@ -574,7 +663,7 @@ const Sklad = () => {
                     ) : (
                         <div className="py-12 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
                             <AlertTriangle className="mx-auto text-amber-400 mb-2" size={32}/>
-                            <p className="text-slate-400 font-bold text-sm">Sotuvda aktiv partiyalar yo'q!</p>
+                            <p className="text-slate-400 font-bold text-sm">Chop etish uchun aktiv partiya yo'q!</p>
                         </div>
                     )}
                 </div>
@@ -589,29 +678,101 @@ const Sklad = () => {
         </div>
       )}
 
+      {/* --- TOVAR QO'SHISH MODALI --- */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4" onClick={(e) => {if(e.target===e.currentTarget && !isSubmitting) setIsModalOpen(false)}}>
+            <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-6 animate-in zoom-in-95">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-black text-slate-800">Yangi tovar qo'shish</h2>
+                    <button disabled={isSubmitting} onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 disabled:opacity-50"><X size={20}/></button>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tovar nomi *</label>
+                            <input type="text" required disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 disabled:opacity-50" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} placeholder="Masalan: iPhone 15 Pro" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Kategoriya *</label>
+                            <select required disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 disabled:opacity-50" value={formData.category} onChange={e=>setFormData({...formData, category: e.target.value})}>
+                                <option value="">Tanlang...</option>
+                                {categories.map((c, i) => (
+                                    <option key={c.id || i} value={c.name}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                            <label className="block text-xs font-black text-amber-700 uppercase mb-2">Kirim Narxi va Valyuta</label>
+                            <div className="flex gap-2">
+                                <input type="number" min="0" step="0.01" disabled={isSubmitting} className="w-full p-3 bg-white border border-amber-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-amber-900 disabled:opacity-50" value={formData.buyPrice} onChange={e=>setFormData({...formData, buyPrice: e.target.value})} placeholder="0" />
+                                <select disabled={isSubmitting} className="w-24 p-3 bg-white border border-amber-200 rounded-xl font-bold text-amber-900 outline-none disabled:opacity-50" value={formData.buyCurrency} onChange={e=>setFormData({...formData, buyCurrency: e.target.value})}>
+                                    <option value="USD">USD</option>
+                                    <option value="UZS">UZS</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                            <label className="block text-xs font-black text-emerald-700 uppercase mb-2">Sotuv Narxi va Valyuta</label>
+                            <div className="flex gap-2">
+                                <input type="number" min="0" step="0.01" disabled={isSubmitting} className="w-full p-3 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-900 disabled:opacity-50" value={formData.salePrice} onChange={e=>setFormData({...formData, salePrice: e.target.value})} placeholder="0" />
+                                <select disabled={isSubmitting} className="w-24 p-3 bg-white border border-emerald-200 rounded-xl font-bold text-emerald-900 outline-none disabled:opacity-50" value={formData.saleCurrency} onChange={e=>setFormData({...formData, saleCurrency: e.target.value})}>
+                                    <option value="USD">USD</option>
+                                    <option value="UZS">UZS</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Boshlang'ich soni (Qoldiq)</label>
+                            <input type="number" min="0" step={formData.unit === 'Dona' ? '1' : '0.01'} disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 disabled:opacity-50" value={formData.quantity} onChange={e=>setFormData({...formData, quantity: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">O'lchov birligi</label>
+                            <select disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 disabled:opacity-50" value={formData.unit} onChange={e=>setFormData({...formData, unit: e.target.value})}>
+                                <option value="Dona">Dona</option>
+                                <option value="Kg">Kg</option>
+                                <option value="Metr">Metr</option>
+                                <option value="Litr">Litr</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" disabled={isSubmitting} className="w-full py-4 mt-2 bg-blue-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200 flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed">
+                        {isSubmitting ? <Loader2 size={20} className="animate-spin"/> : <Save size={20} />} Saqlash
+                    </button>
+                </form>
+            </div>
+        </div>
+      )}
+
       {/* --- TOVARNI TAHRIRLASH MODALI --- */}
       {isEditModalOpen && (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4" onClick={(e) => {if(e.target===e.currentTarget && !isActionLoading) setIsEditModalOpen(false)}}>
               <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-6 animate-in zoom-in-95">
                   <div className="flex justify-between items-center mb-6">
                       <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><Edit2 className="text-amber-500"/> Tovarni tahrirlash</h2>
-                      <button onClick={() => setIsEditModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
+                      <button disabled={isActionLoading} onClick={() => setIsEditModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 disabled:opacity-50"><X size={20}/></button>
                   </div>
                   
-                  <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg text-amber-800 text-xs flex items-start gap-2 mb-4">
-                      <span className="font-bold shrink-0">DIQQAT:</span> 
-                      Bu yerda faqat tovarning narxlari va kategoriyasini o'zgartirishingiz mumkin. Tovarning soni (qoldig'i) faqat Ombor operatsiyalari orqali o'zgartiriladi!
+                  <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl text-amber-800 text-xs flex items-start gap-2 mb-4 font-medium">
+                      <span className="font-black shrink-0">DIQQAT:</span> 
+                      Bu yerda faqat tovarning asosiy ma'lumotlari tahrirlanadi. Qoldiq soni o'zgartirilmaydi!
                   </div>
 
                   <form onSubmit={handleUpdateProduct} className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                           <div>
                               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tovar nomi *</label>
-                              <input type="text" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-700" value={editData.name} onChange={e=>setEditData({...editData, name: e.target.value})} />
+                              <input type="text" required disabled={isActionLoading} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-700 disabled:opacity-50" value={editData.name} onChange={e=>setEditData({...editData, name: e.target.value})} />
                           </div>
                           <div>
                               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Kategoriya *</label>
-                              <select required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-700" value={editData.category} onChange={e=>setEditData({...editData, category: e.target.value})}>
+                              <select required disabled={isActionLoading} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-700 disabled:opacity-50" value={editData.category} onChange={e=>setEditData({...editData, category: e.target.value})}>
                                   <option value="">Tanlang...</option>
                                   {categories.map((c, i) => (
                                       <option key={c.id || i} value={c.name}>{c.name}</option>
@@ -624,31 +785,31 @@ const Sklad = () => {
                           <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
                               <label className="block text-xs font-black text-amber-700 uppercase mb-2">Kirim Narxi</label>
                               <div className="relative">
-                                  <input type="number" className="w-full p-3 bg-white border border-amber-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-amber-900 pr-12" value={editData.buyPrice} onChange={e=>setEditData({...editData, buyPrice: e.target.value})} required />
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500">UZS</span>
+                                  <input type="number" step="0.01" disabled={isActionLoading} className="w-full p-3 bg-white border border-amber-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-amber-900 pr-12 disabled:opacity-50" value={editData.buyPrice} onChange={e=>setEditData({...editData, buyPrice: e.target.value})} required />
+                                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500">UZS</span>
                               </div>
                           </div>
                           <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
                               <label className="block text-xs font-black text-emerald-700 uppercase mb-2">Sotuv Narxi</label>
                               <div className="relative">
-                                  <input type="number" className="w-full p-3 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-900 pr-12" value={editData.salePrice} onChange={e=>setEditData({...editData, salePrice: e.target.value})} required />
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-500">UZS</span>
+                                  <input type="number" step="0.01" disabled={isActionLoading} className="w-full p-3 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-900 pr-12 disabled:opacity-50" value={editData.salePrice} onChange={e=>setEditData({...editData, salePrice: e.target.value})} required />
+                                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-500">UZS</span>
                               </div>
                           </div>
                       </div>
 
                       <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-2">O'lchov birligi</label>
-                          <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-700" value={editData.unit} onChange={e=>setEditData({...editData, unit: e.target.value})}>
+                          <select disabled={isActionLoading} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-700 disabled:opacity-50" value={editData.unit} onChange={e=>setEditData({...editData, unit: e.target.value})}>
                               <option value="Dona">Dona</option>
                               <option value="Kg">Kg</option>
                               <option value="Metr">Metr</option>
-                              <option value="To'plam">To'plam</option>
+                              <option value="Litr">Litr</option>
                           </select>
                       </div>
 
-                      <button type="submit" className="w-full py-4 mt-2 bg-amber-500 text-white rounded-xl font-black uppercase tracking-widest hover:bg-amber-600 active:scale-95 transition-all shadow-lg shadow-amber-200 flex justify-center items-center gap-2">
-                          <Save size={20} /> O'zgarishlarni Saqlash
+                      <button type="submit" disabled={isActionLoading} className="w-full py-4 mt-2 bg-amber-500 text-white rounded-xl font-black uppercase tracking-widest hover:bg-amber-600 active:scale-95 transition-all shadow-lg shadow-amber-200 flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed">
+                          {isActionLoading ? <Loader2 size={20} className="animate-spin"/> : <Save size={20} />} O'zgarishlarni Saqlash
                       </button>
                   </form>
               </div>
@@ -663,13 +824,16 @@ const Sklad = () => {
                 <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">O'chirilsinmi?</h3>
                 <p className="text-slate-400 font-bold text-sm mb-8 leading-relaxed px-2">Bu mahsulot tizimdan butunlay o'chib ketadi. Buni ortga qaytarib bo'lmaydi!</p>
                 <div className="flex gap-3">
-                    <button onClick={() => setDeleteModal({ isOpen: false, productId: null })} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs">Bekor qilish</button>
-                    <button onClick={() => executeDelete(deleteModal.productId)} className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black shadow-xl shadow-rose-200 hover:bg-rose-700 active:scale-95 transition-all uppercase text-xs tracking-widest">O'CHIRISH</button>
+                    <button disabled={isActionLoading} onClick={() => setDeleteModal({ isOpen: false, productId: null })} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs disabled:opacity-50">Bekor qilish</button>
+                    <button disabled={isActionLoading} onClick={() => executeDelete(deleteModal.productId)} className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black shadow-xl shadow-rose-200 hover:bg-rose-700 active:scale-95 transition-all uppercase text-xs tracking-widest flex justify-center items-center disabled:opacity-70">
+                        {isActionLoading ? <Loader2 size={16} className="animate-spin"/> : "O'CHIRISH"}
+                    </button>
                 </div>
             </div>
         </div>
       )}
 
+      {/* --- BATCH ARXIVLASH MODALI --- */}
       {archiveModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1100] p-4">
             <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-10 text-center animate-in zoom-in-95">
@@ -678,26 +842,19 @@ const Sklad = () => {
                 </div>
                 <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Yashirilsinmi?</h3>
                 <p className="text-slate-400 font-bold text-sm mb-8 leading-relaxed px-2">
-                    Bu partiya barcha ro'yxatlardan yashiriladi, lekin tizim xotirasida (arxivda) saqlanib qoladi.
+                    Bu partiya barcha ro'yxatlardan yashiriladi, lekin arxivda saqlanib qoladi.
                 </p>
                 <div className="flex gap-3">
-                    <button 
-                        onClick={() => setArchiveModal({ isOpen: false, batchId: null })} 
-                        className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs"
-                    >
-                        BEKOR QILISH
-                    </button>
-                    <button 
-                        onClick={executeArchiveBatch} 
-                        className="flex-1 py-4 bg-amber-500 text-white rounded-2xl font-black shadow-xl shadow-amber-200 hover:bg-amber-600 active:scale-95 transition-all uppercase text-xs tracking-widest"
-                    >
-                        YASHIRISH
+                    <button disabled={isActionLoading} onClick={() => setArchiveModal({ isOpen: false, batchId: null })} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs disabled:opacity-50">BEKOR QILISH</button>
+                    <button disabled={isActionLoading} onClick={executeArchiveBatch} className="flex-1 py-4 bg-amber-500 text-white rounded-2xl font-black shadow-xl shadow-amber-200 hover:bg-amber-600 active:scale-95 transition-all uppercase text-xs tracking-widest flex justify-center items-center disabled:opacity-70">
+                        {isActionLoading ? <Loader2 size={16} className="animate-spin"/> : "YASHIRISH"}
                     </button>
                 </div>
             </div>
         </div>
       )}
 
+      {/* SUCCESS MODALI */}
       {isSuccessOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[2000] p-4 text-center animate-in zoom-in-95 duration-300">
             <div className="bg-white w-full max-w-sm rounded-[40px] shadow-2xl p-12 border border-slate-100">
@@ -708,78 +865,6 @@ const Sklad = () => {
                 <h3 className="text-3xl font-black text-slate-800 mb-2 tracking-tighter">Bajarildi!</h3>
                 <p className="text-slate-400 font-bold text-sm px-4 leading-relaxed uppercase tracking-widest">Ombor yangilandi.</p>
                 <div className="mt-10 px-4"><div className="w-full bg-slate-50 h-2 rounded-full overflow-hidden"><div className="bg-emerald-500 h-full animate-progress-line w-full"></div></div></div>
-            </div>
-        </div>
-      )}
-
-      {/* --- TOVAR QO'SHISH MODALI --- */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-            <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-6 animate-in zoom-in-95">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-black text-slate-800">Yangi tovar qo'shish</h2>
-                    <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
-                </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tovar nomi *</label>
-                            <input type="text" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} placeholder="Masalan: iPhone 15 Pro" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Kategoriya *</label>
-                            <select required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={formData.category} onChange={e=>setFormData({...formData, category: e.target.value})}>
-                                <option value="">Tanlang...</option>
-                                {Array.isArray(categories) && categories.map((c, i) => (
-                                    <option key={c.id || i} value={c.name}>{c.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                            <label className="block text-xs font-black text-amber-700 uppercase mb-2">Kirim Narxi va Valyuta</label>
-                            <div className="flex gap-2">
-                                <input type="number" className="w-full p-3 bg-white border border-amber-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-amber-900" value={formData.buyPrice} onChange={e=>setFormData({...formData, buyPrice: e.target.value})} placeholder="0" />
-                                <select className="w-24 p-3 bg-white border border-amber-200 rounded-xl font-bold text-amber-900 outline-none" value={formData.buyCurrency} onChange={e=>setFormData({...formData, buyCurrency: e.target.value})}>
-                                    <option value="USD">USD</option>
-                                    <option value="UZS">UZS</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                            <label className="block text-xs font-black text-emerald-700 uppercase mb-2">Sotuv Narxi va Valyuta</label>
-                            <div className="flex gap-2">
-                                <input type="number" className="w-full p-3 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-900" value={formData.salePrice} onChange={e=>setFormData({...formData, salePrice: e.target.value})} placeholder="0" />
-                                <select className="w-24 p-3 bg-white border border-emerald-200 rounded-xl font-bold text-emerald-900 outline-none" value={formData.saleCurrency} onChange={e=>setFormData({...formData, saleCurrency: e.target.value})}>
-                                    <option value="USD">USD</option>
-                                    <option value="UZS">UZS</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Boshlang'ich soni (Qoldiq)</label>
-                            <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={formData.quantity} onChange={e=>setFormData({...formData, quantity: e.target.value})} />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">O'lchov birligi</label>
-                            <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={formData.unit} onChange={e=>setFormData({...formData, unit: e.target.value})}>
-                                <option value="Dona">Dona</option>
-                                <option value="Kg">Kg</option>
-                                <option value="Metr">Metr</option>
-                                <option value="To'plam">To'plam</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <button type="submit" className="w-full py-4 mt-2 bg-blue-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200 flex justify-center items-center gap-2">
-                        <Save size={20} /> Tovarni Saqlash
-                    </button>
-                </form>
             </div>
         </div>
       )}
