@@ -474,6 +474,7 @@ const SupplierIncome = () => {
                 )}
              </div>
           </div>
+      </div>
     </div>
   );
 };
