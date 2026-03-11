@@ -93,8 +93,8 @@ const WarehouseOperations = lazy(() => import('./pages/ombor/WarehouseOperations
 const InternalIncome = lazy(() => import('./pages/ombor/InternalIncome'));
 const InternalExpense = lazy(() => import('./pages/ombor/InternalExpense'));
 const SupplierIncomeList = lazy(() => import('./pages/ombor/SupplierIncomeList'));
+const SupplierIncome = lazy(() => import('./pages/ombor/SupplierIncome'));
 const EditSupplierIncome = lazy(() => import('./pages/ombor/EditSupplierIncome'));
-const AddSupplierIncome = lazy(() => import('./pages/ombor/AddSupplierIncome')); 
 const SupplierReturn = lazy(() => import('./pages/ombor/SupplierReturn'));
 const UnfinishedSales = lazy(() => import('./pages/ombor/UnfinishedSales'));
 const CustomerIncome = lazy(() => import('./pages/ombor/CustomerIncome'));
@@ -282,7 +282,7 @@ function App() {
                   <Route path="/ombor/boshqa-kirim" element={<InternalIncome />} />
                   <Route path="/ombor/boshqa-chiqim" element={<InternalExpense />} />
                   <Route path="/ombor/taminotchi-kirim" element={<SupplierIncomeList />} />
-                  <Route path="/ombor/taminotchi-kirim/qoshish" element={<AddSupplierIncome />} />
+                  <Route path="/ombor/taminotchi-kirim/qoshish" element={<SupplierIncome />} />
                   <Route path="/ombor/taminotchi-kirim/tahrirlash/:id" element={<EditSupplierIncome />} />
                   <Route path="/ombor/taminotchi-qaytarish" element={<SupplierReturn />} />
                   <Route path="/ombor/yakunlanmagan" element={<UnfinishedSales />} />
