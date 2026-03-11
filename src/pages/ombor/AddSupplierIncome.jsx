@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
 
+// HELPER: Xavfsiz JSON parsing
 const parseJsonSafe = async (response) => {
     try {
         return await response.json();
@@ -20,7 +21,8 @@ const AddSupplierIncome = () => {
   const currentUserName = sessionStorage.getItem('userName') || 'Hodim';
   const token = sessionStorage.getItem('token');
   
-  const generateInvoiceNumber = () => `INV-${Date.now().toString().slice(-6)}`;
+  // 🚨 O'ZGARISH: "INV-" olib tashlandi. Faqat son qoldi.
+  const generateInvoiceNumber = () => `${Date.now().toString().slice(-6)}`;
 
   // --- STATES ---
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -293,7 +295,7 @@ const AddSupplierIncome = () => {
 
         const payload = {
             supplierName: supplierName.trim(),
-            invoiceNumber: invoiceNumber.trim(),
+            invoiceNumber: invoiceNumber.trim() || Date.now().toString().slice(-6), // 🚨 O'ZGARISH
             exchangeRate: finalExchangeRate,
             totalSum: grandTotalUZS,
             status: 'Jarayonda', 
@@ -359,7 +361,6 @@ const AddSupplierIncome = () => {
                         <input type="date" disabled={isSubmitting} className="w-full p-3 border rounded-lg outline-blue-500 disabled:bg-gray-50" value={date} onChange={e=>setDate(e.target.value)}/>
                         <input type="text" disabled={isSubmitting} className={`w-full p-3 border rounded-lg outline-blue-500 font-bold disabled:bg-gray-50`} placeholder="Faktura №" value={invoiceNumber} onChange={e=>setInvoiceNumber(e.target.value)} />
                         
-                        {/* 🚨 DIQQAT: MANA SHU QISM SELECT GA O'ZGARTIRILDI 🚨 */}
                         <select 
                             disabled={isSubmitting}
                             className={`w-full p-3 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800 transition-all disabled:bg-gray-50 disabled:opacity-50`}
@@ -371,7 +372,6 @@ const AddSupplierIncome = () => {
                                 <option key={s.id} value={s.name}>{s.name}</option>
                             ))}
                         </select>
-                        {/* -------------------------------------------------------- */}
                         
                         <input type="number" disabled={isSubmitting} className="w-full p-3 border rounded-lg border-blue-300 bg-blue-50 outline-blue-500 disabled:opacity-70" placeholder="1 USD kursi" value={exchangeRate} onChange={e=>setExchangeRate(e.target.value)}/>
                     </div>
@@ -442,96 +442,97 @@ const AddSupplierIncome = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* --- JADVAL QISMI (Faqat Faktura tovarlari) --- */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 min-h-[300px] flex flex-col overflow-hidden">
+                    <div className="px-6 py-4 border-b bg-slate-50 flex items-center justify-between">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                            <Package size={18} className="text-blue-500"/> Faktura tovarlari
+                        </h3>
+                        {selectedItems.length > 0 && <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full">{selectedItems.length} xil tovar</span>}
+                    </div>
+
+                    <div className="flex flex-col h-full flex-1 p-6 animate-in fade-in">
+                        {selectedItems.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center flex-1 text-gray-400 py-10">
+                                <Package size={48} className="mb-3 opacity-20"/>
+                                <p className="font-medium text-sm">Faktura bo'sh. Yuqoridan mahsulot qo'shing.</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto border rounded-xl custom-scrollbar max-h-[400px]">
+                                <table className="w-full text-left whitespace-nowrap">
+                                    <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-black tracking-wider sticky top-0 z-10 shadow-sm">
+                                        <tr>
+                                            <th className="p-3">Nomi</th>
+                                            <th className="p-3 w-24 text-center">Soni</th>
+                                            <th className="p-3 w-32">Kirim Narx</th>
+                                            <th className="p-3 w-24">Valyuta</th>
+                                            <th className="p-3 w-24 text-center text-amber-600">Ustama %</th>
+                                            <th className="p-3 w-36 text-emerald-600">Sotuv (UZS)</th>
+                                            <th className="p-3 w-32 text-right">Jami Kirim</th>
+                                            <th className="p-3 w-12 text-center"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y text-sm font-bold text-slate-700">
+                                        {selectedItems.map((item, index) => (
+                                            <tr key={index} className="hover:bg-blue-50/30 transition-colors">
+                                                <td className="p-3">
+                                                    <div>{item.name}</div>
+                                                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">#{item.customId ?? '-'}</div>
+                                                </td>
+                                                <td className="p-2">
+                                                    <input type="number" disabled={isSubmitting} step={item.unit === 'Dona' ? '1' : '0.01'} className="w-full p-2 border rounded-lg text-center outline-blue-500 disabled:bg-gray-50" value={item.count} onChange={(e) => updateItem(item.id, 'count', e.target.value)} />
+                                                </td>
+                                                <td className="p-2">
+                                                    <input type="number" disabled={isSubmitting} step="0.01" className="w-full p-2 border rounded-lg outline-blue-500 disabled:bg-gray-50" value={item.price} onChange={(e) => updateItem(item.id, 'price', e.target.value)} />
+                                                </td>
+                                                <td className="p-2">
+                                                    <select disabled={isSubmitting} className="w-full p-2 border rounded-lg bg-white outline-blue-500 text-xs disabled:bg-gray-50" value={item.currency} onChange={(e) => updateItem(item.id, 'currency', e.target.value)}>
+                                                        <option value="UZS">UZS</option>
+                                                        <option value="USD">USD</option>
+                                                    </select>
+                                                </td>
+                                                <td className="p-2">
+                                                    <input type="number" disabled={isSubmitting} className="w-full p-2 border border-amber-200 bg-amber-50 rounded-lg text-center outline-amber-500 text-amber-700 disabled:opacity-50" value={item.markup} onChange={(e) => updateItem(item.id, 'markup', e.target.value)} />
+                                                </td>
+                                                <td className="p-2">
+                                                    <input type="number" disabled={isSubmitting} className="w-full p-2 border border-emerald-200 bg-emerald-50 rounded-lg outline-emerald-500 text-emerald-700 disabled:opacity-50" value={item.salePrice} onChange={(e) => updateItem(item.id, 'salePrice', e.target.value)} />
+                                                </td>
+                                                <td className="p-3 text-right font-black text-slate-800">
+                                                    {(Number(item.total) || 0).toLocaleString()}
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <button disabled={isSubmitting} onClick={() => handleRemoveItem(index)} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50">
+                                                        <Trash2 size={18}/>
+                                                    </button>
+                                                </td>
+                                            </tr> 
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
 
+            {/* O'NG TOMON: STATISTIKA */}
             {userRole === 'director' && (
-                <div className="lg:col-span-4 grid grid-rows-2 gap-4 h-fit sticky top-6">
+                <div className="lg:col-span-4 grid grid-rows-2 gap-6 h-fit sticky top-6">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center relative overflow-hidden">
                         <div className="absolute right-[-20px] top-[-20px] opacity-5"><Package size={150}/></div>
-                        <div className="text-gray-500 text-sm font-bold uppercase tracking-widest mb-1">Pozitsiyalar soni</div>
+                        <div className="text-gray-400 text-xs font-black uppercase tracking-widest mb-1">Pozitsiyalar soni</div>
                         <div className="text-4xl font-black text-blue-600 relative z-10">{selectedItems.length} <span className="text-lg text-gray-400 font-bold ml-1">xil tovar</span></div>
                     </div>
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center relative overflow-hidden">
                         <div className="absolute right-[-20px] top-[-20px] opacity-5"><DollarSign size={150}/></div>
-                        <div className="text-gray-500 text-sm font-bold uppercase tracking-widest mb-1">Jami Summasi</div>
-                        <div className="text-3xl font-black text-green-600 relative z-10 truncate" title={`${grandTotalUZS.toLocaleString()} UZS`}>
-                            {grandTotalUZS.toLocaleString()} <span className="text-lg text-gray-400 font-bold ml-1">UZS</span>
+                        <div className="text-gray-400 text-xs font-black uppercase tracking-widest mb-1">Jami Summasi</div>
+                        <div className="text-3xl lg:text-4xl font-black text-emerald-500 relative z-10 truncate" title={`${grandTotalUZS.toLocaleString()} UZS`}>
+                            {grandTotalUZS.toLocaleString()} <span className="text-lg text-emerald-600/50 font-bold ml-1">UZS</span>
                         </div>
                     </div>
                 </div>
             )}
-        </div>
-
-        {/* JADVAL QISMI */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mt-6 min-h-[300px] flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b bg-slate-50 flex items-center justify-between">
-                <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                    <Package size={18} className="text-blue-500"/> Faktura tovarlari
-                </h3>
-                {selectedItems.length > 0 && <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full">{selectedItems.length} xil tovar</span>}
-            </div>
-
-            <div className="flex flex-col h-full flex-1 p-6 animate-in fade-in">
-                {selectedItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center flex-1 text-gray-400 py-10">
-                        <Package size={48} className="mb-3 opacity-20"/>
-                        <p className="font-medium text-sm">Faktura bo'sh. Yuqoridan mahsulot qo'shing.</p>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto border rounded-xl custom-scrollbar max-h-[400px]">
-                        <table className="w-full text-left whitespace-nowrap">
-                            <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-black tracking-wider sticky top-0 z-10 shadow-sm">
-                                <tr>
-                                    <th className="p-3">Nomi</th>
-                                    <th className="p-3 w-24 text-center">Soni</th>
-                                    <th className="p-3 w-32">Kirim Narx</th>
-                                    <th className="p-3 w-24">Valyuta</th>
-                                    <th className="p-3 w-24 text-center text-amber-600">Ustama %</th>
-                                    <th className="p-3 w-36 text-emerald-600">Sotuv (UZS)</th>
-                                    <th className="p-3 w-32 text-right">Jami Kirim</th>
-                                    <th className="p-3 w-12 text-center"></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y text-sm font-bold text-slate-700">
-                                {selectedItems.map((item, index) => (
-                                    <tr key={index} className="hover:bg-blue-50/30 transition-colors">
-                                        <td className="p-3">
-                                            <div>{item.name}</div>
-                                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">#{item.customId ?? '-'}</div>
-                                        </td>
-                                        <td className="p-2">
-                                            <input type="number" disabled={isSubmitting} step={item.unit === 'Dona' ? '1' : '0.01'} className="w-full p-2 border rounded-lg text-center outline-blue-500 disabled:bg-gray-50" value={item.count} onChange={(e) => updateItem(item.id, 'count', e.target.value)} />
-                                        </td>
-                                        <td className="p-2">
-                                            <input type="number" disabled={isSubmitting} step="0.01" className="w-full p-2 border rounded-lg outline-blue-500 disabled:bg-gray-50" value={item.price} onChange={(e) => updateItem(item.id, 'price', e.target.value)} />
-                                        </td>
-                                        <td className="p-2">
-                                            <select disabled={isSubmitting} className="w-full p-2 border rounded-lg bg-white outline-blue-500 text-xs disabled:bg-gray-50" value={item.currency} onChange={(e) => updateItem(item.id, 'currency', e.target.value)}>
-                                                <option value="UZS">UZS</option>
-                                                <option value="USD">USD</option>
-                                            </select>
-                                        </td>
-                                        <td className="p-2">
-                                            <input type="number" disabled={isSubmitting} className="w-full p-2 border border-amber-200 bg-amber-50 rounded-lg text-center outline-amber-500 text-amber-700 disabled:opacity-50" value={item.markup} onChange={(e) => updateItem(item.id, 'markup', e.target.value)} />
-                                        </td>
-                                        <td className="p-2">
-                                            <input type="number" disabled={isSubmitting} className="w-full p-2 border border-emerald-200 bg-emerald-50 rounded-lg outline-emerald-500 text-emerald-700 disabled:opacity-50" value={item.salePrice} onChange={(e) => updateItem(item.id, 'salePrice', e.target.value)} />
-                                        </td>
-                                        <td className="p-3 text-right font-black text-slate-800">
-                                            {(Number(item.total) || 0).toLocaleString()}
-                                        </td>
-                                        <td className="p-3 text-center">
-                                            <button disabled={isSubmitting} onClick={() => handleRemoveItem(index)} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50">
-                                                <Trash2 size={18}/>
-                                            </button>
-                                        </td>
-                                    </tr> 
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
         </div>
 
         {/* TASDIQLASH MODALI */}
