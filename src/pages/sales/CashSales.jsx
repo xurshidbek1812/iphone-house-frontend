@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Trash2, X, CheckCircle, Edit2, Eye, AlertTriangle, Clock, User, ShoppingCart, Tag, MessageSquare, Save, Loader2 } from 'lucide-react';
+import { Search, Plus, Trash2, X, Edit2, Eye, AlertTriangle, Clock, User, CheckCircle, CreditCard, Send, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
@@ -17,14 +17,14 @@ const CashSales = () => {
   const navigate = useNavigate();
   const [sales, setSales] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isActionLoading, setIsActionLoading] = useState(false); // Edit, Delete, Approve uchun lock
+  const [isActionLoading, setIsActionLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL'); 
 
   // Modallar
   const [detailsModal, setDetailsModal] = useState({ isOpen: false, sale: null });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
-  const [confirmModal, setConfirmModal] = useState({ isOpen: false, id: null });
+  const [sendToPaymentModal, setSendToPaymentModal] = useState({ isOpen: false, id: null }); 
   const [editModal, setEditModal] = useState({ isOpen: false, data: null });
 
   const token = sessionStorage.getItem('token');
@@ -67,35 +67,34 @@ const CashSales = () => {
       return () => controller.abort();
   }, [fetchSales]);
 
-  // --- TASDIQLASH (To'lov kutish holatiga o'tkazish) ---
-  const handleApprove = async () => {
-    const id = confirmModal.id;
+  // --- TO'LOVGA YUBORISH ---
+  const handleSendToPayment = async () => {
+    const id = sendToPaymentModal.id;
     setIsActionLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/cash-sales/${id}/approve`, {
         method: 'PATCH',
         headers: getJsonAuthHeaders(),
-        // 🚨 ENDI TASDIQLANGAN SAVDO "KUTILMOQDA" STATUSIGA O'TADI
         body: JSON.stringify({ status: 'Kutilmoqda' })
       });
       
       const data = await parseJsonSafe(res);
       
       if (res.ok) {
-        toast.success("Savdo tasdiqlandi va To'lovga yuborildi!");
+        toast.success("Savdo to'lov bo'limiga yuborildi!");
         await fetchSales();
       } else {
-        toast.error(data?.error || "Tasdiqlashda xatolik");
+        toast.error(data?.error || "Yuborishda xatolik");
       }
     } catch (err) { 
         toast.error("Server xatosi!"); 
     } finally { 
         setIsActionLoading(false);
-        setConfirmModal({ isOpen: false, id: null }); 
+        setSendToPaymentModal({ isOpen: false, id: null }); 
     }
   };
 
-  // --- O'CHIRISH ---
+  // --- O'CHIRISH (Bekor qilish) ---
   const handleDelete = async () => {
     const id = deleteModal.id;
     setIsActionLoading(true);
@@ -107,7 +106,7 @@ const CashSales = () => {
       const data = await parseJsonSafe(res);
       
       if (res.ok) {
-        toast.success("Savdo bekor qilindi!");
+        toast.success("Savdo bekor qilindi (o'chirildi)!");
         await fetchSales();
       } else {
         toast.error(data?.error || "O'chirishda xatolik");
@@ -185,7 +184,7 @@ const CashSales = () => {
       }
   };
 
-  // --- QIDIRUV VA FILTR (Memoized null-safe) ---
+  // --- QIDIRUV VA FILTR ---
   const filteredSales = useMemo(() => {
     return sales.filter(sale => {
       const search = searchTerm.trim().toLowerCase();
@@ -195,7 +194,6 @@ const CashSales = () => {
       const searchString = `${sale.id} ${customerName} ${phone}`.toLowerCase();
       const matchesSearch = searchString.includes(search);
       
-      // Hozirgi holatlar (Jarayonda, Kutilmoqda, Yakunlangan)
       const matchesStatus = filterStatus === 'ALL' || String(sale.status).toUpperCase() === filterStatus;
       
       return matchesSearch && matchesStatus;
@@ -233,8 +231,8 @@ const CashSales = () => {
         </div>
         <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex gap-1">
             <button onClick={() => setFilterStatus('ALL')} className={`px-6 py-2 rounded-xl font-bold text-sm transition-all ${filterStatus === 'ALL' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>Barchasi</button>
-            <button onClick={() => setFilterStatus('JARAYONDA')} className={`px-6 py-2 rounded-xl font-bold text-sm transition-all ${filterStatus === 'JARAYONDA' ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'text-slate-500 hover:bg-amber-50'}`}>Tasdiqlanmagan</button>
-            <button onClick={() => setFilterStatus('KUTILMOQDA')} className={`px-6 py-2 rounded-xl font-bold text-sm transition-all ${filterStatus === 'KUTILMOQDA' ? 'bg-blue-500 text-white shadow-md shadow-blue-200' : 'text-slate-500 hover:bg-blue-50'}`}>To'lov Kutilmoqda</button>
+            <button onClick={() => setFilterStatus('JARAYONDA')} className={`px-6 py-2 rounded-xl font-bold text-sm transition-all ${filterStatus === 'JARAYONDA' ? 'bg-slate-100 text-slate-700 shadow-inner border border-slate-200' : 'text-slate-500 hover:bg-slate-50'}`}>Yangi (Jarayonda)</button>
+            <button onClick={() => setFilterStatus('KUTILMOQDA')} className={`px-6 py-2 rounded-xl font-bold text-sm transition-all ${filterStatus === 'KUTILMOQDA' ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'text-slate-500 hover:bg-amber-50'}`}>To'lov Kutilmoqda</button>
             <button onClick={() => setFilterStatus('YAKUNLANGAN')} className={`px-6 py-2 rounded-xl font-bold text-sm transition-all ${filterStatus === 'YAKUNLANGAN' ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200' : 'text-slate-500 hover:bg-emerald-50'}`}>Yakunlangan</button>
         </div>
       </div>
@@ -283,17 +281,18 @@ const CashSales = () => {
                                 {Number(sale.discount) > 0 && <div className="text-[10px] text-rose-500 mt-0.5">Chegirma: {Number(sale.discount).toLocaleString()}</div>}
                             </td>
                             <td className="p-5 text-center">
+                                {/* STATUSLAR DIZAYNI */}
                                 {statusUpper === 'JARAYONDA' ? (
-                                    <span className="inline-flex items-center justify-center w-32 py-1.5 bg-amber-50 text-amber-600 rounded-lg text-[10px] uppercase font-black tracking-widest border border-amber-100">
-                                        Tasdiqlanmagan
+                                    <span className="inline-flex items-center justify-center w-32 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-[10px] uppercase font-black tracking-widest border border-slate-200">
+                                        <Clock size={12} className="mr-1"/> Yangi
                                     </span>
                                 ) : statusUpper === 'KUTILMOQDA' ? (
-                                    <span className="inline-flex items-center justify-center w-32 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] uppercase font-black tracking-widest border border-blue-100">
-                                        To'lov Kutilyapti
+                                    <span className="inline-flex items-center justify-center w-32 py-1.5 bg-amber-50 text-amber-600 rounded-lg text-[10px] uppercase font-black tracking-widest border border-amber-200">
+                                        To'lov kutilmoqda
                                     </span>
                                 ) : (
-                                    <span className="inline-flex items-center justify-center w-32 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] uppercase font-black tracking-widest border border-emerald-100">
-                                        Yakunlangan
+                                    <span className="inline-flex items-center justify-center w-32 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] uppercase font-black tracking-widest border border-emerald-200">
+                                        <CheckCircle size={12} className="mr-1"/> Yakunlangan
                                     </span>
                                 )}
                             </td>
@@ -303,21 +302,24 @@ const CashSales = () => {
                                         <Eye size={18}/>
                                     </button>
 
-                                    {/* FAQAT JARAYONDA (TASDIQLANMAGAN) SAVDOLARNI TAHRIRLASH/O'CHIRISH MUMKIN */}
+                                    {/* 🚨 FAQAT "JARAYONDA" (Yangi) SAVDOLARNI TO'LOVGA YUBORISH / TAHRIRLASH MUMKIN */}
                                     {statusUpper === 'JARAYONDA' && (
                                         <>
-                                            <button disabled={isActionLoading} onClick={() => setConfirmModal({ isOpen: true, id: sale.id })} className="p-2 text-emerald-600 bg-emerald-50 hover:bg-emerald-600 hover:text-white rounded-xl transition-all disabled:opacity-50" title="Savdoni Tasdiqlash">
-                                                <CheckCircle size={18} strokeWidth={2.5}/>
+                                            <button disabled={isActionLoading} onClick={() => setSendToPaymentModal({ isOpen: true, id: sale.id })} className="p-2 text-amber-600 bg-amber-50 hover:bg-amber-600 hover:text-white rounded-xl transition-all disabled:opacity-50" title="To'lovga yuborish (Kassaga)">
+                                                <CreditCard size={18}/>
                                             </button>
                                             
                                             <button disabled={isActionLoading} onClick={() => openEditModal(sale)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-xl transition-all disabled:opacity-50" title="Tahrirlash">
                                                 <Edit2 size={18}/>
                                             </button>
-
-                                            <button disabled={isActionLoading} onClick={() => setDeleteModal({ isOpen: true, id: sale.id })} className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl transition-all disabled:opacity-50" title="Bekor qilish / O'chirish">
-                                                <Trash2 size={18}/>
-                                            </button>
                                         </>
+                                    )}
+
+                                    {/* 🚨 O'CHIRISH TUGMASI ENDI "JARAYONDA" VA "KUTILMOQDA" UCHUN HAM ISHLAYDI */}
+                                    {(statusUpper === 'JARAYONDA' || statusUpper === 'KUTILMOQDA') && (
+                                        <button disabled={isActionLoading} onClick={() => setDeleteModal({ isOpen: true, id: sale.id })} className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl transition-all disabled:opacity-50" title="Bekor qilish / O'chirish">
+                                            <Trash2 size={18}/>
+                                        </button>
                                     )}
                                 </div>
                             </td>
@@ -351,10 +353,10 @@ const CashSales = () => {
                             </p>
                             <p className="text-sm font-mono text-slate-500 mt-1">{detailsModal.sale.customer?.phones?.[0]?.phone || detailsModal.sale.otherPhone || '-'}</p>
                         </div>
-                        <div className={`p-5 rounded-2xl border ${String(detailsModal.sale.status).toUpperCase() === 'JARAYONDA' ? 'bg-amber-50/50 border-amber-100' : String(detailsModal.sale.status).toUpperCase() === 'KUTILMOQDA' ? 'bg-blue-50/50 border-blue-100' : 'bg-emerald-50/50 border-emerald-100'}`}>
-                            <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${String(detailsModal.sale.status).toUpperCase() === 'JARAYONDA' ? 'text-amber-500' : String(detailsModal.sale.status).toUpperCase() === 'KUTILMOQDA' ? 'text-blue-500' : 'text-emerald-500'}`}>Holati</p>
-                            <p className={`text-lg font-bold ${String(detailsModal.sale.status).toUpperCase() === 'JARAYONDA' ? 'text-amber-700' : String(detailsModal.sale.status).toUpperCase() === 'KUTILMOQDA' ? 'text-blue-700' : 'text-emerald-700'}`}>
-                                {String(detailsModal.sale.status).toUpperCase() === 'JARAYONDA' ? 'Tasdiqlanmagan' : String(detailsModal.sale.status).toUpperCase() === 'KUTILMOQDA' ? 'To\'lov Kutilyapti' : 'Tasdiqlangan (Yakunlangan)'}
+                        <div className={`p-5 rounded-2xl border ${String(detailsModal.sale.status).toUpperCase() === 'JARAYONDA' ? 'bg-slate-50 border-slate-200' : String(detailsModal.sale.status).toUpperCase() === 'KUTILMOQDA' ? 'bg-amber-50/50 border-amber-100' : 'bg-emerald-50/50 border-emerald-100'}`}>
+                            <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${String(detailsModal.sale.status).toUpperCase() === 'JARAYONDA' ? 'text-slate-500' : String(detailsModal.sale.status).toUpperCase() === 'KUTILMOQDA' ? 'text-amber-500' : 'text-emerald-500'}`}>Holati</p>
+                            <p className={`text-lg font-bold ${String(detailsModal.sale.status).toUpperCase() === 'JARAYONDA' ? 'text-slate-700' : String(detailsModal.sale.status).toUpperCase() === 'KUTILMOQDA' ? 'text-amber-700' : 'text-emerald-700'}`}>
+                                {String(detailsModal.sale.status).toUpperCase() === 'JARAYONDA' ? 'Yangi (To\'lovga yuborilmagan)' : String(detailsModal.sale.status).toUpperCase() === 'KUTILMOQDA' ? 'To\'lov Kutilyapti' : 'Tasdiqlangan (Yakunlangan)'}
                             </p>
                         </div>
                     </div>
@@ -398,7 +400,7 @@ const CashSales = () => {
                         {Number(detailsModal.sale.discount) > 0 && (
                             <div className="flex justify-between text-sm mb-4 text-amber-400 border-b border-slate-600 pb-4">
                                 <span>Chegirma:</span>
-                                <span className="font-bold">- {Number(detailsModal.sale.discount).toLocaleString()} UZS</span>
+                                <span className="font-bold">- {Number(detailsModal.sale.discount || 0).toLocaleString()} UZS</span>
                             </div>
                         )}
                         <div className="flex justify-between items-end">
@@ -478,21 +480,21 @@ const CashSales = () => {
         </div>
       )}
 
-      {/* --- TASDIQLASH MODALI --- */}
-      {confirmModal.isOpen && (
+      {/* --- TO'LOVGA YUBORISH (OLDINGI TASDIQLASH) MODALI --- */}
+      {sendToPaymentModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
             <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-10 animate-in zoom-in-95 text-center">
-                <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 bg-emerald-50 text-emerald-500 rotate-3 shadow-lg shadow-emerald-100">
-                    <CheckCircle size={40} strokeWidth={2.5} />
+                <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 bg-amber-50 text-amber-500 rotate-3 shadow-lg shadow-amber-100">
+                    <Send size={40} strokeWidth={2.5} />
                 </div>
-                <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Tasdiqlaysizmi?</h3>
+                <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">To'lovga yuborasizmi?</h3>
                 <p className="text-slate-500 font-medium text-sm mb-8 leading-relaxed">
-                    Ushbu amal bajarilgach tovarlar ombordan ayriladi va To'lov bo'limiga yuboriladi. Buni ortga qaytarib bo'lmaydi!
+                    Ushbu amal bajarilgach, savdo "To'lov kutilmoqda" holatiga o'tadi va uni tahrirlab bo'lmaydi. Kassa bo'limida to'lov qilish imkoniyati ochiladi.
                 </p>
                 <div className="flex gap-3">
-                    <button disabled={isActionLoading} onClick={() => setConfirmModal({ isOpen: false, id: null })} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs disabled:opacity-50">Bekor qilish</button>
-                    <button disabled={isActionLoading} onClick={handleApprove} className="flex-1 py-4 bg-emerald-500 text-white rounded-2xl font-black shadow-xl shadow-emerald-200 hover:bg-emerald-600 active:scale-95 transition-all uppercase text-xs tracking-widest flex justify-center items-center disabled:opacity-70 disabled:cursor-not-allowed">
-                        {isActionLoading ? <Loader2 size={16} className="animate-spin"/> : "Tasdiqlash"}
+                    <button disabled={isActionLoading} onClick={() => setSendToPaymentModal({ isOpen: false, id: null })} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs disabled:opacity-50">Bekor qilish</button>
+                    <button disabled={isActionLoading} onClick={handleSendToPayment} className="flex-1 py-4 bg-amber-500 text-white rounded-2xl font-black shadow-xl shadow-amber-200 hover:bg-amber-600 active:scale-95 transition-all uppercase text-xs tracking-widest flex justify-center items-center disabled:opacity-70 disabled:cursor-not-allowed">
+                        {isActionLoading ? <Loader2 size={16} className="animate-spin"/> : "Yuborish"}
                     </button>
                 </div>
             </div>
@@ -508,7 +510,7 @@ const CashSales = () => {
                 </div>
                 <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Bekor qilinadimi?</h3>
                 <p className="text-slate-500 font-medium text-sm mb-8 leading-relaxed">
-                    Hali tasdiqlanmagan ushbu savdoni butunlay o'chirib yuborasiz.
+                    Bu savdoni butunlay o'chirib yuborasiz. Agar u kassaga to'lovga yuborilgan bo'lsa, u yerdan ham o'chadi.
                 </p>
                 <div className="flex gap-3">
                     <button disabled={isActionLoading} onClick={() => setDeleteModal({ isOpen: false, id: null })} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs disabled:opacity-50">Yopish</button>
