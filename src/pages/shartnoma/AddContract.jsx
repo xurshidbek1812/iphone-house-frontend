@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Check, ChevronRight, Search, User, 
   X, Briefcase, Users, ShoppingCart, Calendar, Save, 
-  CheckCircle, Plus, Trash2, ScanLine, Loader2
+  CheckCircle, Plus, Trash2, ScanLine, Loader2, MessageSquare
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -633,3 +633,4 @@ const AddContract = () => {
 };
 
 export default AddContract;
+
