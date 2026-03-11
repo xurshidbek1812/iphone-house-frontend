@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Plus, MoreVertical, Trash2, Edit, Send, CheckCircle, Eye, X, AlertTriangle, Printer, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -7,7 +7,6 @@ import QRCode from "react-qr-code";
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
 
-// HELPER: Xavfsiz JSON parsing
 const parseJsonSafe = async (response) => {
     try {
         return await response.json();
@@ -23,7 +22,7 @@ const SupplierIncomeList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewInvoice, setViewInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false); // Approve, Delete, Send uchun global yuklanish state'i
+  const [isProcessing, setIsProcessing] = useState(false); 
   
   const userRole = sessionStorage.getItem('userRole') || 'admin';
   const token = sessionStorage.getItem('token');
@@ -32,7 +31,6 @@ const SupplierIncomeList = () => {
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [invoiceToPrint, setInvoiceToPrint] = useState(null);
 
-  // Menu tashqarisini bosganda yopish (Memory leak tuzatildi)
   useEffect(() => {
     const handleClickOutside = (e) => {
         if (!e.target.closest('.menu-container')) {
@@ -43,7 +41,6 @@ const SupplierIncomeList = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // HELPER: Auth Headers
   const getAuthHeaders = useCallback(() => ({
       'Authorization': `Bearer ${token}`
   }), [token]);
@@ -53,7 +50,6 @@ const SupplierIncomeList = () => {
       'Content-Type': 'application/json'
   }), [getAuthHeaders]);
 
-  // --- FAKTURALARNI YUKLASH ---
   const fetchInvoices = useCallback(async (signal = undefined) => {
       if (!token) {
           toast.error("Tizimga kirish tokeni topilmadi!");
@@ -63,7 +59,6 @@ const SupplierIncomeList = () => {
 
       try {
           setLoading(true);
-          // 🚨 ENDPOINT: Kelajakda /api/supplier-invoices bo'lishi mumkin. Hozircha moslangan:
           const res = await fetch(`${API_URL}/api/invoices`, { 
               headers: getAuthHeaders(),
               signal
@@ -83,14 +78,9 @@ const SupplierIncomeList = () => {
               toast.error(`Fakturalarni yuklab bo'lmadi (${res.status})`);
           }
       } catch (err) {
-          if (err.name !== 'AbortError') {
-              console.error("Fetch error:", err);
-              toast.error("Tarmoq xatosi yuz berdi!");
-          }
+          if (err.name !== 'AbortError') toast.error("Tarmoq xatosi yuz berdi!");
       } finally {
-          if (!signal?.aborted) {
-              setLoading(false);
-          }
+          if (!signal?.aborted) setLoading(false);
       }
   }, [token, getAuthHeaders]);
 
@@ -124,11 +114,10 @@ const SupplierIncomeList = () => {
             buyPrice: Number(item.price) || 0,
             salePrice: Number(item.salePrice) || 0, 
             buyCurrency: item.currency || 'UZS',
-            supplierName: invoice.supplierName,         
+            supplierName: invoice.supplierName || invoice.supplier || 'Noma\'lum',         
             invoiceNumber: invoice.invoiceNumber    
         }));
 
-        // 1. Ombordagi qoldiqni oshiramiz (Partiya yaratamiz)
         const stockResponse = await fetch(`${API_URL}/api/products/increase-stock`, {
             method: 'POST',
             headers: getJsonAuthHeaders(),
@@ -140,7 +129,6 @@ const SupplierIncomeList = () => {
             throw new Error(errData?.error || "Ombor yangilanmadi!");
         }
 
-        // 2. Fakturaning statusini "Tasdiqlandi" qilib bazada o'zgartiramiz
         const statusResponse = await fetch(`${API_URL}/api/invoices/${id}/status`, {
             method: 'PATCH',
             headers: getJsonAuthHeaders(),
@@ -152,7 +140,7 @@ const SupplierIncomeList = () => {
         }
         
         toast.success("Muvaffaqiyatli tasdiqlandi va omborga tushdi!");
-        await fetchInvoices(); // Signal'siz chaqiramiz
+        await fetchInvoices(); 
         if(viewInvoice) setViewInvoice(null);
 
     } catch (err) {
@@ -213,7 +201,6 @@ const SupplierIncomeList = () => {
   // --- QR CHOP ETISH ---
   const executePrintQR = (item, invoice) => {
       const printWindow = window.open('', '_blank');
-      // Popup blocker ushlagan bo'lsa
       if (!printWindow) {
           return toast.error("Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!");
       }
@@ -247,9 +234,7 @@ const SupplierIncomeList = () => {
     if (action === 'view') {
         setViewInvoice(invoices.find(i => i.id === id));
     }
-    if (action === 'edit') {
-        navigate(`/ombor/taminotchi-kirim/tahrirlash/${id}`); 
-    }
+    // 🚨 Edit tugmasi hozircha yashirildi.
     if (action === 'print') {
         setInvoiceToPrint(invoices.find(i => i.id === id));
         setPrintModalOpen(true);
@@ -259,13 +244,14 @@ const SupplierIncomeList = () => {
     if (action === 'send') executeSend(id);
   };
 
-  // Qidiruv (Null-safe, String safe, Trimmed)
   const filteredInvoices = useMemo(() => {
       if (!searchTerm) return invoices;
       const search = searchTerm.trim().toLowerCase();
       
       return invoices.filter(inv => {
-          const supplierMatch = (inv.supplierName || '').toLowerCase().includes(search);
+          // Fallback eski supplier maydoni uchun
+          const supplierText = inv.supplierName || inv.supplier || '';
+          const supplierMatch = supplierText.toLowerCase().includes(search);
           const invoiceNumMatch = String(inv.invoiceNumber || '').toLowerCase().includes(search);
           return supplierMatch || invoiceNumMatch;
       });
@@ -288,7 +274,6 @@ const SupplierIncomeList = () => {
                 onChange={e => setSearchTerm(e.target.value)}
             />
          </div>
-         {/* 🚨 Yangi (Variant A) logikaga asosan endi to'g'ridan to'g'ri yangi /ombor/taminotchi-kirim/qoshish sahifasiga o'tadi */}
          <button onClick={() => navigate('/ombor/taminotchi-kirim/qoshish')} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95">
              <Plus size={18} /> Yangi Kirim (Faktura)
          </button>
@@ -316,7 +301,7 @@ const SupplierIncomeList = () => {
                         <tr key={inv.id} className="hover:bg-blue-50/30 transition-colors">
                             <td className="p-5 text-slate-500 font-medium">{formatDate(inv.date || inv.createdAt)}</td>
                             <td className="p-5 font-mono text-blue-600">#{inv.invoiceNumber}</td>
-                            <td className="p-5">{inv.supplierName}</td>
+                            <td className="p-5">{inv.supplierName || inv.supplier || "Noma'lum"}</td>
                             {userRole === 'director' && <td className="p-5 text-right text-emerald-600">{Number(inv.totalSum || 0).toLocaleString()} <span className="text-[10px] text-slate-400">UZS</span></td>}
                             <td className="p-5 text-center">
                                 <span className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider ${inv.status === 'Tasdiqlandi' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : (inv.status === 'Yuborildi' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-amber-50 text-amber-600 border border-amber-100')}`}>
@@ -331,25 +316,23 @@ const SupplierIncomeList = () => {
                                     <div className="absolute right-12 top-8 w-48 bg-white shadow-xl border border-slate-100 rounded-xl z-50 overflow-hidden font-bold text-sm animate-in zoom-in-95">
                                         <button onClick={() => handleAction('view', inv.id)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"><Eye size={16}/> Ko'rish</button>
                                         
-                                        {/* Chop etish har doim mumkin */}
                                         <button onClick={() => handleAction('print', inv.id)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"><Printer size={16}/> QR Chop etish</button>
                                         
-                                        {/* Status: Tasdiqlanmagan bo'lsa Tahrirlash va O'chirish mumkin */}
+                                        {/* Edit vaqtincha yashirilgan 
                                         {inv.status !== 'Tasdiqlandi' && (
-                                            <>
-                                                <button onClick={() => handleAction('edit', inv.id)} className="w-full text-left px-4 py-3 hover:bg-amber-50 text-amber-600 flex items-center gap-2 border-b border-slate-50 transition-colors"><Edit size={16}/> Tahrirlash</button>
-                                                <button onClick={() => handleAction('delete', inv.id)} className="w-full text-left px-4 py-3 hover:bg-rose-50 text-rose-600 flex items-center gap-2 transition-colors"><Trash2 size={16}/> O'chirish</button>
-                                            </>
+                                            <button onClick={() => handleAction('edit', inv.id)} className="w-full text-left px-4 py-3 hover:bg-amber-50 text-amber-600 flex items-center gap-2 border-b border-slate-50 transition-colors"><Edit size={16}/> Tahrirlash</button>
+                                        )} */}
+
+                                        {inv.status !== 'Tasdiqlandi' && (
+                                            <button onClick={() => handleAction('delete', inv.id)} className="w-full text-left px-4 py-3 hover:bg-rose-50 text-rose-600 flex items-center gap-2 transition-colors"><Trash2 size={16}/> O'chirish</button>
                                         )}
                                         
-                                        {/* Direktor uchun Tasdiqlash */}
                                         {userRole === 'director' && inv.status !== 'Tasdiqlandi' && (
                                             <button onClick={() => handleAction('approve', inv.id)} className="w-full text-left px-4 py-3 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 flex items-center gap-2 transition-all"><CheckCircle size={16}/> Tasdiqlash</button>
                                         )}
                                         
-                                        {/* Admin uchun Yuborish */}
                                         {userRole === 'admin' && inv.status === 'Jarayonda' && (
-                                            <button onClick={() => handleAction('send', inv.id)} className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 flex items-center gap-2 transition-all"><Send size={16}/> Direktorga yuborish</button>
+                                            <button onClick={() => handleAction('send', inv.id)} className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 flex items-center gap-2 transition-all"><Send size={16}/> Yuborish</button>
                                         )}
                                     </div>
                                 )}
@@ -386,7 +369,8 @@ const SupplierIncomeList = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 font-bold text-slate-700">
-                            {invoiceToPrint.items.map((item, i) => (
+                            {/* Null-safe map */}
+                            {(Array.isArray(invoiceToPrint.items) ? invoiceToPrint.items : []).map((item, i) => (
                                 <tr key={i} className="hover:bg-slate-50 transition-colors">
                                     <td className="p-4 font-mono text-blue-600">#{item.customId ?? '-'}</td>
                                     <td className="p-4">{item.name}</td>
@@ -421,12 +405,12 @@ const SupplierIncomeList = () => {
                             Faktura: <span className="text-blue-600 px-3 py-1 bg-blue-50 rounded-lg ml-2">№ {viewInvoice.invoiceNumber}</span>
                         </h2>
                         <div className="text-xs text-slate-500 font-bold flex gap-4 uppercase tracking-widest">
-                            <span className="flex items-center gap-1">Ta'minotchi: <span className="text-slate-800">{viewInvoice.supplierName}</span></span>
+                            <span className="flex items-center gap-1">Ta'minotchi: <span className="text-slate-800">{viewInvoice.supplierName || viewInvoice.supplier}</span></span>
                             <span>•</span>
                             <span className="flex items-center gap-1">Kiritdi: <span className="text-slate-800">{viewInvoice.userName || "Noma'lum"}</span></span>
                         </div>
                     </div>
-                    <button onClick={() => setViewInvoice(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"><X size={24}/></button>
+                    <button disabled={isProcessing} onClick={() => setViewInvoice(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors disabled:opacity-50"><X size={24}/></button>
                 </div>
                 <div className="max-h-[50vh] overflow-y-auto mb-8 border border-slate-100 rounded-2xl custom-scrollbar">
                     <table className="w-full text-sm text-left">
@@ -441,7 +425,8 @@ const SupplierIncomeList = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 font-bold text-slate-700">
-                            {viewInvoice.items.map((item, i) => (
+                            {/* Null-safe map */}
+                            {(Array.isArray(viewInvoice.items) ? viewInvoice.items : []).map((item, i) => (
                                 <tr key={i} className="hover:bg-slate-50 transition-colors">
                                     <td className="p-4 font-mono text-slate-400">#{item.customId ?? '-'}</td>
                                     <td className="p-4">{item.name}</td>
@@ -485,7 +470,7 @@ const SupplierIncomeList = () => {
 
                 <div className="flex gap-3">
                     <button disabled={isProcessing} onClick={() => setConfirmModal({ isOpen: false, type: null, invoiceId: null })} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs tracking-widest disabled:opacity-50">Bekor qilish</button>
-                    <button disabled={isProcessing} onClick={() => confirmModal.type === 'approve' ? executeApprove(confirmModal.invoiceId) : executeDelete(confirmModal.invoiceId)} className={`flex-1 py-4 text-white rounded-2xl font-black shadow-xl active:scale-95 transition-all uppercase text-xs tracking-widest disabled:opacity-70 flex justify-center items-center gap-2 ${confirmModal.type === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'}`}>
+                    <button disabled={isProcessing} onClick={() => confirmModal.type === 'approve' ? executeApprove(confirmModal.invoiceId) : executeDelete(confirmModal.invoiceId)} className={`flex-1 py-4 text-white rounded-2xl font-black shadow-xl active:scale-95 transition-all uppercase text-xs tracking-widest flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed ${confirmModal.type === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'}`}>
                         {isProcessing ? <Loader2 size={16} className="animate-spin"/> : (confirmModal.type === 'approve' ? 'Tasdiqlash' : "O'chirish")}
                     </button>
                 </div>
