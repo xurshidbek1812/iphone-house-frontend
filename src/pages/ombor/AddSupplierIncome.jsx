@@ -5,7 +5,6 @@ import toast from 'react-hot-toast';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
 
-// HELPER: Xavfsiz JSON parsing
 const parseJsonSafe = async (response) => {
     try {
         return await response.json();
@@ -21,16 +20,14 @@ const AddSupplierIncome = () => {
   const currentUserName = sessionStorage.getItem('userName') || 'Hodim';
   const token = sessionStorage.getItem('token');
   
-  // 12. invoiceNumber bir xil standartga tushirildi
   const generateInvoiceNumber = () => `INV-${Date.now().toString().slice(-6)}`;
 
   // --- STATES ---
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [supplierName, setSupplierName] = useState(''); // 13. supplier -> supplierName
+  const [supplierName, setSupplierName] = useState(''); 
   const [invoiceNumber, setInvoiceNumber] = useState(generateInvoiceNumber()); 
   const [exchangeRate, setExchangeRate] = useState(sessionStorage.getItem('globalExchangeRate') || '12500'); 
 
-  // 5. isSubmitting va loading state'lar
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showConfirmModal, setShowConfirmModal] = useState(false); 
@@ -48,7 +45,6 @@ const AddSupplierIncome = () => {
   const [inputSalePrice, setInputSalePrice] = useState(''); 
   const [inputCurrency, setInputCurrency] = useState('UZS');
 
-  // HELPER: Auth Headers
   const getAuthHeaders = useCallback(() => ({
       'Authorization': `Bearer ${token}`
   }), [token]);
@@ -58,7 +54,6 @@ const AddSupplierIncome = () => {
       'Content-Type': 'application/json'
   }), [getAuthHeaders]);
 
-  // --- 6. TOVARLARNI YUKLASH (Xavfsiz va Mustahkam) ---
   const fetchProducts = useCallback(async (signal) => {
       if (!token) {
           toast.error("Tizimga kirish tokeni topilmadi!");
@@ -99,7 +94,6 @@ const AddSupplierIncome = () => {
       return () => controller.abort();
   }, [fetchProducts]);
 
-  // --- NARX HISOBLASHLAR (NaN Himoyasi bilan) ---
   const getCostInUZS = (price, currency, rate) => {
       const numPrice = Number(price) || 0;
       const numRate = Number(rate) || 12500;
@@ -164,7 +158,6 @@ const AddSupplierIncome = () => {
     }
   };
 
-  // --- 8. QO'SHISH VALIDATSIYASI ---
   const handleAddItem = () => {
     let productToAdd = selectedProduct;
     
@@ -178,7 +171,6 @@ const AddSupplierIncome = () => {
     
     if (!productToAdd) return toast.error("Bazada topilmadi! To'g'ri tanlang.");
     
-    // 7. Duplicate himoyasi
     if (selectedItems.some(item => item.id === productToAdd.id)) {
         return toast.error("Bu tovar allaqachon fakturaga qo'shilgan!");
     }
@@ -191,7 +183,6 @@ const AddSupplierIncome = () => {
     if (!price || price <= 0) return toast.error("Kirim narxini to'g'ri kiriting!");
     if (sale < 0) return toast.error("Sotuv narxi manfiy bo'lishi mumkin emas!");
     
-    // Dona uchun butun son himoyasi
     if (productToAdd.unit === 'Dona' && !Number.isInteger(qty)) {
         return toast.error("Dona o'lchov birligi uchun miqdor butun son bo'lishi shart!");
     }
@@ -209,10 +200,8 @@ const AddSupplierIncome = () => {
         total: qty * price
     };
 
-    // 10. Functional state update
     setSelectedItems(prev => [...prev, newItem]);
     
-    // Reset form
     setSelectedProduct(null);
     setSearchTerm('');
     setInputCount('');
@@ -221,7 +210,6 @@ const AddSupplierIncome = () => {
     setInputSalePrice('');
   };
 
-  // 10. Functional updates
   const updateItem = (id, field, value) => {
     setSelectedItems(prev => prev.map(item => {
       if (item.id === id) {
@@ -261,7 +249,6 @@ const AddSupplierIncome = () => {
     });
   };
 
-  // 11. useMemo orqali hisoblash
   const { grandTotalUZS } = useMemo(() => {
     let totalUZS = 0; let totalUSD = 0;
     selectedItems.forEach(item => {
@@ -274,7 +261,6 @@ const AddSupplierIncome = () => {
     };
   }, [selectedItems, exchangeRate]);
 
-  // 9. Null-safe qidiruv
   const filteredProducts = useMemo(() => {
       if (!searchTerm) return [];
       const cleanSearch = searchTerm.trim().toLowerCase();
@@ -284,14 +270,12 @@ const AddSupplierIncome = () => {
       });
   }, [products, searchTerm]);
 
-  // --- SAVE FLOW ---
   const handlePreSave = () => {
     const cleanSupplier = supplierName.trim();
     if (!invoiceNumber.trim() || !cleanSupplier) {
         return toast.error("Ta'minotchi nomi va Faktura raqamini to'ldiring!");
     }
     
-    // USD kursi validatsiyasi
     const hasUsdItem = selectedItems.some(i => i.currency === 'USD');
     if (hasUsdItem && (!Number(exchangeRate) || Number(exchangeRate) <= 0)) {
         return toast.error("USD valyutasi uchun kursni to'g'ri kiriting!");
@@ -302,7 +286,6 @@ const AddSupplierIncome = () => {
     setShowConfirmModal(true);
   };
 
-  // 1, 2, 5. BAZAGA YUBORISH (Contract moslashuvi)
   const handleSaveInvoice = async () => {
     setIsSubmitting(true);
     try {
@@ -314,10 +297,8 @@ const AddSupplierIncome = () => {
             exchangeRate: finalExchangeRate,
             totalSum: grandTotalUZS,
             status: 'Jarayonda', 
-            // userName kerak bo'lsa server o'zi tokendan oladi, yoki qo'shamiz
             userName: currentUserName, 
             
-            // Items aynan List kutayotgan shaklda
             items: selectedItems.map(item => ({
                 productId: item.id,
                 customId: item.customId != null ? Number(item.customId) : null,
@@ -330,7 +311,6 @@ const AddSupplierIncome = () => {
             }))
         };
 
-        // 1. Endpoint To'g'rilandi
         const res = await fetch(`${API_URL}/api/invoices`, {
             method: 'POST',
             headers: getJsonAuthHeaders(),
@@ -361,7 +341,7 @@ const AddSupplierIncome = () => {
                 <button disabled={isSubmitting} onClick={() => navigate(-1)} className="p-2 bg-white rounded-lg border hover:bg-gray-100 disabled:opacity-50 transition-colors"><ArrowLeft size={20}/></button>
                 <h1 className="text-2xl font-bold text-gray-800">Yangi kirim qilish (Batafsil)</h1>
             </div>
-            <button disabled={isSubmitting} onClick={handlePreSave} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg flex items-center gap-2 active:scale-95 transition-all disabled:opacity-50">
+            <button disabled={isSubmitting} onClick={handlePreSave} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg flex items-center gap-2 active:scale-95 transition-transform">
                 {isSubmitting ? <Loader2 size={20} className="animate-spin"/> : <Save size={20}/>}
                 Fakturani saqlash
             </button>
@@ -379,19 +359,19 @@ const AddSupplierIncome = () => {
                         <input type="date" disabled={isSubmitting} className="w-full p-3 border rounded-lg outline-blue-500 disabled:bg-gray-50" value={date} onChange={e=>setDate(e.target.value)}/>
                         <input type="text" disabled={isSubmitting} className={`w-full p-3 border rounded-lg outline-blue-500 font-bold disabled:bg-gray-50`} placeholder="Faktura №" value={invoiceNumber} onChange={e=>setInvoiceNumber(e.target.value)} />
                         
-                        <div className="relative">
-                            <input 
-                                type="text" disabled={isSubmitting} 
-                                className={`w-full p-3 border rounded-lg outline-blue-500 disabled:bg-gray-50`} 
-                                placeholder="Ta'minotchi nomi..." 
-                                list="suppliers-list" 
-                                value={supplierName} 
-                                onChange={(e) => setSupplierName(e.target.value)} 
-                            />
-                            <datalist id="suppliers-list">
-                                {suppliersList.map(s => <option key={s.id} value={s.name} />)}
-                            </datalist>
-                        </div>
+                        {/* 🚨 DIQQAT: MANA SHU QISM SELECT GA O'ZGARTIRILDI 🚨 */}
+                        <select 
+                            disabled={isSubmitting}
+                            className={`w-full p-3 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800 transition-all disabled:bg-gray-50 disabled:opacity-50`}
+                            value={supplierName}
+                            onChange={(e) => setSupplierName(e.target.value)}
+                        >
+                            <option value="">Ta'minotchi tanlang...</option>
+                            {suppliersList.map(s => (
+                                <option key={s.id} value={s.name}>{s.name}</option>
+                            ))}
+                        </select>
+                        {/* -------------------------------------------------------- */}
                         
                         <input type="number" disabled={isSubmitting} className="w-full p-3 border rounded-lg border-blue-300 bg-blue-50 outline-blue-500 disabled:opacity-70" placeholder="1 USD kursi" value={exchangeRate} onChange={e=>setExchangeRate(e.target.value)}/>
                     </div>
@@ -403,7 +383,6 @@ const AddSupplierIncome = () => {
                     
                     <div className="flex flex-col gap-4">
                         <div className="flex flex-wrap md:flex-nowrap gap-4 items-start">
-                            {/* Qidiruv Inputi */}
                             <div className="flex-1 relative min-w-[200px]">
                                 <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">Tovar nomi / Kod</label>
                                 <input 
@@ -444,15 +423,14 @@ const AddSupplierIncome = () => {
                             </div>
                         </div>
 
-                        {/* Ustama va Qo'shish */}
                         <div className="flex flex-wrap md:flex-nowrap gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-100 mt-2">
                             <div className="w-32">
                                 <label className="text-[11px] font-bold text-amber-600 uppercase mb-1 block">Ustama (%)</label>
-                                <input type="number" disabled={isSubmitting} className="w-full p-3 border border-amber-200 bg-amber-50 rounded-lg outline-amber-500 font-bold text-amber-700 text-sm text-center disabled:opacity-50" placeholder="10" value={inputMarkup} onChange={e => handleMarkupChange(e.target.value)} />
+                                <input type="number" disabled={isSubmitting} className="w-full p-3 border border-amber-200 bg-amber-50 rounded-lg outline-amber-500 font-bold text-amber-700 text-sm text-center disabled:opacity-50" placeholder="Misol: 10" value={inputMarkup} onChange={e => handleMarkupChange(e.target.value)} />
                             </div>
 
                             <div className="flex-1">
-                                <label className="text-[11px] font-bold text-emerald-600 uppercase mb-1 block">Sotuv Narx <span className="text-gray-400 font-normal">(UZS)</span></label>
+                                <label className="text-[11px] font-bold text-emerald-600 uppercase mb-1 block">Sotuv Narx <span className="text-gray-400 font-normal">(Har doim So'mda)</span></label>
                                 <input type="number" disabled={isSubmitting} className="w-full p-3 border border-emerald-200 bg-emerald-50 rounded-lg outline-emerald-500 font-bold text-emerald-700 text-sm disabled:opacity-50" placeholder="Avtomat hisoblanadi" value={inputSalePrice} onChange={e => handleSalePriceChange(e.target.value)} />
                             </div>
 
@@ -464,104 +442,102 @@ const AddSupplierIncome = () => {
                         </div>
                     </div>
                 </div>
-
-                {/* --- JADVAL QISMI (Faqat Faktura tovarlari) --- */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 min-h-[300px] flex flex-col overflow-hidden">
-                    <div className="px-6 py-4 border-b bg-slate-50 flex items-center justify-between">
-                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                            <Package size={18} className="text-blue-500"/> Faktura tovarlari
-                        </h3>
-                        {selectedItems.length > 0 && <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full">{selectedItems.length} xil tovar</span>}
-                    </div>
-
-                    <div className="flex flex-col h-full flex-1 p-6 animate-in fade-in">
-                        {selectedItems.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center flex-1 text-gray-400 py-10">
-                                <Package size={48} className="mb-3 opacity-20"/>
-                                <p className="font-medium text-sm">Faktura bo'sh. Yuqoridan mahsulot qo'shing.</p>
-                            </div>
-                        ) : (
-                            <div className="overflow-x-auto border rounded-xl custom-scrollbar max-h-[400px]">
-                                <table className="w-full text-left whitespace-nowrap">
-                                    <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-black tracking-wider sticky top-0 z-10 shadow-sm">
-                                        <tr>
-                                            <th className="p-3">Nomi</th>
-                                            <th className="p-3 w-24 text-center">Soni</th>
-                                            <th className="p-3 w-32">Kirim Narx</th>
-                                            <th className="p-3 w-24">Valyuta</th>
-                                            <th className="p-3 w-24 text-center text-amber-600">Ustama %</th>
-                                            <th className="p-3 w-36 text-emerald-600">Sotuv (UZS)</th>
-                                            <th className="p-3 w-32 text-right">Jami Kirim</th>
-                                            <th className="p-3 w-12 text-center"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y text-sm font-bold text-slate-700">
-                                        {selectedItems.map((item, index) => (
-                                            <tr key={index} className="hover:bg-blue-50/30 transition-colors">
-                                                <td className="p-3">
-                                                    <div>{item.name}</div>
-                                                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">#{item.customId ?? '-'}</div>
-                                                </td>
-                                                <td className="p-2">
-                                                    <input type="number" disabled={isSubmitting} step={item.unit === 'Dona' ? '1' : '0.01'} className="w-full p-2 border rounded-lg text-center outline-blue-500 disabled:bg-gray-50" value={item.count} onChange={(e) => updateItem(item.id, 'count', e.target.value)} />
-                                                </td>
-                                                <td className="p-2">
-                                                    <input type="number" disabled={isSubmitting} step="0.01" className="w-full p-2 border rounded-lg outline-blue-500 disabled:bg-gray-50" value={item.price} onChange={(e) => updateItem(item.id, 'price', e.target.value)} />
-                                                </td>
-                                                <td className="p-2">
-                                                    <select disabled={isSubmitting} className="w-full p-2 border rounded-lg bg-white outline-blue-500 text-xs disabled:bg-gray-50" value={item.currency} onChange={(e) => updateItem(item.id, 'currency', e.target.value)}>
-                                                        <option value="UZS">UZS</option>
-                                                        <option value="USD">USD</option>
-                                                    </select>
-                                                </td>
-                                                <td className="p-2">
-                                                    <input type="number" disabled={isSubmitting} className="w-full p-2 border border-amber-200 bg-amber-50 rounded-lg text-center outline-amber-500 text-amber-700 disabled:opacity-50" value={item.markup} onChange={(e) => updateItem(item.id, 'markup', e.target.value)} />
-                                                </td>
-                                                <td className="p-2">
-                                                    <input type="number" disabled={isSubmitting} className="w-full p-2 border border-emerald-200 bg-emerald-50 rounded-lg outline-emerald-500 text-emerald-700 disabled:opacity-50" value={item.salePrice} onChange={(e) => updateItem(item.id, 'salePrice', e.target.value)} />
-                                                </td>
-                                                <td className="p-3 text-right font-black text-slate-800">
-                                                    {(Number(item.total) || 0).toLocaleString()}
-                                                </td>
-                                                <td className="p-3 text-center">
-                                                    <button disabled={isSubmitting} onClick={() => handleRemoveItem(index)} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50">
-                                                        <Trash2 size={18}/>
-                                                    </button>
-                                                </td>
-                                            </tr> 
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-                </div>
             </div>
 
-            {/* O'NG TOMON: STATISTIKA */}
             {userRole === 'director' && (
-                <div className="lg:col-span-4 grid grid-rows-2 gap-6 h-fit sticky top-6">
+                <div className="lg:col-span-4 grid grid-rows-2 gap-4 h-fit sticky top-6">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center relative overflow-hidden">
                         <div className="absolute right-[-20px] top-[-20px] opacity-5"><Package size={150}/></div>
-                        <div className="text-gray-400 text-xs font-black uppercase tracking-widest mb-1">Pozitsiyalar soni</div>
-                        {/* 14. Mixed unit stat fix */}
+                        <div className="text-gray-500 text-sm font-bold uppercase tracking-widest mb-1">Pozitsiyalar soni</div>
                         <div className="text-4xl font-black text-blue-600 relative z-10">{selectedItems.length} <span className="text-lg text-gray-400 font-bold ml-1">xil tovar</span></div>
                     </div>
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center relative overflow-hidden">
                         <div className="absolute right-[-20px] top-[-20px] opacity-5"><DollarSign size={150}/></div>
-                        <div className="text-gray-400 text-xs font-black uppercase tracking-widest mb-1">Jami Summasi</div>
-                        <div className="text-3xl lg:text-4xl font-black text-emerald-500 relative z-10 truncate" title={`${grandTotalUZS.toLocaleString()} UZS`}>
-                            {grandTotalUZS.toLocaleString()} <span className="text-lg text-emerald-600/50 font-bold ml-1">UZS</span>
+                        <div className="text-gray-500 text-sm font-bold uppercase tracking-widest mb-1">Jami Summasi</div>
+                        <div className="text-3xl font-black text-green-600 relative z-10 truncate" title={`${grandTotalUZS.toLocaleString()} UZS`}>
+                            {grandTotalUZS.toLocaleString()} <span className="text-lg text-gray-400 font-bold ml-1">UZS</span>
                         </div>
                     </div>
                 </div>
             )}
         </div>
 
-        {/* TASDIQLASH MODALI (15. UI blokirovkalari bilan) */}
+        {/* JADVAL QISMI */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mt-6 min-h-[300px] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b bg-slate-50 flex items-center justify-between">
+                <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                    <Package size={18} className="text-blue-500"/> Faktura tovarlari
+                </h3>
+                {selectedItems.length > 0 && <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full">{selectedItems.length} xil tovar</span>}
+            </div>
+
+            <div className="flex flex-col h-full flex-1 p-6 animate-in fade-in">
+                {selectedItems.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center flex-1 text-gray-400 py-10">
+                        <Package size={48} className="mb-3 opacity-20"/>
+                        <p className="font-medium text-sm">Faktura bo'sh. Yuqoridan mahsulot qo'shing.</p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto border rounded-xl custom-scrollbar max-h-[400px]">
+                        <table className="w-full text-left whitespace-nowrap">
+                            <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-black tracking-wider sticky top-0 z-10 shadow-sm">
+                                <tr>
+                                    <th className="p-3">Nomi</th>
+                                    <th className="p-3 w-24 text-center">Soni</th>
+                                    <th className="p-3 w-32">Kirim Narx</th>
+                                    <th className="p-3 w-24">Valyuta</th>
+                                    <th className="p-3 w-24 text-center text-amber-600">Ustama %</th>
+                                    <th className="p-3 w-36 text-emerald-600">Sotuv (UZS)</th>
+                                    <th className="p-3 w-32 text-right">Jami Kirim</th>
+                                    <th className="p-3 w-12 text-center"></th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y text-sm font-bold text-slate-700">
+                                {selectedItems.map((item, index) => (
+                                    <tr key={index} className="hover:bg-blue-50/30 transition-colors">
+                                        <td className="p-3">
+                                            <div>{item.name}</div>
+                                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">#{item.customId ?? '-'}</div>
+                                        </td>
+                                        <td className="p-2">
+                                            <input type="number" disabled={isSubmitting} step={item.unit === 'Dona' ? '1' : '0.01'} className="w-full p-2 border rounded-lg text-center outline-blue-500 disabled:bg-gray-50" value={item.count} onChange={(e) => updateItem(item.id, 'count', e.target.value)} />
+                                        </td>
+                                        <td className="p-2">
+                                            <input type="number" disabled={isSubmitting} step="0.01" className="w-full p-2 border rounded-lg outline-blue-500 disabled:bg-gray-50" value={item.price} onChange={(e) => updateItem(item.id, 'price', e.target.value)} />
+                                        </td>
+                                        <td className="p-2">
+                                            <select disabled={isSubmitting} className="w-full p-2 border rounded-lg bg-white outline-blue-500 text-xs disabled:bg-gray-50" value={item.currency} onChange={(e) => updateItem(item.id, 'currency', e.target.value)}>
+                                                <option value="UZS">UZS</option>
+                                                <option value="USD">USD</option>
+                                            </select>
+                                        </td>
+                                        <td className="p-2">
+                                            <input type="number" disabled={isSubmitting} className="w-full p-2 border border-amber-200 bg-amber-50 rounded-lg text-center outline-amber-500 text-amber-700 disabled:opacity-50" value={item.markup} onChange={(e) => updateItem(item.id, 'markup', e.target.value)} />
+                                        </td>
+                                        <td className="p-2">
+                                            <input type="number" disabled={isSubmitting} className="w-full p-2 border border-emerald-200 bg-emerald-50 rounded-lg outline-emerald-500 text-emerald-700 disabled:opacity-50" value={item.salePrice} onChange={(e) => updateItem(item.id, 'salePrice', e.target.value)} />
+                                        </td>
+                                        <td className="p-3 text-right font-black text-slate-800">
+                                            {(Number(item.total) || 0).toLocaleString()}
+                                        </td>
+                                        <td className="p-3 text-center">
+                                            <button disabled={isSubmitting} onClick={() => handleRemoveItem(index)} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50">
+                                                <Trash2 size={18}/>
+                                            </button>
+                                        </td>
+                                    </tr> 
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </div>
+
+        {/* TASDIQLASH MODALI */}
         {showConfirmModal && (
             <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-                <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-8 animate-in zoom-in-95">
+                <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-8 animate-in zoom-in-95 text-center">
                     <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600 shadow-inner">
                         <CheckCircle size={32} strokeWidth={2.5}/>
                     </div>
