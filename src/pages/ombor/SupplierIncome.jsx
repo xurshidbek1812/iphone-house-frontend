@@ -43,7 +43,6 @@ const SupplierIncome = () => {
   const [inputSalePrice, setInputSalePrice] = useState(''); 
   const [inputCurrency, setInputCurrency] = useState('UZS');
 
-  // HELPER: Auth Headers
   const getAuthHeaders = useCallback(() => ({
       'Authorization': `Bearer ${token}`
   }), [token]);
@@ -53,7 +52,6 @@ const SupplierIncome = () => {
       'Content-Type': 'application/json'
   }), [getAuthHeaders]);
 
-  // --- YUKLASH ---
   const fetchData = useCallback(async (signal = undefined) => {
       if (!token) return;
       try {
@@ -89,7 +87,6 @@ const SupplierIncome = () => {
       return () => controller.abort();
   }, [fetchData]);
 
-  // --- NARXLARNI HISOBLASH ---
   const getCostInUZS = (price, currency, rate) => {
       const numPrice = Number(price) || 0;
       const numRate = Number(rate) || 12500;
@@ -154,7 +151,6 @@ const SupplierIncome = () => {
     }
   };
 
-  // --- QO'SHISH VA O'CHIRISH ---
   const handleAddItem = () => {
     let productToAdd = selectedProduct;
     if (!productToAdd && searchTerm) {
@@ -226,7 +222,7 @@ const SupplierIncome = () => {
       );
   }, [allProducts, searchTerm]);
 
-  // --- SAQLASH ---
+  // --- SAQLASH (Baza bilan ulanish) ---
   const handleSave = async () => {
     const cleanSupplier = supplierName.trim();
     if (!cleanSupplier) return toast.error("Ta'minotchi nomini tanlang!");
@@ -236,15 +232,19 @@ const SupplierIncome = () => {
     setIsSubmitting(true);
 
     try {
+      const finalExchangeRate = currencyRate;
+
+      // 🚨 BAZA KUTAYOTGAN ANIQ FORMAT (500 ERROR FIX)
       const payload = {
-        supplierName: cleanSupplier,
+        date: date, // <--- Baza so'rashi mumkin
+        supplier: cleanSupplier, // <--- supplierName emas, aynan supplier bo'lishi shart!
         invoiceNumber: invoiceNumber.trim() || Date.now().toString().slice(-6),
-        exchangeRate: Number(currencyRate),
+        exchangeRate: finalExchangeRate,
         totalSum: grandTotalUZS,
         status: "Jarayonda", 
         userName: currentUserName,
         items: invoiceItems.map(item => ({
-            productId: item.id,
+            id: item.id, // <--- productId emas, aynan id bo'lishi shart!
             customId: Number(item.customId) || 0,
             name: item.name,
             count: Number(item.count),
@@ -265,7 +265,7 @@ const SupplierIncome = () => {
       const data = await parseJsonSafe(response);
 
       if (response.ok) {
-          toast.success("Kirim saqlandi!");
+          toast.success("Kirim 'Jarayonda' holatida saqlandi!");
           navigate('/ombor/taminotchi-kirim'); 
       } else {
           toast.error(data?.error || `Saqlashda xatolik (${response.status})`);
@@ -413,7 +413,7 @@ const SupplierIncome = () => {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col justify-center relative overflow-hidden">
                 <div className="absolute right-[-20px] top-[-20px] opacity-5"><DollarSign size={140}/></div>
                 <div className="text-slate-400 text-[11px] font-black uppercase tracking-widest mb-1">Jami Summasi</div>
-                <div className="text-3xl lg:text-4xl font-black text-emerald-500 relative z-10 truncate" title={`${grandTotalUZS.toLocaleString()} UZS`}>
+                <div className="text-3xl font-black text-emerald-500 relative z-10 truncate" title={`${grandTotalUZS.toLocaleString()} UZS`}>
                     {grandTotalUZS.toLocaleString()} <span className="text-base text-emerald-600/50 font-bold ml-1">UZS</span>
                 </div>
             </div>
@@ -421,9 +421,8 @@ const SupplierIncome = () => {
          {/* --- O'NG TOMON TUGADI --- */}
 
       </div> 
-      {/* 🚨 GRID CONTAINER SHU YERDA YOPILADI 🚨 */}
 
-      {/* 3. FAKTURA JADVALI (To'liq kenglikda) */}
+      {/* 3. FAKTURA JADVALI */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[300px] flex flex-col overflow-hidden">
          <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
              <h3 className="font-bold text-slate-700 flex items-center gap-2">
