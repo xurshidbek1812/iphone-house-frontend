@@ -23,7 +23,7 @@ const CashSales = () => {
 
   // Modallar
   const [detailsModal, setDetailsModal] = useState({ isOpen: false, sale: null });
-  const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, sale: null }); // sale object beriladi
   const [sendToPaymentModal, setSendToPaymentModal] = useState({ isOpen: false, id: null }); 
   const [editModal, setEditModal] = useState({ isOpen: false, data: null });
 
@@ -96,7 +96,8 @@ const CashSales = () => {
 
   // --- O'CHIRISH (Bekor qilish) ---
   const handleDelete = async () => {
-    const id = deleteModal.id;
+    if (!deleteModal.sale) return;
+    const id = deleteModal.sale.id;
     setIsActionLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/cash-sales/${id}`, {
@@ -106,16 +107,16 @@ const CashSales = () => {
       const data = await parseJsonSafe(res);
       
       if (res.ok) {
-        toast.success("Savdo bekor qilindi (o'chirildi)!");
+        toast.success("Savdo bekor qilindi (o'chirildi) va tovarlar qaytarildi!");
         await fetchSales();
       } else {
-        toast.error(data?.error || "O'chirishda xatolik");
+        toast.error(data?.error || "O'chirishda xatolik yuz berdi");
       }
     } catch (err) { 
         toast.error("Server xatosi!"); 
     } finally { 
         setIsActionLoading(false);
-        setDeleteModal({ isOpen: false, id: null }); 
+        setDeleteModal({ isOpen: false, sale: null }); 
     }
   };
 
@@ -302,7 +303,7 @@ const CashSales = () => {
                                         <Eye size={18}/>
                                     </button>
 
-                                    {/* 🚨 FAQAT "JARAYONDA" (Yangi) SAVDOLARNI TO'LOVGA YUBORISH / TAHRIRLASH MUMKIN */}
+                                    {/* FAQAT "JARAYONDA" (Yangi) SAVDOLARNI TO'LOVGA YUBORISH / TAHRIRLASH MUMKIN */}
                                     {statusUpper === 'JARAYONDA' && (
                                         <>
                                             <button disabled={isActionLoading} onClick={() => setSendToPaymentModal({ isOpen: true, id: sale.id })} className="p-2 text-amber-600 bg-amber-50 hover:bg-amber-600 hover:text-white rounded-xl transition-all disabled:opacity-50" title="To'lovga yuborish (Kassaga)">
@@ -315,12 +316,10 @@ const CashSales = () => {
                                         </>
                                     )}
 
-                                    {/* 🚨 O'CHIRISH TUGMASI ENDI "JARAYONDA" VA "KUTILMOQDA" UCHUN HAM ISHLAYDI */}
-                                    {(statusUpper === 'JARAYONDA' || statusUpper === 'KUTILMOQDA') && (
-                                        <button disabled={isActionLoading} onClick={() => setDeleteModal({ isOpen: true, id: sale.id })} className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl transition-all disabled:opacity-50" title="Bekor qilish / O'chirish">
-                                            <Trash2 size={18}/>
-                                        </button>
-                                    )}
+                                    {/* 🚨 O'CHIRISH TUGMASI ENDI BARCHA STATUSLARDA OCHIQ */}
+                                    <button disabled={isActionLoading} onClick={() => setDeleteModal({ isOpen: true, sale })} className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl transition-all disabled:opacity-50" title="Bekor qilish / O'chirish">
+                                        <Trash2 size={18}/>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -382,7 +381,10 @@ const CashSales = () => {
                             <tbody className="divide-y divide-slate-50 font-bold text-slate-700">
                                 {(detailsModal.sale.items || []).map((item) => (
                                     <tr key={item.id} className="hover:bg-slate-50/50">
-                                        <td className="p-4">{item.product?.name || item.name || "Noma'lum tovar"}</td>
+                                        <td className="p-4">
+                                            <div>{item.product?.name || item.name || "Noma'lum tovar"}</div>
+                                            {item.batchId && <div className="text-[10px] text-indigo-500 mt-0.5">Partiya: P-{item.batchId}</div>}
+                                        </td>
                                         <td className="p-4 text-center">{item.quantity || item.qty} ta</td>
                                         <td className="p-4 text-right text-slate-500 font-medium">{Number(item.price || item.salePrice).toLocaleString()}</td>
                                         <td className="p-4 text-right text-blue-600">{(Number(item.price || item.salePrice) * (item.quantity || item.qty)).toLocaleString()}</td>
@@ -480,7 +482,7 @@ const CashSales = () => {
         </div>
       )}
 
-      {/* --- TO'LOVGA YUBORISH (OLDINGI TASDIQLASH) MODALI --- */}
+      {/* --- TO'LOVGA YUBORISH MODALI --- */}
       {sendToPaymentModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
             <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-10 animate-in zoom-in-95 text-center">
@@ -501,8 +503,8 @@ const CashSales = () => {
         </div>
       )}
 
-      {/* --- O'CHIRISH MODALI --- */}
-      {deleteModal.isOpen && (
+      {/* --- O'CHIRISH MODALI (Qattiq ogohlantirish bilan) --- */}
+      {deleteModal.isOpen && deleteModal.sale && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
             <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-10 animate-in zoom-in-95 text-center">
                 <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 bg-rose-50 text-rose-500 rotate-3 shadow-lg shadow-rose-100">
@@ -510,12 +512,12 @@ const CashSales = () => {
                 </div>
                 <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Bekor qilinadimi?</h3>
                 <p className="text-slate-500 font-medium text-sm mb-8 leading-relaxed">
-                    Bu savdoni butunlay o'chirib yuborasiz. Agar u kassaga to'lovga yuborilgan bo'lsa, u yerdan ham o'chadi.
+                    Siz <b>#{deleteModal.sale.id}</b> raqamli savdoni o'chirmoqchisiz. Agar bu to'lovga borgan bo'lsa yoki to'langan bo'lsa puli va tovarlari omborga qaytariladi.
                 </p>
                 <div className="flex gap-3">
-                    <button disabled={isActionLoading} onClick={() => setDeleteModal({ isOpen: false, id: null })} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs disabled:opacity-50">Yopish</button>
+                    <button disabled={isActionLoading} onClick={() => setDeleteModal({ isOpen: false, sale: null })} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs disabled:opacity-50">Yopish</button>
                     <button disabled={isActionLoading} onClick={handleDelete} className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black shadow-xl shadow-rose-200 hover:bg-rose-700 active:scale-95 transition-all uppercase text-xs tracking-widest flex justify-center items-center disabled:opacity-70 disabled:cursor-not-allowed">
-                        {isActionLoading ? <Loader2 size={16} className="animate-spin"/> : "O'chirish"}
+                        {isActionLoading ? <Loader2 size={16} className="animate-spin"/> : "Ha, O'chirish"}
                     </button>
                 </div>
             </div>
