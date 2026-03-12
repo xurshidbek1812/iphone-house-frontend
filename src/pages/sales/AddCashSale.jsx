@@ -70,7 +70,7 @@ const AddCashSale = () => {
   const [products, setProducts] = useState([]); 
   const [allBatches, setAllBatches] = useState([]); 
   
-  // 🚨 YANGI: Qaysi tovarning partiyalari ko'rilayotganini saqlash
+  // 🚨 TOVAR USTIGA BOSGANDA PARTIYALAR OYNASI OCHILISHI UCHUN STATE
   const [selectedProductForBatches, setSelectedProductForBatches] = useState(null);
 
   const token = sessionStorage.getItem('token');
@@ -140,7 +140,7 @@ const AddCashSale = () => {
                                       name: prod.name,
                                       quantity: batch.quantity,    
                                       buyPrice: batch.buyPrice,
-                                      salePrice: prod.salePrice, 
+                                      salePrice: batch.salePrice || prod.salePrice, 
                                       buyCurrency: batch.buyCurrency,
                                       unit: prod.unit
                                   });
@@ -178,7 +178,6 @@ const AddCashSale = () => {
       return () => controller.abort();
   }, [fetchData]);
 
-  // --- SHTRIX KOD ---
   const handleBarcodeScan = (e) => {
       if (e.key === 'Enter' && e.target.value.trim() !== '') {
           const code = e.target.value.trim();
@@ -196,7 +195,6 @@ const AddCashSale = () => {
               if (foundBatch) addBatchToCart(foundBatch);
               else toast.error(`Kod bo'yicha aktiv partiya topilmadi!`);
           } else {
-              // Agar partiya raqami bo'lmasa, tovarning o'zini qidirib modalni ochib beradi
               const foundProduct = products.find(p => String(p.customId) === searchKey || String(p.id) === searchKey);
               if (foundProduct) {
                   setSelectedProductForBatches(foundProduct);
@@ -218,7 +216,6 @@ const AddCashSale = () => {
       return Math.max(0, grandTotal - (Number(saleData.discount) || 0)); 
   }, [grandTotal, saleData.discount]);
 
-  // 🚨 TO'G'RIDAN TO'G'RI PARTIYANI SAVATGA QO'SHISH
   const addBatchToCart = (batch) => {
       if (Number(batch.quantity) <= 0) return toast.error("Ushbu partiyada qoldiq yo'q!");
       
@@ -336,7 +333,7 @@ const AddCashSale = () => {
   return (
     <div className="min-h-screen bg-gray-50 pb-24 animate-in fade-in duration-300 relative">
       
-      {/* 🚨 YANGI: PARTIYALARNI TANLASH MODALI */}
+      {/* 🚨 PARTIYALARNI TANLASH MODALI */}
       {selectedProductForBatches && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4" onClick={(e) => {if(e.target===e.currentTarget) setSelectedProductForBatches(null)}}>
               <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
