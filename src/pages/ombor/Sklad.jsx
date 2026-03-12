@@ -40,12 +40,13 @@ const Sklad = () => {
       id: null, name: '', category: '', unit: 'Dona', buyPrice: '', salePrice: ''
   });
 
-  // 🚨 YANGI: Partiya (Batch) narxini tahrirlash uchun state
+  // 🚨 Partiya (Batch) narxini tahrirlash uchun state
   const [editBatch, setEditBatch] = useState({ id: null, salePrice: '' });
   
   const [selectedProduct, setSelectedProduct] = useState(null);
   const token = sessionStorage.getItem('token');
 
+  // QR Print
   const [printProduct, setPrintProduct] = useState(null); 
   const [selectedBatch, setSelectedBatch] = useState(null); 
 
@@ -112,9 +113,11 @@ const Sklad = () => {
         return toast.error("Dona o'lchov birligi uchun qoldiq butun son bo'lishi shart!");
     }
 
+    const avtomatikId = Math.floor(10000 + Math.random() * 90000).toString();
+    
     const payload = {
         id: Date.now().toString(),
-        customId: Math.floor(10000 + Math.random() * 90000).toString(), 
+        customId: avtomatikId, 
         name: formData.name.trim(),
         category: formData.category, 
         quantity: qoldiq, 
@@ -133,6 +136,8 @@ const Sklad = () => {
         body: JSON.stringify(payload)
       });
       
+      const data = await parseJsonSafe(res);
+
       if (res.ok) {
         setIsModalOpen(false); 
         setIsSuccessOpen(true); 
@@ -142,7 +147,11 @@ const Sklad = () => {
           setIsSuccessOpen(false); 
           setFormData({ name: '', category: '', buyPrice: '', salePrice: '', quantity: '0', unit: 'Dona', buyCurrency: 'USD', saleCurrency: 'UZS' });
         }, 2500);
+      } else {
+        toast.error(data?.error || `Saqlashda xatolik (${res.status})`);
       }
+    } catch (err) { 
+        toast.error("Server bilan aloqa yo'q!"); 
     } finally {
         setIsSubmitting(false);
     }
@@ -152,8 +161,15 @@ const Sklad = () => {
       setIsActionLoading(true);
       try {
           const res = await fetch(`${API_URL}/api/products/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
-          if (res.ok) { toast.success("Tovar o'chirildi!"); await fetchData(); } 
-      } finally { 
+          if (res.ok) { 
+              toast.success("Tovar o'chirildi!"); 
+              await fetchData(); 
+          } else {
+              const data = await parseJsonSafe(res);
+              toast.error(data?.error || "O'chirib bo'lmaydi! (Bog'langan ma'lumotlar mavjud)");
+          }
+      } catch (err) { toast.error("Tarmoq xatosi!"); } 
+      finally { 
           setIsActionLoading(false);
           setDeleteModal({ isOpen: false, productId: null }); 
       }
@@ -168,37 +184,50 @@ const Sklad = () => {
 
   const handleUpdateProduct = async (e) => {
       e.preventDefault();
+      if (!editData.name.trim() || !editData.category) return toast.error("Nomi va Kategoriyasi shart!");
+
       setIsActionLoading(true);
       try {
           const payload = { ...editData, buyPrice: Number(editData.buyPrice) || 0, salePrice: Number(editData.salePrice) || 0 };
           const res = await fetch(`${API_URL}/api/products/${editData.id}`, {
               method: 'PUT', headers: getJsonAuthHeaders(), body: JSON.stringify(payload)
           });
+          const data = await parseJsonSafe(res);
+
           if (res.ok) {
-              toast.success("Tovar va uning partiyalari yangilandi!");
+              toast.success("Tovar muvaffaqiyatli tahrirlandi!");
               setIsEditModalOpen(false);
               await fetchData(); 
+          } else {
+              toast.error(data?.error || `Tahrirlashda xatolik (${res.status})`);
           }
-      } finally { setIsActionLoading(false); }
+      } catch (error) { toast.error("Server bilan aloqa yo'q"); } 
+      finally { setIsActionLoading(false); }
   };
 
   const executeArchiveBatch = async () => {
+      const batchId = archiveModal.batchId;
       setIsActionLoading(true);
       try {
-          const res = await fetch(`${API_URL}/api/products/batches/${archiveModal.batchId}/archive`, {
+          const res = await fetch(`${API_URL}/api/products/batches/${batchId}/archive`, {
               method: 'PATCH', headers: getAuthHeaders()
           });
+
           if (res.ok) {
-              toast.success("Partiya yashirildi!");
+              toast.success("Partiya muvaffaqiyatli yashirildi!");
               await fetchData(); 
-              setSelectedProduct(prev => prev ? { ...prev, batches: prev.batches.map(b => b.id === archiveModal.batchId ? { ...b, isArchived: true } : b) } : prev);
+              setSelectedProduct(prev => prev ? { ...prev, batches: prev.batches.map(b => b.id === batchId ? { ...b, isArchived: true } : b) } : prev);
+          } else {
+              const data = await parseJsonSafe(res);
+              toast.error(data?.error || "Xatolik yuz berdi");
           }
-      } finally { 
+      } catch (error) { toast.error("Server bilan aloqa yo'q"); } 
+      finally { 
           setIsActionLoading(false); setArchiveModal({ isOpen: false, batchId: null }); 
       }
   };
 
-  // 🚨 YANGI: PARTIYANING SOTUV NARXINI SAQLASH
+  // 🚨 BATCH NARXINI SAQLASH
   const handleSaveBatchPrice = async (batchId) => {
       if (!editBatch.salePrice || isNaN(editBatch.salePrice)) return toast.error("Narxni to'g'ri kiriting!");
       
@@ -215,7 +244,6 @@ const Sklad = () => {
               setEditBatch({ id: null, salePrice: '' });
               await fetchData(); 
               
-              // Ekranda darhol o'zgarishi uchun
               setSelectedProduct(prev => {
                   if (!prev) return prev;
                   return {
@@ -239,6 +267,7 @@ const Sklad = () => {
 
   const handleFinalPrint = () => {
     if (!printProduct || !selectedBatch) return toast.error("Partiyani tanlang!");
+    
     const printWindow = window.open('', '_blank');
     if (!printWindow) return toast.error("Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!");
 
@@ -272,6 +301,7 @@ const Sklad = () => {
           const search = searchTerm.trim().toLowerCase();
           const matchesSearch = (p.name || '').toLowerCase().includes(search) || 
                                 (p.customId != null && String(p.customId).includes(search));
+          
           const matchesId = filterValues.id ? String(p.customId || '').includes(filterValues.id) : true;
           const matchesCategory = filterValues.category ? p.category === filterValues.category : true;
           
@@ -279,7 +309,19 @@ const Sklad = () => {
           if (filterValues.stockStatus === 'available') matchesStock = Number(p.quantity || 0) > 0;
           if (filterValues.stockStatus === 'unavailable') matchesStock = Number(p.quantity || 0) <= 0;
 
-          return matchesSearch && matchesId && matchesCategory && matchesStock;
+          const buyFrom = filterValues.buyPriceFrom ? Number(filterValues.buyPriceFrom) : null;
+          const buyTo = filterValues.buyPriceTo ? Number(filterValues.buyPriceTo) : null;
+          let matchesBuyPrice = true;
+          if (buyFrom !== null && Number(p.buyPrice || 0) < buyFrom) matchesBuyPrice = false;
+          if (buyTo !== null && Number(p.buyPrice || 0) > buyTo) matchesBuyPrice = false;
+
+          const saleFrom = filterValues.salePriceFrom ? Number(filterValues.salePriceFrom) : null;
+          const saleTo = filterValues.salePriceTo ? Number(filterValues.salePriceTo) : null;
+          let matchesSalePrice = true;
+          if (saleFrom !== null && Number(p.salePrice || 0) < saleFrom) matchesSalePrice = false;
+          if (saleTo !== null && Number(p.salePrice || 0) > saleTo) matchesSalePrice = false;
+
+          return matchesSearch && matchesId && matchesCategory && matchesStock && matchesBuyPrice && matchesSalePrice;
       });
   }, [products, searchTerm, filterValues]);
 
@@ -299,7 +341,7 @@ const Sklad = () => {
         </div>
       </div>
 
-      {/* SEARCH & FILTER TUGMASI */}
+      {/* SEARCH & FILTER */}
       <div className="flex gap-3 mb-6">
         <div className="flex-1 bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
             <Search className="text-slate-400" size={20} />
@@ -310,7 +352,7 @@ const Sklad = () => {
         </button>
       </div>
 
-      {/* --- ASOSIY JADVAL --- */}
+      {/* ASOSIY JADVAL */}
       <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 overflow-hidden">
         <table className="w-full text-left">
             <thead className="bg-slate-50/50 text-slate-400 text-[11px] uppercase font-black tracking-widest border-b border-slate-100">
@@ -372,7 +414,90 @@ const Sklad = () => {
         </table>
       </div>
 
-      {/* --- BATAFSIL (KIRIM TARIXI VA NARX TAHRIRI) MODALI --- */}
+      {/* FILTR MODALI */}
+      {isFilterOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[200] flex justify-end" onClick={(e) => {if(e.target===e.currentTarget) setIsFilterOpen(false)}}>
+            <div className="bg-white w-full max-w-[450px] h-full shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col">
+                <div className="flex justify-between items-center p-6 border-b border-slate-100">
+                    <h2 className="text-xl font-black text-slate-800">Ma'lumotlarni filtrlash</h2>
+                    <button onClick={() => setIsFilterOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><X size={20}/></button>
+                </div>
+                <div className="p-6 flex-1 overflow-y-auto space-y-6 custom-scrollbar">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tovar ID (Kod)</label>
+                        <input type="text" value={filterValues.id} onChange={(e) => setFilterValues({...filterValues, id: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 transition-all" placeholder="Kodni yozing..." />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Kategoriyasi</label>
+                        <select value={filterValues.category} onChange={(e) => setFilterValues({...filterValues, category: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 transition-all">
+                            <option value="">Barchasi</option>
+                            {categories.map((c, i) => (
+                                <option key={c.id || i} value={c.name}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    {isDirector && (
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Kirim narxi</label>
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1 relative">
+                                    <input type="number" placeholder="Dan" value={filterValues.buyPriceFrom} onChange={(e) => setFilterValues({...filterValues, buyPriceFrom: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-700" />
+                                </div>
+                                <div className="text-slate-300">-</div>
+                                <div className="flex-1 relative">
+                                    <input type="number" placeholder="Gacha" value={filterValues.buyPriceTo} onChange={(e) => setFilterValues({...filterValues, buyPriceTo: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-700" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Sotish narxi</label>
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1 relative">
+                                <input type="number" placeholder="Dan" value={filterValues.salePriceFrom} onChange={(e) => setFilterValues({...filterValues, salePriceFrom: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-700" />
+                            </div>
+                            <div className="text-slate-300">-</div>
+                            <div className="flex-1 relative">
+                                <input type="number" placeholder="Gacha" value={filterValues.salePriceTo} onChange={(e) => setFilterValues({...filterValues, salePriceTo: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-700" />
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-4">Qoldiq holati</label>
+                        <div className="flex flex-col gap-3">
+                            <label className="flex items-center gap-3 cursor-pointer group">
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${filterValues.stockStatus === '' ? 'border-blue-600 bg-blue-600' : 'border-slate-300 group-hover:border-blue-400'}`}>
+                                    {filterValues.stockStatus === '' && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                </div>
+                                <input type="radio" className="hidden" checked={filterValues.stockStatus === ''} onChange={() => setFilterValues({...filterValues, stockStatus: ''})} />
+                                <span className="font-bold text-slate-700 group-hover:text-slate-900">Barchasi</span>
+                            </label>
+                            <label className="flex items-center gap-3 cursor-pointer group">
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${filterValues.stockStatus === 'available' ? 'border-blue-600 bg-blue-600' : 'border-slate-300 group-hover:border-blue-400'}`}>
+                                    {filterValues.stockStatus === 'available' && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                </div>
+                                <input type="radio" className="hidden" checked={filterValues.stockStatus === 'available'} onChange={() => setFilterValues({...filterValues, stockStatus: 'available'})} />
+                                <span className="font-bold text-slate-700 group-hover:text-slate-900">Qoldiq mavjud</span>
+                            </label>
+                            <label className="flex items-center gap-3 cursor-pointer group">
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${filterValues.stockStatus === 'unavailable' ? 'border-blue-600 bg-blue-600' : 'border-slate-300 group-hover:border-blue-400'}`}>
+                                    {filterValues.stockStatus === 'unavailable' && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                </div>
+                                <input type="radio" className="hidden" checked={filterValues.stockStatus === 'unavailable'} onChange={() => setFilterValues({...filterValues, stockStatus: 'unavailable'})} />
+                                <span className="font-bold text-slate-700 group-hover:text-slate-900">Qoldiq mavjud emas</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div className="p-6 border-t border-slate-100 flex gap-4 bg-slate-50 shrink-0">
+                    <button onClick={() => setFilterValues({ id: '', category: '', buyPriceFrom: '', buyPriceTo: '', salePriceFrom: '', salePriceTo: '', stockStatus: '' })} className="flex-1 py-3.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-100 transition-colors">Tozalash</button>
+                    <button onClick={() => setIsFilterOpen(false)} className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors">Tasdiqlash</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* BATAFSIL (KIRIM TARIXI VA NARX TAHRIRI) MODALI */}
       {isDetailsOpen && selectedProduct && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[999] p-4" onClick={(e) => {if(e.target===e.currentTarget) setIsDetailsOpen(false)}}>
             <div className="bg-white w-full max-w-4xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95">
@@ -418,7 +543,6 @@ const Sklad = () => {
                                                 </td>
                                             )}
                                             
-                                            {/* 🚨 SOTUV NARXI VA TAHRIRLASH */}
                                             <td className="p-4 text-right">
                                                 {editBatch.id === batch.id ? (
                                                     <div className="flex items-center justify-end gap-1.5">
@@ -446,12 +570,7 @@ const Sklad = () => {
                                             
                                             {isDirector && (
                                               <td className="p-4 text-center">
-                                                  <button 
-                                                      disabled={isActionLoading}
-                                                      onClick={() => setArchiveModal({ isOpen: true, batchId: batch.id })} 
-                                                      className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors disabled:opacity-50"
-                                                      title="Ro'yxatdan yashirish"
-                                                  >
+                                                  <button disabled={isActionLoading} onClick={() => setArchiveModal({ isOpen: true, batchId: batch.id })} className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors disabled:opacity-50" title="Ro'yxatdan yashirish">
                                                       <EyeOff size={18}/>
                                                   </button>
                                               </td>
@@ -472,10 +591,126 @@ const Sklad = () => {
         </div>
       )}
 
-      {/* --- QOLGAN MODALLAR (Tahrirlash, O'chirish, Arxivlash, Filtr, va hokazo) O'zgarishsiz qoldi --- */}
-      {/* ... [Kodni qisqartirmaslik uchun Tahrirlash, O'chirish modallari oldingi holicha ishlayveradi] ... */}
-      
-      {/* --- TOVARNI TAHRIRLASH MODALI --- */}
+      {/* QR PRINT MODAL */}
+      {printProduct && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4" onClick={(e) => {if(e.target===e.currentTarget) setPrintProduct(null)}}>
+            <div className="bg-white w-full max-w-lg rounded-[32px] shadow-2xl p-8 animate-in zoom-in-95">
+                <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-5">
+                    <div>
+                        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 tracking-tight"><Printer className="text-blue-600"/> Partiya tanlang</h2>
+                        <p className="text-sm text-slate-400 font-bold mt-1 uppercase tracking-wider">{printProduct.name}</p>
+                    </div>
+                    <button onClick={() => setPrintProduct(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"><X size={24}/></button>
+                </div>
+
+                <div className="space-y-3 max-h-80 overflow-y-auto mb-8 pr-2 custom-scrollbar">
+                    {Array.isArray(printProduct.batches) && printProduct.batches.filter(b => b.quantity > 0 && !b.isArchived).length > 0 ? (
+                        printProduct.batches.filter(b => b.quantity > 0 && !b.isArchived).map(batch => (
+                            <div key={batch.id} onClick={() => setSelectedBatch(batch)} className={`p-4 border-2 rounded-2xl cursor-pointer transition-all flex justify-between items-center group ${selectedBatch?.id === batch.id ? 'border-blue-600 bg-blue-50/50 shadow-md ring-4 ring-blue-50' : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`}>
+                                <div className="flex items-center gap-4">
+                                    <div className={`p-3 rounded-xl transition-all ${selectedBatch?.id === batch.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'}`}><Layers size={22}/></div>
+                                    <div>
+                                        <div className="font-black text-slate-800 text-base">Partiya ID: #{batch.id}</div>
+                                        <div className="text-[10px] text-slate-400 font-black uppercase mt-0.5">{new Date(batch.createdAt).toLocaleDateString('uz-UZ')} dagi kirim</div>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-lg font-black text-blue-600">{batch.quantity} <span className="text-xs">{printProduct.unit}</span></div>
+                                    <div className="text-[10px] text-slate-300 font-black uppercase tracking-tighter">Hozir bor</div>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="py-12 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                            <AlertTriangle className="mx-auto text-amber-400 mb-2" size={32}/>
+                            <p className="text-slate-400 font-bold text-sm">Chop etish uchun aktiv partiya yo'q!</p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                    <button onClick={() => setPrintProduct(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200">BEKOR QILISH</button>
+                    <button onClick={handleFinalPrint} disabled={!selectedBatch} className={`flex-1 py-4 rounded-2xl font-black shadow-lg flex justify-center items-center gap-2 transition-all ${selectedBatch ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}>
+                        <Printer size={20}/> CHOP ETISH
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* TOVAR QO'SHISH MODALI */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4" onClick={(e) => {if(e.target===e.currentTarget && !isSubmitting) setIsModalOpen(false)}}>
+            <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-6 animate-in zoom-in-95">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-black text-slate-800">Yangi tovar qo'shish</h2>
+                    <button disabled={isSubmitting} onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 disabled:opacity-50"><X size={20}/></button>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tovar nomi *</label>
+                            <input type="text" required disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 disabled:opacity-50" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} placeholder="Masalan: iPhone 15 Pro" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Kategoriya *</label>
+                            <select required disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 disabled:opacity-50" value={formData.category} onChange={e=>setFormData({...formData, category: e.target.value})}>
+                                <option value="">Tanlang...</option>
+                                {categories.map((c, i) => (
+                                    <option key={c.id || i} value={c.name}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                            <label className="block text-xs font-black text-amber-700 uppercase mb-2">Kirim Narxi va Valyuta</label>
+                            <div className="flex gap-2">
+                                <input type="number" min="0" step="0.01" disabled={isSubmitting} className="w-full p-3 bg-white border border-amber-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-amber-900 disabled:opacity-50" value={formData.buyPrice} onChange={e=>setFormData({...formData, buyPrice: e.target.value})} placeholder="0" />
+                                <select disabled={isSubmitting} className="w-24 p-3 bg-white border border-amber-200 rounded-xl font-bold text-amber-900 outline-none disabled:opacity-50" value={formData.buyCurrency} onChange={e=>setFormData({...formData, buyCurrency: e.target.value})}>
+                                    <option value="USD">USD</option>
+                                    <option value="UZS">UZS</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                            <label className="block text-xs font-black text-emerald-700 uppercase mb-2">Sotuv Narxi va Valyuta</label>
+                            <div className="flex gap-2">
+                                <input type="number" min="0" step="0.01" disabled={isSubmitting} className="w-full p-3 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-900 disabled:opacity-50" value={formData.salePrice} onChange={e=>setFormData({...formData, salePrice: e.target.value})} placeholder="0" />
+                                <select disabled={isSubmitting} className="w-24 p-3 bg-white border border-emerald-200 rounded-xl font-bold text-emerald-900 outline-none disabled:opacity-50" value={formData.saleCurrency} onChange={e=>setFormData({...formData, saleCurrency: e.target.value})}>
+                                    <option value="USD">USD</option>
+                                    <option value="UZS">UZS</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Boshlang'ich soni (Qoldiq)</label>
+                            <input type="number" min="0" step={formData.unit === 'Dona' ? '1' : '0.01'} disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 disabled:opacity-50" value={formData.quantity} onChange={e=>setFormData({...formData, quantity: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">O'lchov birligi</label>
+                            <select disabled={isSubmitting} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 disabled:opacity-50" value={formData.unit} onChange={e=>setFormData({...formData, unit: e.target.value})}>
+                                <option value="Dona">Dona</option>
+                                <option value="Kg">Kg</option>
+                                <option value="Metr">Metr</option>
+                                <option value="Litr">Litr</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" disabled={isSubmitting} className="w-full py-4 mt-2 bg-blue-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200 flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed">
+                        {isSubmitting ? <Loader2 size={20} className="animate-spin"/> : <Save size={20} />} Saqlash
+                    </button>
+                </form>
+            </div>
+        </div>
+      )}
+
+      {/* TOVARNI TAHRIRLASH MODALI */}
       {isEditModalOpen && (
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4" onClick={(e) => {if(e.target===e.currentTarget && !isActionLoading) setIsEditModalOpen(false)}}>
               <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-6 animate-in zoom-in-95">
@@ -490,7 +725,6 @@ const Sklad = () => {
                   </div>
 
                   <form onSubmit={handleUpdateProduct} className="space-y-4">
-                      {/* ... qolgan tahrirlash formasi xuddi o'zidek ... */}
                       <div className="grid grid-cols-2 gap-4">
                           <div>
                               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tovar nomi *</label>
@@ -523,6 +757,16 @@ const Sklad = () => {
                               </div>
                           </div>
                       </div>
+                      
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-2">O'lchov birligi</label>
+                          <select disabled={isActionLoading} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-700 disabled:opacity-50" value={editData.unit} onChange={e=>setEditData({...editData, unit: e.target.value})}>
+                              <option value="Dona">Dona</option>
+                              <option value="Kg">Kg</option>
+                              <option value="Metr">Metr</option>
+                              <option value="Litr">Litr</option>
+                          </select>
+                      </div>
 
                       <button type="submit" disabled={isActionLoading} className="w-full py-4 mt-2 bg-amber-500 text-white rounded-xl font-black uppercase tracking-widest hover:bg-amber-600 active:scale-95 transition-all shadow-lg shadow-amber-200 flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed">
                           {isActionLoading ? <Loader2 size={20} className="animate-spin"/> : <Save size={20} />} O'zgarishlarni Saqlash
@@ -531,6 +775,58 @@ const Sklad = () => {
               </div>
           </div>
       )}
+
+      {/* O'CHIRISH MODALI */}
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+            <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-10 animate-in zoom-in-95 text-center">
+                <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 bg-rose-50 text-rose-500 rotate-3 shadow-lg shadow-rose-100"><AlertTriangle size={40} strokeWidth={2.5} /></div>
+                <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">O'chirilsinmi?</h3>
+                <p className="text-slate-400 font-bold text-sm mb-8 leading-relaxed px-2">Bu mahsulot tizimdan butunlay o'chib ketadi. Buni ortga qaytarib bo'lmaydi!</p>
+                <div className="flex gap-3">
+                    <button disabled={isActionLoading} onClick={() => setDeleteModal({ isOpen: false, productId: null })} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs disabled:opacity-50">Bekor qilish</button>
+                    <button disabled={isActionLoading} onClick={() => executeDelete(deleteModal.productId)} className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black shadow-xl shadow-rose-200 hover:bg-rose-700 active:scale-95 transition-all uppercase text-xs tracking-widest flex justify-center items-center disabled:opacity-70">
+                        {isActionLoading ? <Loader2 size={16} className="animate-spin"/> : "O'CHIRISH"}
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* BATCH ARXIVLASH MODALI */}
+      {archiveModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1100] p-4">
+            <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-10 text-center animate-in zoom-in-95">
+                <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 bg-amber-50 text-amber-500 rotate-3 shadow-lg shadow-amber-100"><EyeOff size={40} strokeWidth={2.5} /></div>
+                <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Yashirilsinmi?</h3>
+                <p className="text-slate-400 font-bold text-sm mb-8 leading-relaxed px-2">Bu partiya barcha ro'yxatlardan yashiriladi, lekin arxivda saqlanib qoladi.</p>
+                <div className="flex gap-3">
+                    <button disabled={isActionLoading} onClick={() => setArchiveModal({ isOpen: false, batchId: null })} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs disabled:opacity-50">BEKOR QILISH</button>
+                    <button disabled={isActionLoading} onClick={executeArchiveBatch} className="flex-1 py-4 bg-amber-500 text-white rounded-2xl font-black shadow-xl shadow-amber-200 hover:bg-amber-600 active:scale-95 transition-all uppercase text-xs tracking-widest flex justify-center items-center disabled:opacity-70">
+                        {isActionLoading ? <Loader2 size={16} className="animate-spin"/> : "YASHIRISH"}
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* SUCCESS MODALI */}
+      {isSuccessOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[2000] p-4 text-center animate-in zoom-in-95 duration-300">
+            <div className="bg-white w-full max-w-sm rounded-[40px] shadow-2xl p-12 border border-slate-100">
+                <div className="relative w-28 h-28 mx-auto mb-8">
+                    <div className="absolute inset-0 bg-emerald-100 rounded-full animate-ping opacity-20"></div>
+                    <div className="relative w-28 h-28 bg-emerald-500 rounded-[35px] flex items-center justify-center text-white shadow-2xl shadow-emerald-200 rotate-3 transition-transform"><CheckCircle size={56} strokeWidth={2.5} /></div>
+                </div>
+                <h3 className="text-3xl font-black text-slate-800 mb-2 tracking-tighter">Bajarildi!</h3>
+                <p className="text-slate-400 font-bold text-sm px-4 leading-relaxed uppercase tracking-widest">Ombor yangilandi.</p>
+                <div className="mt-10 px-4"><div className="w-full bg-slate-50 h-2 rounded-full overflow-hidden"><div className="bg-emerald-500 h-full animate-progress-line w-full"></div></div></div>
+            </div>
+        </div>
+      )}
+
+      {/* KALKULYATOR COMPONENTI */}
+      <Calculator isOpen={isCalcOpen} onClose={() => setIsCalcOpen(false)} initialTotal={calcInitialPrice} initialCurrency={calcInitialCurrency} />
     </div>
   );
 };
