@@ -67,7 +67,12 @@ const AddCashSale = () => {
   const [dataLoading, setDataLoading] = useState(true);
   
   const [customers, setCustomers] = useState([]);
-  const [allBatches, setAllBatches] = useState([]); // 🚨 Tovar emas, Partiyalar bilan ishlaymiz
+  const [products, setProducts] = useState([]); 
+  const [allBatches, setAllBatches] = useState([]); 
+  
+  // 🚨 YANGI: Qaysi tovarning partiyalari ko'rilayotganini saqlash
+  const [selectedProductForBatches, setSelectedProductForBatches] = useState(null);
+
   const token = sessionStorage.getItem('token');
   const barcodeInputRef = useRef(null); 
 
@@ -93,7 +98,6 @@ const AddCashSale = () => {
       'Content-Type': 'application/json'
   }), [getAuthHeaders]);
 
-  // --- YUKLASH (PARTIYALARNI YIG'ISH) ---
   const fetchData = useCallback(async (signal = undefined) => {
       if (!token) return;
       try {
@@ -112,7 +116,20 @@ const AddCashSale = () => {
               const data = await parseJsonSafe(prodRes.value);
               if (Array.isArray(data)) {
                   let extractedBatches = [];
+                  let catalogProducts = [];
+
                   data.forEach(prod => {
+                      if (Number(prod.quantity) > 0) {
+                          catalogProducts.push({
+                              id: prod.id,
+                              customId: prod.customId,
+                              name: prod.name,
+                              quantity: prod.quantity,
+                              salePrice: prod.salePrice,
+                              unit: prod.unit
+                          });
+                      }
+
                       if (prod.batches && prod.batches.length > 0) {
                           prod.batches.forEach(batch => {
                               if (batch.quantity > 0 && !batch.isArchived) {
@@ -123,14 +140,13 @@ const AddCashSale = () => {
                                       name: prod.name,
                                       quantity: batch.quantity,    
                                       buyPrice: batch.buyPrice,
-                                      salePrice: prod.salePrice, // Sotuv narxi tovardan olinadi
+                                      salePrice: prod.salePrice, 
                                       buyCurrency: batch.buyCurrency,
                                       unit: prod.unit
                                   });
                               }
                           });
                       } else if (prod.quantity > 0) {
-                          // Eski tovarlar (partiyasi yo'q) bo'lsa
                           extractedBatches.push({
                               id: prod.id,
                               batchId: `old-${prod.id}`,
@@ -144,6 +160,8 @@ const AddCashSale = () => {
                           });
                       }
                   });
+                  
+                  setProducts(catalogProducts);
                   setAllBatches(extractedBatches);
               }
           }
@@ -167,30 +185,31 @@ const AddCashSale = () => {
           let searchKey = code;
           let batchKey = ""; 
 
-          // QR kod formatidan (ID:123|BATCH:4) ajratib olish
           if (code.includes('|')) {
               const parts = code.split('|');
               searchKey = parts.find(p => p.startsWith('ID:'))?.replace('ID:', '').trim() || searchKey;
               batchKey = parts.find(p => p.startsWith('BATCH:'))?.replace('BATCH:', '').trim() || "";
           }
 
-          let foundBatch = null;
           if (batchKey) {
-              foundBatch = allBatches.find(b => String(b.batchId) === batchKey && String(b.customId) === searchKey);
+              const foundBatch = allBatches.find(b => String(b.batchId) === batchKey && String(b.customId) === searchKey);
+              if (foundBatch) addBatchToCart(foundBatch);
+              else toast.error(`Kod bo'yicha aktiv partiya topilmadi!`);
           } else {
-              // Agar faqat ID kiritilsa, shu ID dagi eng birinchi (eski) partiyani oladi (FIFO)
-              foundBatch = allBatches.find(b => String(b.customId) === searchKey || String(b.id) === searchKey);
+              // Agar partiya raqami bo'lmasa, tovarning o'zini qidirib modalni ochib beradi
+              const foundProduct = products.find(p => String(p.customId) === searchKey || String(p.id) === searchKey);
+              if (foundProduct) {
+                  setSelectedProductForBatches(foundProduct);
+              } else {
+                  toast.error(`Kod bo'yicha tovar topilmadi!`);
+              }
           }
-          
-          if (foundBatch) addProductToCart(foundBatch);
-          else toast.error(`Kod bo'yicha aktiv partiya topilmadi!`);
           
           e.target.value = '';
           barcodeInputRef.current?.focus();
       }
   };
 
-  // --- HISOBLASH ---
   const grandTotal = useMemo(() => {
       return saleData.items.reduce((sum, item) => sum + ((Number(item.salePrice) || 0) * (Number(item.qty) || 1)), 0);
   }, [saleData.items]);
@@ -199,21 +218,25 @@ const AddCashSale = () => {
       return Math.max(0, grandTotal - (Number(saleData.discount) || 0)); 
   }, [grandTotal, saleData.discount]);
 
-  // --- SAVATGA QO'SHISH ---
-  const addProductToCart = (batch) => {
-      if (Number(batch.quantity) <= 0) return toast.error("Omborda qoldiq yo'q!");
+  // 🚨 TO'G'RIDAN TO'G'RI PARTIYANI SAVATGA QO'SHISH
+  const addBatchToCart = (batch) => {
+      if (Number(batch.quantity) <= 0) return toast.error("Ushbu partiyada qoldiq yo'q!");
       
       const existingItem = saleData.items.find(i => i.batchId === batch.batchId);
+      
       if (existingItem) {
           if (existingItem.qty + 1 > batch.quantity) return toast.error(`Ushbu partiyada faqat ${batch.quantity} ta qolgan!`);
           setSaleData(prev => ({
               ...prev, 
               items: prev.items.map(item => item.batchId === batch.batchId ? { ...item, qty: item.qty + 1 } : item)
           }));
-          toast.success(`${batch.name} soni oshirildi`);
+          toast.success(`Soni oshirildi`);
       } else {
-          setSaleData(prev => ({ ...prev, items: [...prev.items, { ...batch, qty: 1 }] }));
-          toast.success(`${batch.name} savatga qo'shildi`);
+          setSaleData(prev => ({ 
+              ...prev, 
+              items: [...prev.items, { ...batch, qty: 1 }] 
+          }));
+          toast.success(`Savatga qo'shildi`);
       }
   };
 
@@ -226,7 +249,6 @@ const AddCashSale = () => {
 
   const removeItem = (batchId) => setSaleData(prev => ({ ...prev, items: prev.items.filter(i => i.batchId !== batchId) }));
 
-  // --- QADAMLAR LOGIKASI ---
   const handleNext = () => {
       if (step === 1 && !saleData.isAnonymous && !saleData.mainCustomer) return toast.error("Mijozni tanlang yoki 'Boshqa shaxs' ni tanlang!");
       if (step === 1 && saleData.isAnonymous && !saleData.otherName.trim()) return toast.error("Xaridor ismini yozing!");
@@ -240,7 +262,6 @@ const AddCashSale = () => {
       }
   };
 
-  // --- SAQLASH ---
   const submitSale = async () => {
       const disc = Number(saleData.discount) || 0;
       if (disc > 0 && (!saleData.note || saleData.note.trim() === '')) {
@@ -261,7 +282,6 @@ const AddCashSale = () => {
               discount: disc,
               finalAmount: finalAmount,
               note: saleData.note.trim() || null,
-              // 🚨 JAMI TOVARLAR VA PARTIYALAR YUBORILADI
               items: saleData.items.map(item => ({
                   productId: item.id, 
                   batchId: String(item.batchId).startsWith('old-') ? null : item.batchId,
@@ -292,18 +312,19 @@ const AddCashSale = () => {
       }
   };
 
-  const filteredBatches = useMemo(() => {
-      if (!productSearch) return allBatches;
+  const filteredProducts = useMemo(() => {
+      if (!productSearch) return products;
       const search = productSearch.trim().toLowerCase();
-      return allBatches.filter(b => 
-          (b.name || '').toLowerCase().includes(search) || 
-          (b.customId != null && String(b.customId).includes(search))
+      return products.filter(p => 
+          (p.name || '').toLowerCase().includes(search) || 
+          (p.customId != null && String(p.customId).includes(search))
       );
-  }, [allBatches, productSearch]);
+  }, [products, productSearch]);
 
   const getCustomerPhone = (customer) => {
       if (!customer) return 'Tel kiritilmagan';
       if (Array.isArray(customer.phones) && customer.phones.length > 0) return customer.phones[0].phone;
+      if (typeof customer.phones === 'string' && customer.phones.trim() !== '') return customer.phones;
       if (customer.phone) return customer.phone;
       return 'Tel kiritilmagan';
   };
@@ -313,7 +334,65 @@ const AddCashSale = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 animate-in fade-in duration-300">
+    <div className="min-h-screen bg-gray-50 pb-24 animate-in fade-in duration-300 relative">
+      
+      {/* 🚨 YANGI: PARTIYALARNI TANLASH MODALI */}
+      {selectedProductForBatches && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4" onClick={(e) => {if(e.target===e.currentTarget) setSelectedProductForBatches(null)}}>
+              <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50/80">
+                      <div>
+                          <h3 className="font-black text-gray-800 text-lg flex items-center gap-2">
+                              <Layers className="text-blue-500" size={24}/> Partiyani tanlang
+                          </h3>
+                          <p className="text-sm font-medium text-gray-500 mt-1">{selectedProductForBatches.name}</p>
+                      </div>
+                      <button onClick={() => setSelectedProductForBatches(null)} className="p-3 bg-white hover:bg-gray-100 rounded-xl text-gray-500 border border-gray-200 transition-colors">
+                          <X size={20}/>
+                      </button>
+                  </div>
+                  <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                      <div className="space-y-4">
+                          {allBatches.filter(b => b.id === selectedProductForBatches.id).map(batch => {
+                              const qtyInCart = saleData.items.find(i => i.batchId === batch.batchId)?.qty || 0;
+                              const isFullyAdded = qtyInCart >= batch.quantity;
+
+                              return (
+                                  <div key={batch.batchId} className={`flex justify-between items-center p-5 border-2 rounded-2xl transition-all ${isFullyAdded ? 'border-gray-100 bg-gray-50/50' : 'border-blue-100 hover:border-blue-300 hover:bg-blue-50/30'}`}>
+                                      <div>
+                                          <div className="flex items-center gap-3 mb-2">
+                                              <span className="text-[11px] font-black uppercase tracking-widest bg-indigo-100 text-indigo-700 px-3 py-1 rounded-lg">
+                                                  {!String(batch.batchId).startsWith('old-') ? `Partiya: P-${batch.batchId}` : 'Eski tovar'}
+                                              </span>
+                                          </div>
+                                          <div className="text-sm font-bold text-gray-600 mt-2 flex items-center gap-4">
+                                              <span>Qoldiq: <span className="text-blue-600 font-black">{batch.quantity} ta</span></span>
+                                              {qtyInCart > 0 && <span className="text-rose-500 bg-rose-50 px-2 py-0.5 rounded-md">Savatda: {qtyInCart} ta</span>}
+                                          </div>
+                                      </div>
+                                      <div className="flex items-center gap-6">
+                                          <div className="text-right">
+                                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Sotuv narxi</p>
+                                              <p className="font-black text-emerald-600 text-lg">{Number(batch.salePrice).toLocaleString()} <span className="text-xs">UZS</span></p>
+                                          </div>
+                                          <button 
+                                              disabled={isFullyAdded} 
+                                              onClick={() => addBatchToCart(batch)} 
+                                              className={`w-14 h-14 flex items-center justify-center rounded-2xl transition-all shadow-sm active:scale-95 ${qtyInCart > 0 && !isFullyAdded ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-blue-200' : 'bg-white border-2 border-gray-200 text-gray-500 hover:border-blue-500 hover:text-blue-500'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                                          >
+                                              {isFullyAdded ? <Check size={24} strokeWidth={3}/> : <Plus size={24} strokeWidth={2.5}/>}
+                                          </button>
+                                      </div>
+                                  </div>
+                              )
+                          })}
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* TEPADAGI HEADER */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
          <div className="flex items-center gap-4">
             <button disabled={isLoading} onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50 transition-colors"><ArrowLeft size={20} className="text-gray-600"/></button>
@@ -447,35 +526,38 @@ const AddCashSale = () => {
                             <div className="flex-1 overflow-y-auto custom-scrollbar border border-gray-100 rounded-2xl">
                                 <table className="w-full text-left text-sm">
                                     <thead className="bg-gray-50 sticky top-0 text-[10px] text-gray-400 uppercase font-black tracking-widest z-10 shadow-sm border-b border-gray-100">
-                                        <tr><th className="p-4">Nomi va Partiya</th><th className="p-4 text-center">Qoldiq</th><th className="p-4 text-right">Sotuv Narxi</th><th className="p-4 text-center">Amal</th></tr>
+                                        <tr><th className="p-4">Tovar Nomi</th><th className="p-4 text-center">Umumiy Qoldiq</th><th className="p-4 text-right">Sotuv Narxi</th><th className="p-4 text-center">Tanlash</th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
-                                        {filteredBatches.map(batch => {
-                                            const isAdded = saleData.items.some(i => i.batchId === batch.batchId);
+                                        {filteredProducts.map(product => {
+                                            const qtyInCart = saleData.items.filter(i => i.id === product.id).reduce((s, i) => s + i.qty, 0);
+                                            const isFullyAdded = qtyInCart >= product.quantity;
+
                                             return (
-                                                <tr key={batch.batchId} className={`hover:bg-blue-50/50 transition-colors ${isAdded ? 'bg-blue-50/30' : ''}`}>
+                                                <tr key={product.id} className="hover:bg-blue-50/50 transition-colors group cursor-pointer" onClick={() => setSelectedProductForBatches(product)}>
                                                     <td className="p-4">
-                                                        <div className="text-gray-800">{batch.name}</div>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <span className="text-[10px] font-mono text-gray-400 uppercase tracking-widest">#{batch.customId ?? '-'}</span>
-                                                            {!String(batch.batchId).startsWith('old-') && (
-                                                                <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded flex items-center gap-1"><Layers size={10}/> P-{batch.batchId}</span>
-                                                            )}
+                                                        <div className="text-gray-800 group-hover:text-blue-700 transition-colors">{product.name}</div>
+                                                        <div className="text-[10px] font-mono text-gray-400 uppercase tracking-widest mt-1">ID: #{product.customId ?? '-'}</div>
+                                                    </td>
+                                                    <td className="p-4 text-center">
+                                                        <div className="flex flex-col items-center">
+                                                            <span className="px-2.5 py-1 rounded-md text-xs bg-blue-50 text-blue-600">{Number(product.quantity || 0)} ta</span>
+                                                            {qtyInCart > 0 && <span className="text-[9px] text-rose-500 mt-1">Savatda: {qtyInCart} ta</span>}
                                                         </div>
                                                     </td>
+                                                    <td className="p-4 text-right text-emerald-600">{Number(product.salePrice || 0).toLocaleString()}</td>
                                                     <td className="p-4 text-center">
-                                                        <span className={`px-2.5 py-1 rounded-md text-xs ${Number(batch.quantity) > 0 ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-500'}`}>{Number(batch.quantity || 0)}</span>
-                                                    </td>
-                                                    <td className="p-4 text-right text-emerald-600">{Number(batch.salePrice || 0).toLocaleString()}</td>
-                                                    <td className="p-4 text-center">
-                                                        <button disabled={batch.quantity <= 0} onClick={() => addProductToCart(batch)} className={`p-2 rounded-xl transition-all shadow-sm active:scale-95 ${isAdded ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-white border border-gray-200 text-gray-500 hover:border-blue-500 hover:text-blue-500'} disabled:opacity-30 disabled:cursor-not-allowed`}>
-                                                            {isAdded ? <Check size={18} strokeWidth={3}/> : <Plus size={18} strokeWidth={2.5}/>}
+                                                        <button 
+                                                            className={`p-2 rounded-xl transition-all shadow-sm active:scale-95 bg-white border border-gray-200 text-blue-500 hover:border-blue-500 hover:bg-blue-50 group-hover:bg-blue-500 group-hover:text-white`}
+                                                            title="Partiyalarni ko'rish"
+                                                        >
+                                                            <Layers size={18} strokeWidth={2.5}/>
                                                         </button>
                                                     </td>
                                                 </tr>
                                             )
                                         })}
-                                        {filteredBatches.length === 0 && <tr><td colSpan="4" className="p-16 text-center text-gray-400 font-medium">Hech narsa topilmadi</td></tr>}
+                                        {filteredProducts.length === 0 && <tr><td colSpan="4" className="p-16 text-center text-gray-400 font-medium">Hech narsa topilmadi</td></tr>}
                                     </tbody>
                                 </table>
                             </div>
@@ -494,23 +576,23 @@ const AddCashSale = () => {
                                 <div className="flex-1 overflow-y-auto custom-scrollbar border bg-white border-gray-100 rounded-3xl shadow-sm">
                                     <table className="w-full text-left text-sm">
                                         <thead className="bg-gray-50 sticky top-0 text-[10px] text-gray-400 uppercase font-black tracking-widest border-b border-gray-100 z-10">
-                                            <tr><th className="p-4 pl-6">Nomi / Partiya</th><th className="p-4 w-28 text-center">Soni</th><th className="p-4 text-right">Dona Narxi</th><th className="p-4 text-right">Jami (UZS)</th><th className="p-4 text-center w-16">X</th></tr>
+                                            <tr><th className="p-4 pl-6">Nomi va Partiyasi</th><th className="p-4 w-28 text-center">Soni</th><th className="p-4 text-right">Dona Narxi</th><th className="p-4 text-right">Jami (UZS)</th><th className="p-4 text-center w-16">X</th></tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
                                             {saleData.items.map(item => (
                                                 <tr key={item.batchId} className="hover:bg-rose-50/30 transition-colors">
                                                     <td className="p-4 pl-6">
                                                         <div className="text-gray-800">{item.name}</div>
-                                                        {!String(item.batchId).startsWith('old-') && (
-                                                            <div className="text-[10px] text-indigo-500 mt-1 uppercase">Partiya: P-{item.batchId}</div>
-                                                        )}
+                                                        <div className="text-[10px] text-indigo-500 mt-1 uppercase font-black bg-indigo-50 w-fit px-2 py-0.5 rounded">Partiya: {!String(item.batchId).startsWith('old-') ? `P-${item.batchId}` : 'ESKI TOVAR'}</div>
                                                     </td>
                                                     <td className="p-3 text-center">
-                                                        <input type="number" min="1" max={item.quantity} value={item.qty} onChange={(e) => updateItemQty(item.batchId, Number(e.target.value))} className="w-full p-2.5 border border-gray-200 rounded-xl text-center outline-none focus:border-blue-500 focus:ring-2 ring-blue-100 font-black text-blue-600 bg-blue-50 focus:bg-white transition-all"/>
+                                                        <div className="w-full p-2.5 border border-gray-200 rounded-xl text-center font-black text-blue-600 bg-blue-50">
+                                                            {item.qty}
+                                                        </div>
                                                     </td>
                                                     <td className="p-4 text-right text-gray-500 font-medium">{Number(item.salePrice).toLocaleString()}</td>
                                                     <td className="p-4 text-right font-black text-gray-800">{(Number(item.salePrice) * item.qty).toLocaleString()}</td>
-                                                    <td className="p-4 text-center"><button onClick={() => removeItem(item.batchId)} className="p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors"><Trash2 size={18}/></button></td>
+                                                    <td className="p-4 text-center"><button onClick={() => removeItem(item.batchId)} className="p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors" title="O'chirish"><Trash2 size={18}/></button></td>
                                                 </tr>
                                             ))}
                                         </tbody>
