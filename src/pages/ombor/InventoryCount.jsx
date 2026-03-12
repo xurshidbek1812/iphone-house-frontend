@@ -4,7 +4,6 @@ import toast from 'react-hot-toast';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
 
-// HELPER: Xavfsiz JSON parsing
 const parseJsonSafe = async (response) => {
     try {
         return await response.json();
@@ -19,11 +18,9 @@ const InventoryCount = () => {
   const [scanInput, setScanInput] = useState(''); 
   const [lastScanned, setLastScanned] = useState(null); 
   
-  // Yuklanish va Holatlar
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- SANOQ SESSIYASI VA TANLOV STATE'LARI ---
   const [isCounting, setIsCounting] = useState(false); 
   const [finishModalOpen, setFinishModalOpen] = useState(false);
   const [hasDifferences, setHasDifferences] = useState(false);
@@ -34,7 +31,6 @@ const InventoryCount = () => {
   const inputRef = useRef(null);
   const token = sessionStorage.getItem('token');
 
-  // HELPER: Auth Headers
   const getAuthHeaders = useCallback(() => ({
       'Authorization': `Bearer ${token}`
   }), [token]);
@@ -44,7 +40,6 @@ const InventoryCount = () => {
       'Content-Type': 'application/json'
   }), [getAuthHeaders]);
 
-  // OVOZ EFFEKTI
   const playBeep = useCallback((type) => {
     try {
         const context = new (window.AudioContext || window.webkitAudioContext)();
@@ -64,14 +59,8 @@ const InventoryCount = () => {
     }
   }, []);
 
-  // YUKLASH (XAVFSIZ)
   const fetchProducts = useCallback(async (signal = undefined) => {
-    if (!token) {
-        toast.error("Tizimga kirish tokeni topilmadi!");
-        setLoading(false);
-        return;
-    }
-
+    if (!token) return;
     try {
         setLoading(true);
         const res = await fetch(`${API_URL}/api/products`, { 
@@ -81,21 +70,10 @@ const InventoryCount = () => {
 
         if (res.ok) {
             const data = await parseJsonSafe(res);
-            if (Array.isArray(data)) {
-                setProducts(data);
-            } else {
-                setProducts([]);
-                toast.error("Mahsulotlar formati noto'g'ri keldi");
-            }
-        } else {
-            const errText = await res.text();
-            console.error('Products fetch error:', res.status, errText);
-            toast.error(`Mahsulotlarni yuklab bo'lmadi (${res.status})`);
+            if (Array.isArray(data)) setProducts(data);
         }
     } catch (error) {
-        if (error.name !== 'AbortError') {
-            toast.error("Tarmoq xatosi yuz berdi!");
-        }
+        if (error.name !== 'AbortError') toast.error("Tarmoq xatosi!");
     } finally {
         if (!signal?.aborted) setLoading(false);
     }
@@ -107,15 +85,11 @@ const InventoryCount = () => {
       return () => controller.abort();
   }, [fetchProducts]);
 
-  // Autofocus faqat sanoq boshlanganda ishlaydi
   useEffect(() => {
-      if (isCounting && inputRef.current) {
-          inputRef.current.focus();
-      }
+      if (isCounting && inputRef.current) inputRef.current.focus();
   }, [isCounting]);
 
 
-  // --- TANLASH MANTIQI (Null-safe va Memoized) ---
   const filteredProducts = useMemo(() => {
       const search = searchTerm.trim().toLowerCase();
       if (!search) return products;
@@ -140,7 +114,7 @@ const InventoryCount = () => {
       }
   };
 
-  // --- SCAN JARAYONI ---
+  // 🚨 SKANER QILISH MANTIQI (PARTIYA BILAN)
   const processCode = useCallback((code) => {
     if (!code) return;
     let searchKey = code.trim();
@@ -152,13 +126,18 @@ const InventoryCount = () => {
         batchKey = parts.find(p => p.startsWith('BATCH:'))?.replace('BATCH:', '').trim() || "";
     }
 
-    const product = products.find(p => String(p.customId) === searchKey);
+    const product = products.find(p => String(p.customId) === searchKey || String(p.id) === searchKey);
 
     if (product) {
         if (!selectedIds.includes(product.id)) {
             toast.error(`❌ "${product.name}" bu sanoq ro'yxatiga kiritilmagan!`);
             playBeep('error');
             return;
+        }
+
+        // Agar partiya o'qitilmagan bo'lsa va tovarning bitta aktiv partiyasi bo'lsa, o'shani oladi
+        if (!batchKey && Array.isArray(product.batches) && product.batches.filter(b=>!b.isArchived).length === 1) {
+            batchKey = String(product.batches.filter(b=>!b.isArchived)[0].id);
         }
 
         const uniqueKey = `${product.id}-${batchKey || 'none'}`;
@@ -170,7 +149,7 @@ const InventoryCount = () => {
         setLastScanned({ ...product, scannedBatch: batchKey });
         playBeep('success');
     } else {
-        toast.error(`Diqqat! "${searchKey}" kodli tovar bazada yo'q!`);
+        toast.error(`Diqqat! Kodli tovar bazada yo'q!`);
         playBeep('error');
     }
   }, [products, selectedIds, playBeep]);
@@ -188,10 +167,8 @@ const InventoryCount = () => {
     }
   };
 
-  // --- QO'LDA KIRITISH (MANUAL ENTRY) MANTIQI ---
   const updateManualCount = (productId, batchId, amount) => {
       const uniqueKey = `${productId}-${batchId || 'none'}`;
-      
       setScannedItems(prev => {
           const currentCount = prev[uniqueKey] || 0;
           const newCount = currentCount + amount;
@@ -204,11 +181,7 @@ const InventoryCount = () => {
       const uniqueKey = `${productId}-${batchId || 'none'}`;
       const numValue = Number(value);
       if (isNaN(numValue) || numValue < 0) return;
-      
-      setScannedItems(prev => ({
-          ...prev, 
-          [uniqueKey]: numValue
-      }));
+      setScannedItems(prev => ({ ...prev, [uniqueKey]: numValue }));
   };
 
   const handleReset = () => {
@@ -220,18 +193,17 @@ const InventoryCount = () => {
   };
 
   const handleStartCount = () => {
-      if (selectedIds.length === 0) {
-          toast.error("Sanoqni boshlash uchun kamida bitta tovar tanlang!");
-          return;
-      }
+      if (selectedIds.length === 0) return toast.error("Sanoqni boshlash uchun kamida bitta tovar tanlang!");
       setIsCounting(true);
       toast.success(`${selectedIds.length} ta tovar uchun sanoq boshlandi!`);
   };
 
-  // HISOBLASH (useMemo)
+  // 🚨 HISOBLASH MANTIQI (PARTIYALAR UCHUN ALOHIDA QATORLAR)
   const tableData = useMemo(() => {
     let result = [];
     products.filter(p => selectedIds.includes(p.id)).forEach(product => {
+        
+        // 1. Agar tovarning umuman partiyasi bo'lmasa
         if (!product.batches || product.batches.length === 0) {
             const uniqueKey = `${product.id}-none`;
             const scannedQty = scannedItems[uniqueKey] || 0;
@@ -240,6 +212,7 @@ const InventoryCount = () => {
             result.push({ ...product, batchId: null, scannedQty, systemQty, diff });
         } 
         else {
+            // 2. Agar partiyalari bo'lsa, har birini alohida qator qilamiz
             product.batches.filter(b => !b.isArchived).forEach(batch => {
                 const uniqueKey = `${product.id}-${batch.id}`;
                 const scannedQty = scannedItems[uniqueKey] || 0;
@@ -256,6 +229,7 @@ const InventoryCount = () => {
                 });
             });
             
+            // 3. Agar adashib partiyasiz sanalgan bo'lsa (Skaner orqali)
             const noneKey = `${product.id}-none`;
             if (scannedItems[noneKey]) {
                 result.push({ 
@@ -277,7 +251,6 @@ const InventoryCount = () => {
       setFinishModalOpen(true);
   };
 
-  // --- SANOQNI YAKUNLASH ---
   const executeFinish = async (updateStock) => {
     setIsSubmitting(true);
     try {
@@ -305,7 +278,6 @@ const InventoryCount = () => {
             toast.error(data?.error || `Saqlashda xatolik yuz berdi (${response.status})`);
         }
     } catch (error) {
-        console.error(error);
         toast.error("Server bilan aloqa yo'q");
     } finally {
         setIsSubmitting(false);
@@ -370,7 +342,7 @@ const InventoryCount = () => {
                             </th>
                             <th className="p-4 border-b border-slate-100">Kod</th>
                             <th className="p-4 border-b border-slate-100">Nomi</th>
-                            <th className="p-4 border-b border-slate-100 text-center">Joriy Qoldiq</th>
+                            <th className="p-4 border-b border-slate-100 text-center">Umumiy Qoldiq</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50 text-sm font-bold text-slate-700">
@@ -449,7 +421,7 @@ const InventoryCount = () => {
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                     <h2 className="font-black text-slate-700 flex items-center gap-3">
                         <span className="bg-blue-600 text-white px-3 py-1 rounded-xl shadow-md text-sm">{tableData.length}</span> 
-                        ta tovar (va partiyalar) sanalyapti
+                        ta partiya sanalyapti
                     </h2>
                     <button onClick={handleReset} className="px-5 py-2.5 bg-white border border-slate-200 text-rose-500 rounded-xl hover:bg-rose-50 flex items-center gap-2 font-bold transition-all shadow-sm active:scale-95">
                         <RotateCcw size={18} strokeWidth={2.5}/> Natijalarni tozalash
@@ -461,8 +433,8 @@ const InventoryCount = () => {
                         <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-widest border-b border-slate-100 sticky top-0 z-10 shadow-sm">
                             <tr>
                                 <th className="p-4 pl-6">Nomi / Partiya</th>
-                                <th className="p-4 text-center">Joriy Qoldiq</th>
-                                <th className="p-4 text-center text-blue-600 bg-blue-50/80">Qo'lda kiritish (Sanaldi)</th>
+                                <th className="p-4 text-center">Tizimdagi Qoldiq</th>
+                                <th className="p-4 text-center text-blue-600 bg-blue-50/80">Sanalgan Son</th>
                                 <th className="p-4 text-center">Farq</th>
                             </tr>
                         </thead>
@@ -473,16 +445,15 @@ const InventoryCount = () => {
                                     <tr key={uniqueKey + index} className="hover:bg-slate-50/50 transition-colors">
                                         <td className="p-4 pl-6">
                                             <div className="text-slate-800 text-base">{item.name} <span className="text-slate-400 font-mono text-[11px] ml-2">#{item.customId}</span></div>
-                                            {item.batchId && (
+                                            {item.batchId ? (
                                                 <div className="flex items-center gap-1.5 text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg w-fit mt-2 border border-indigo-100 uppercase tracking-widest">
                                                     <Layers size={12} strokeWidth={2.5}/> Partiya: P-{item.batchId} 
                                                     {item.batchDate && <span className="text-indigo-400 ml-1">({new Date(item.batchDate).toLocaleDateString()})</span>}
                                                 </div>
-                                            )}
-                                            {!item.batchId && Array.isArray(item.batches) && item.batches.length > 0 && (
-                                                 <div className="text-[10px] font-black text-rose-500 bg-rose-50 px-3 py-1 rounded-lg w-fit mt-2 uppercase tracking-widest border border-rose-100">
-                                                     Partiyasiz sanalgan! E'tibor bering
-                                                 </div>
+                                            ) : (
+                                                <div className="text-[10px] font-black text-amber-500 bg-amber-50 px-3 py-1 rounded-lg w-fit mt-2 uppercase tracking-widest border border-amber-100">
+                                                    Asosiy tovar qoldig'i (Eski)
+                                                </div>
                                             )}
                                         </td>
                                         
@@ -555,7 +526,7 @@ const InventoryCount = () => {
                             <button disabled={isSubmitting} onClick={() => executeFinish(false)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all disabled:opacity-50">
                                 YO'Q, FAQAT TARIXGA YOZISH
                             </button>
-                            <button disabled={isSubmitting} onClick={() => setFinishModalOpen(false)} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors mt-2">Orqaga qaytish (Sanoqni davom ettirish)</button>
+                            <button disabled={isSubmitting} onClick={() => setFinishModalOpen(false)} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors mt-2">Orqaga qaytish</button>
                         </div>
                     </>
                 ) : (
