@@ -68,7 +68,8 @@ const AddCashSale = () => {
   
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]); 
-  const [allBatches, setAllBatches] = useState([]); 
+  const [allBatches, setAllBatches] = useState([]);
+  const [cashboxes, setCashboxes] = useState([]); 
   
   // 🚨 TOVAR USTIGA BOSGANDA PARTIYALAR OYNASI OCHILISHI UCHUN STATE
   const [selectedProductForBatches, setSelectedProductForBatches] = useState(null);
@@ -77,13 +78,15 @@ const AddCashSale = () => {
   const barcodeInputRef = useRef(null); 
 
   const [saleData, setSaleData] = useState({
-      isAnonymous: false,
-      mainCustomer: null,
-      otherName: '',
-      otherPhone: '+998 ',
-      items: [],
-      discount: '',
-      note: ''     
+    isAnonymous: false,
+    mainCustomer: null,
+    otherName: '',
+    otherPhone: '+998 ',
+    items: [],
+    discount: '',
+    note: '',
+    cashboxId: null,
+    paymentMethod: 'CASH'
   });
 
   const [productTab, setProductTab] = useState('catalog'); 
@@ -102,9 +105,10 @@ const AddCashSale = () => {
       if (!token) return;
       try {
           setDataLoading(true);
-          const [custRes, prodRes] = await Promise.allSettled([
-              fetch(`${API_URL}/api/customers`, { headers: getAuthHeaders(), signal }),
-              fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal })
+          const [custRes, prodRes, cashboxRes] = await Promise.allSettled([
+            fetch(`${API_URL}/api/customers`, { headers: getAuthHeaders(), signal }),
+            fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal }),
+            fetch(`${API_URL}/api/cashboxes`, { headers: getAuthHeaders(), signal })
           ]);
 
           if (custRes.status === 'fulfilled' && custRes.value.ok) {
@@ -164,6 +168,17 @@ const AddCashSale = () => {
                   setProducts(catalogProducts);
                   setAllBatches(extractedBatches);
               }
+          }
+          if (cashboxRes.status === 'fulfilled' && cashboxRes.value.ok) {
+            const data = await parseJsonSafe(cashboxRes.value);
+            if (Array.isArray(data)) {
+                setCashboxes(data);
+
+                setSaleData(prev => ({
+                ...prev,
+                cashboxId: prev.cashboxId || data[0]?.id || null
+                }));
+            }
           }
       } catch (err) { 
           if (err.name !== 'AbortError') toast.error("Ma'lumotlarni yuklashda xatolik yuz berdi"); 
@@ -260,54 +275,57 @@ const AddCashSale = () => {
   };
 
   const submitSale = async () => {
-      const disc = Number(saleData.discount) || 0;
-      if (disc > 0 && (!saleData.note || saleData.note.trim() === '')) {
-          return toast.error("Chegirma berilganda sababini (izoh) yozish majburiy!");
-      }
-      if (disc > grandTotal) {
-          return toast.error("Chegirma summasi tovarlar narxidan ko'p bo'lishi mumkin emas!");
-      }
+  const disc = Number(saleData.discount) || 0;
 
-      setIsLoading(true);
-      try {
-          const payload = {
-              isAnonymous: saleData.isAnonymous,
-              customerId: saleData.isAnonymous ? null : (saleData.mainCustomer?.id || null),
-              otherName: saleData.isAnonymous ? saleData.otherName.trim() : null,
-              otherPhone: saleData.isAnonymous ? saleData.otherPhone.trim() : null,
-              totalAmount: grandTotal,
-              discount: disc,
-              finalAmount: finalAmount,
-              note: saleData.note.trim() || null,
-              items: saleData.items.map(item => ({
-                  productId: item.id, 
-                  batchId: String(item.batchId).startsWith('old-') ? null : item.batchId,
-                  name: item.name,
-                  qty: Number(item.qty),
-                  salePrice: Number(item.salePrice)
-              }))
-          };
+  if (disc > 0 && (!saleData.note || saleData.note.trim() === '')) {
+    return toast.error("Chegirma berilganda sababini (izoh) yozish majburiy!");
+  }
 
-          const res = await fetch(`${API_URL}/api/cash-sales`, {
-              method: 'POST',
-              headers: getJsonAuthHeaders(),
-              body: JSON.stringify(payload)
-          });
-          
-          const data = await parseJsonSafe(res);
+  if (disc > grandTotal) {
+    return toast.error("Chegirma summasi tovarlar narxidan ko'p bo'lishi mumkin emas!");
+  }
 
-          if (res.ok) {
-              toast.success("Savdo saqlandi (Jarayonda)");
-              navigate('/savdo'); 
-          } else {
-              toast.error(data?.error || `Saqlashda xatolik (${res.status})`);
-          }
-      } catch (err) { 
-          toast.error("Server bilan aloqa yo'q!"); 
-      } finally { 
-          setIsLoading(false); 
-      }
-  };
+  if (!saleData.cashboxId) {
+    return toast.error("Kassa tanlanmagan!");
+  }
+
+  setIsLoading(true);
+
+  try {
+    const payload = {
+      customerId: saleData.isAnonymous ? null : (saleData.mainCustomer?.id || null),
+      cashboxId: Number(saleData.cashboxId),
+      paymentMethod: saleData.paymentMethod || 'CASH',
+      note: saleData.note.trim() || null,
+      discountAmount: disc,
+      items: saleData.items.map(item => ({
+        productId: item.id,
+        quantity: Number(item.qty),
+        unitPrice: Number(item.salePrice),
+        discountAmount: 0
+      }))
+    };
+
+    const res = await fetch(`${API_URL}/api/orders/direct`, {
+      method: 'POST',
+      headers: getJsonAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+
+    const data = await parseJsonSafe(res);
+
+    if (res.ok) {
+      toast.success("Savdo muvaffaqiyatli yaratildi!");
+      navigate('/savdo');
+    } else {
+      toast.error(data?.error || `Saqlashda xatolik (${res.status})`);
+    }
+  } catch (err) {
+    toast.error("Server bilan aloqa yo'q!");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const filteredProducts = useMemo(() => {
       if (!productSearch) return products;
@@ -611,13 +629,58 @@ const AddCashSale = () => {
                             </div>
                             <div>
                                 <h2 className="text-2xl font-black text-gray-800 mb-1 tracking-tight">Qo'shimcha va Saqlash</h2>
-                                <p className="text-gray-400 text-sm font-medium">Savdoni "Jarayonda" qilib saqlashdan oldin chegirma kiritishingiz mumkin.</p>
+                                <p className="text-gray-400 text-sm font-medium">
+                                    Savdoni yakunlashdan oldin chegirma va izoh kiritishingiz mumkin.
+                                </p>
                             </div>
                         </div>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
                         <div className="space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                                    Kassa
+                                </label>
+                                <select
+                                    value={saleData.cashboxId || ''}
+                                    onChange={(e) =>
+                                    setSaleData(prev => ({
+                                        ...prev,
+                                        cashboxId: Number(e.target.value)
+                                    }))
+                                    }
+                                    className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-blue-400 focus:ring-4 ring-blue-50 text-gray-700 font-bold transition-all"
+                                >
+                                    <option value="">Kassani tanlang</option>
+                                    {cashboxes.map(cashbox => (
+                                    <option key={cashbox.id} value={cashbox.id}>
+                                        {cashbox.name}
+                                    </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                                    To'lov turi
+                                </label>
+                                <select
+                                    value={saleData.paymentMethod}
+                                    onChange={(e) =>
+                                    setSaleData(prev => ({
+                                        ...prev,
+                                        paymentMethod: e.target.value
+                                    }))
+                                    }
+                                    className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-blue-400 focus:ring-4 ring-blue-50 text-gray-700 font-bold transition-all"
+                                >
+                                    <option value="CASH">Naqd</option>
+                                    <option value="CARD">Karta</option>
+                                    <option value="BANK_TRANSFER">Bank o'tkazma</option>
+                                </select>
+                            </div>
+                            
                             <div>
                                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><Tag size={12}/> Chegirma berish (UZS)</label>
                                 <input 
