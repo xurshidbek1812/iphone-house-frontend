@@ -293,17 +293,20 @@ const AddCashSale = () => {
 
   try {
     const payload = {
-      customerId: saleData.isAnonymous ? null : (saleData.mainCustomer?.id || null),
-      cashboxId: Number(saleData.cashboxId),
-      paymentMethod: saleData.paymentMethod || 'CASH',
-      note: saleData.note.trim() || null,
-      discountAmount: disc,
-      items: saleData.items.map(item => ({
-        productId: item.id,
-        quantity: Number(item.qty),
-        unitPrice: Number(item.salePrice),
-        discountAmount: 0
-      }))
+        customerId: saleData.isAnonymous ? null : (saleData.mainCustomer?.id || null),
+        cashboxId: Number(saleData.cashboxId),
+        paymentMethod: saleData.paymentMethod || 'CASH',
+        note: saleData.note.trim() || null,
+        discountAmount: disc,
+        items: saleData.items.map(item => ({
+            productId: item.id,
+            batchId: item.batchId && !String(item.batchId).startsWith('old-')
+            ? Number(item.batchId)
+            : null,
+            quantity: Number(item.qty),
+            unitPrice: Number(item.salePrice),
+            discountAmount: 0
+        }))
     };
 
     const res = await fetch(`${API_URL}/api/orders/direct`, {
