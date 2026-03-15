@@ -10,7 +10,8 @@ const SupplierReturn = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   // 1. ROLNI OLAMIZ
-  const userRole = sessionStorage.getItem('userRole') || 'admin'; // 'director' yoki 'admin'
+  const userRole = (sessionStorage.getItem('userRole') || '').toLowerCase()
+ || 'admin'; // 'director' yoki 'admin'
   const currentUserName = sessionStorage.getItem('userName') || 'Bekchonov Azomat';
   const token = sessionStorage.getItem('token');
 

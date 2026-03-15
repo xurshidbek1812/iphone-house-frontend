@@ -10,7 +10,6 @@ const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrend
 const formatSum = (num) => Number(num || 0).toLocaleString();
 
 const Finance = () => {
-  const [cashboxes, setCashboxes] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,7 +20,6 @@ const Finance = () => {
       try {
         // Ikkala ma'lumotni bir vaqtda tortib olamiz (Kassalar va Tranzaksiyalar)
         const [cashboxesRes, transactionsRes] = await Promise.all([
-          fetch(`${API_URL}/api/cashboxes`, { headers: { 'Authorization': `Bearer ${token}` } }),
           fetch(`${API_URL}/api/transactions`, { headers: { 'Authorization': `Bearer ${token}` } })
         ]);
 

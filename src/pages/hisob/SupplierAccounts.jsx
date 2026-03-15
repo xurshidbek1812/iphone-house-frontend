@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Filter, FileText, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const SupplierAccounts = () => {
   const [suppliersData, setSuppliersData] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -15,8 +17,8 @@ const SupplierAccounts = () => {
       try {
         // 1. Ta'minotchilar va Fakturalarni (Kirimlar) Backenddan yuklaymiz
         const [suppliersRes, invoicesRes] = await Promise.all([
-          fetch('https://iphone-house-api.onrender.com/api/suppliers', { headers: { 'Authorization': `Bearer ${token}` } }),
-          fetch('https://iphone-house-api.onrender.com/api/invoices', { headers: { 'Authorization': `Bearer ${token}` } })
+          fetch(`${API_URL}/api/suppliers`, { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(`${API_URL}/api/invoices`, { headers: { 'Authorization': `Bearer ${token}` } })
         ]);
 
         if (!suppliersRes.ok || !invoicesRes.ok) throw new Error("Ma'lumotlarni yuklashda xatolik");

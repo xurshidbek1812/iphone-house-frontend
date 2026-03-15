@@ -16,7 +16,8 @@ const parseJsonSafe = async (response) => {
 };
 
 const Sklad = () => {
-  const userRole = sessionStorage.getItem('userRole');
+  const userRole = (sessionStorage.getItem('userRole') || '').toLowerCase()
+;
   const isDirector = userRole === 'director'; 
 
   const [products, setProducts] = useState([]);
@@ -265,36 +266,236 @@ const Sklad = () => {
     setPrintProduct(product); setSelectedBatch(null); 
   };
 
-  const handleFinalPrint = () => {
-    if (!printProduct || !selectedBatch) return toast.error("Partiyani tanlang!");
-    
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return toast.error("Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!");
+const handleFinalPrint = () => {
+  if (!printProduct || !selectedBatch) {
+    toast.error("Partiyani tanlang!");
+    return;
+  }
 
-    const qrValue = `ID:${printProduct.customId}|BATCH:${selectedBatch.id}|NAME:${printProduct.name}`;
-    const qrCodeSvg = ReactDOMServer.renderToString(<QRCode value={qrValue} size={80} level="H"/>);
-    const bgUrl = `data:image/svg+xml;base64,${btoa(qrCodeSvg)}`;
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    toast.error("Brauzer yangi tab ochishga ruxsat bermadi.");
+    return;
+  }
 
-    printWindow.document.write(`
-        <html><head><title>QR Kod</title><style>
-            @page { size: auto; margin: 0mm; } body { margin: 10mm; font-family: Arial, sans-serif; display: flex; justify-content: center; }
-            .label-card { width: 320px; border: 2px solid #000; padding: 20px; border-radius: 12px; background: white; }
-            .header { font-size: 16px; font-weight: 800; margin-bottom: 8px; text-transform: uppercase; }
-            .divider { border-bottom: 2px solid #000; margin-bottom: 12px; }
-            .content { display: flex; justify-content: space-between; align-items: flex-end; }
-            .product-id { font-size: 34px; font-weight: 900; }
-            .batch-tag { font-size: 11px; background: #000; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-top: 5px; display: inline-block; }
-            .qr-code-bg { width: 85px; height: 85px; background-image: url('${bgUrl}'); background-size: contain; background-repeat: no-repeat; }
-        </style></head><body>
-            <div class="label-card"><div class="header">${printProduct.name}</div><div class="divider"></div><div class="content">
-            <div><div class="product-id">${printProduct.customId}</div><div class="batch-tag">PARTIYA: #${selectedBatch.id}</div></div>
-            <div class="qr-code-bg"></div></div></div>
-            <script>window.onload = function() { window.print(); window.close(); }</script>
-        </body></html>
-    `);
-    printWindow.document.close();
-    setPrintProduct(null);
-  };
+  const qrValue = `ID:${printProduct.customId}|BATCH:${selectedBatch.id}|NAME:${printProduct.name}`;
+  const qrCodeSvg = ReactDOMServer.renderToString(
+    <QRCode value={qrValue} size={140} level="H" />
+  );
+
+  const safeName = String(printProduct.name || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  const safeCategory = String(printProduct.category || "Tovar")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>QR Label</title>
+        <style>
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+            font-family: Arial, Helvetica, sans-serif;
+          }
+
+          @page {
+            size: 58mm 40mm;
+            margin: 0;
+          }
+
+          body {
+            width: 58mm;
+            min-height: 40mm;
+            overflow: hidden;
+          }
+
+          .page {
+            width: 58mm;
+            height: 40mm;
+            padding: 2mm;
+            overflow: hidden;
+          }
+
+          .label {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #111;
+            border-radius: 3mm;
+            background: #fff;
+            padding: 2.2mm;
+            display: flex;
+            gap: 2.2mm;
+            overflow: hidden;
+          }
+
+          .left {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+          }
+
+          .category {
+            font-size: 2.1mm;
+            font-weight: 700;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.15mm;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 0.8mm;
+          }
+
+          .name {
+            font-size: 3.1mm;
+            line-height: 1.05;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: #000;
+            max-height: 9mm;
+            overflow: hidden;
+          }
+
+          .bottom {
+            margin-top: auto;
+          }
+
+          .code-label {
+            font-size: 1.7mm;
+            font-weight: 700;
+            color: #777;
+            text-transform: uppercase;
+            letter-spacing: 0.12mm;
+            margin-bottom: 0.3mm;
+          }
+
+          .product-id {
+            font-size: 4.6mm;
+            line-height: 1;
+            font-weight: 800;
+            color: #000;
+            white-space: nowrap;
+          }
+
+          .batch {
+            margin-top: 0.8mm;
+            display: inline-block;
+            background: #111;
+            color: #fff;
+            border-radius: 1mm;
+            padding: 0.7mm 1.4mm;
+            font-size: 2mm;
+            line-height: 1;
+            font-weight: 700;
+          }
+
+          .right {
+            width: 24mm;
+            height: 100%;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .qr {
+            width: 24mm;
+            height: 24mm;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .qr svg {
+            width: 100%;
+            height: 100%;
+          }
+
+          .print-note {
+            display: none;
+          }
+
+          @media screen {
+            .print-note {
+              display: block;
+              position: fixed;
+              right: 12px;
+              bottom: 12px;
+              font-size: 12px;
+              color: #666;
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 10px;
+              padding: 8px 10px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="label">
+            <div class="left">
+              <div>
+                <div class="category">${safeCategory}</div>
+                <div class="name">${safeName}</div>
+              </div>
+
+              <div class="bottom">
+                <div class="code-label">Mahsulot kodi</div>
+                <div class="product-id">${printProduct.customId}</div>
+                <div class="batch">PARTIYA #${selectedBatch.id}</div>
+              </div>
+            </div>
+
+            <div class="right">
+              <div class="qr">
+                ${qrCodeSvg}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="print-note">Print oynasi ochilmasa Ctrl+P bosing</div>
+
+        <script>
+          setTimeout(() => {
+            window.focus();
+            window.print();
+          }, 300);
+
+          window.onafterprint = () => {
+            setTimeout(() => window.close(), 100);
+          };
+        </script>
+      </body>
+    </html>
+  `;
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+
+  setPrintProduct(null);
+  setSelectedBatch(null);
+};
 
   const filteredProducts = useMemo(() => {
       return products.filter(p => {

@@ -35,7 +35,7 @@ const LoadingSpinner = () => (
 
 // LAZY LOADING (Barcha sahifalar faqat kerak bo'lganda yuklanadi)
 const Login = lazy(() => import('./pages/Login'));
-const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'));
 
 // --- AVTOTO'LOV ---
 const AutoPaymentContracts = lazy(() => import('./pages/autopayment/AutoPaymentContracts'));
@@ -313,6 +313,7 @@ function App() {
                   <Route path="/shartnoma/qaytarish" element={<Returns />} />
                   <Route path="/shartnoma/yopilgan" element={<ClosedContracts />} />
                   <Route path="/shartnoma/qoshish" element={<AddContract />} />
+                  <Route path="/shartnoma/tahrirlash/:id" element={<AddContract />} />
 
                   {/* NAQD SAVDO */}
                   <Route path="/savdo" element={<CashSales />} />

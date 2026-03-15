@@ -3,7 +3,7 @@ import { Search, Plus, Trash2, Save, ArrowLeft, Loader2, DollarSign, Package } f
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const parseJsonSafe = async (response) => {
     try {
@@ -17,7 +17,8 @@ const SupplierIncome = () => {
   const navigate = useNavigate();
   const token = sessionStorage.getItem('token');
   const currentUserName = sessionStorage.getItem('userName') || 'Hodim';
-  const userRole = sessionStorage.getItem('userRole') || 'admin';
+  const userRole = (sessionStorage.getItem('userRole') || '').toLowerCase()
+ || 'admin';
 
   // --- STATES ---
   const [allProducts, setAllProducts] = useState([]);      

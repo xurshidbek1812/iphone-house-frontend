@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Trash2, Phone, User, MapPin, X, Save, AlertTriangle, CheckCircle } from 'lucide-react';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const SupplierList = () => {
   // ROLNI ANIQLASH
-  const userRole = sessionStorage.getItem('userRole');
+  const userRole = (sessionStorage.getItem('userRole') || '').toLowerCase()
+;
   const isDirector = userRole === 'director'; 
   const token = sessionStorage.getItem('token');
 
@@ -29,7 +32,7 @@ const SupplierList = () => {
 
   const fetchSuppliers = async () => {
     try {
-      const res = await fetch('https://iphone-house-api.onrender.com/api/suppliers', {
+      const res = await fetch(`${API_URL}/api/suppliers`, {
           headers: { 'Authorization': `Bearer ${token}` } // <--- TOKEN QO'SHILDI
       }); 
       const data = await res.json();
@@ -69,7 +72,7 @@ const SupplierList = () => {
     const avtomatikId = Math.floor(1000 + Math.random() * 9000).toString();
 
     try {
-        const res = await fetch('https://iphone-house-api.onrender.com/api/suppliers', {
+        const res = await fetch(`${API_URL}/api/suppliers`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 
                        'Authorization': `Bearer ${token}`},
@@ -93,7 +96,7 @@ const SupplierList = () => {
   // 3. O'CHIRISH (Oyna orqali tasdiqlash)
   const handleDelete = async () => {
     try {
-        const res = await fetch(`https://iphone-house-api.onrender.com/api/suppliers/${deleteModal.id}`, { 
+        const res = await fetch(`${API_URL}/api/suppliers/${deleteModal.id}`, { 
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` } // <--- TOKEN QO'SHILDI
         });

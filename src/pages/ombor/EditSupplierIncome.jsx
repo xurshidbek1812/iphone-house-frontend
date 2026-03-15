@@ -17,7 +17,8 @@ const EditSupplierIncome = () => {
   const navigate = useNavigate();
   const { id } = useParams(); 
   
-  const userRole = sessionStorage.getItem('userRole') || 'admin';
+  const userRole = (sessionStorage.getItem('userRole') || '').toLowerCase()
+ || 'admin';
   const token = sessionStorage.getItem('token');
   const currentUserName = sessionStorage.getItem('userName') || 'Hodim';
   

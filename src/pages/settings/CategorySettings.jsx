@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Layers } from 'lucide-react';
 import toast from 'react-hot-toast'; 
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const CategorySettings = () => {
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState('');
@@ -9,7 +11,7 @@ const CategorySettings = () => {
 
   const fetchCategories = async () => {
     try {
-        const res = await fetch('https://iphone-house-api.onrender.com/api/categories', {
+        const res = await fetch(`${API_URL}/api/categories`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -43,7 +45,7 @@ const CategorySettings = () => {
     }
 
     try {
-        const res = await fetch('https://iphone-house-api.onrender.com/api/categories', {
+        const res = await fetch(`${API_URL}/api/categories`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -68,7 +70,7 @@ const CategorySettings = () => {
   const handleDelete = async (id) => {
     if(window.confirm("Kategoriyani o'chirmoqchimisiz?")) {
         try {
-            const res = await fetch(`https://iphone-house-api.onrender.com/api/categories/${id}`, {
+            const res = await fetch(`${API_URL}/api/categories/${id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
