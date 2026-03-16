@@ -51,10 +51,31 @@ const PERMISSION_GROUPS = [
     title: 'Kassa',
     color: 'emerald',
     items: [
-        { key: 'cashbox.manage', label: "Kassalarni boshqarish" }
+      { key: 'cashbox.manage', label: "Kassalarni boshqarish" }
+    ]
+  },
+  {
+    title: 'Ombor',
+    color: 'amber',
+    items: [
+      { key: 'inventory.view_amounts', label: "Kirim summasini ko'rish" },
+      { key: 'product.manage', label: "Mahsulot qo'shish va tahrirlash" }
+    ]
+  },
+  {
+    title: 'Kategoriya',
+    color: 'indigo',
+    items: [
+      { key: 'category.manage', label: "Kategoriyalarni boshqarish" }
+    ]
+  },
+  {
+    title: 'Hisob-kitoblar',
+    color: 'teal',
+    items: [
+      { key: 'supplier.manage', label: "Ta'minotchilarni boshqarish" }
     ]
   }
-
 ];
 
 const groupColorClasses = {
@@ -81,6 +102,24 @@ const groupColorClasses = {
     title: 'text-emerald-700',
     checked: 'bg-emerald-50 border-emerald-300',
     unchecked: 'bg-white border-gray-200 hover:border-emerald-200'
+  },
+  amber: {
+    box: 'border-amber-200 bg-amber-50/40',
+    title: 'text-amber-700',
+    checked: 'bg-amber-50 border-amber-300',
+    unchecked: 'bg-white border-gray-200 hover:border-amber-200'
+  },
+  indigo: {
+    box: 'border-indigo-200 bg-indigo-50/40',
+    title: 'text-indigo-700',
+    checked: 'bg-indigo-50 border-indigo-300',
+    unchecked: 'bg-white border-gray-200 hover:border-indigo-200'
+  },
+  teal: {
+    box: 'border-teal-200 bg-teal-50/40',
+    title: 'text-teal-700',
+    checked: 'bg-teal-50 border-teal-300',
+    unchecked: 'bg-white border-gray-200 hover:border-teal-200'
   }
 };
 

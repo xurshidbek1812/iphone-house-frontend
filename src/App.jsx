@@ -5,6 +5,8 @@ import Sidebar from './components/Sidebar';
 import ProtectedRoute from './components/ProtectedRoute';
 import Calculator from './components/Calculator';
 import { Toaster, toast } from 'react-hot-toast';
+import PermissionRoute from './components/PermissionRoute';
+import { PERMISSIONS } from './utils/permissions';
 
 const originalFetch = window.fetch;
 window.fetch = async (...args) => {
@@ -273,23 +275,62 @@ function App() {
 
                   {/* --- HISOB-KITOBLAR --- */}
                   <Route path="/hisob/akt" element={<SupplierAct />} />
+
                   <Route path="/hisob/taminotchi" element={<SupplierAccounts />} />
+
                   <Route path="/hisob/limit" element={<SupplierLimit />} />
-                  <Route path="/hisob/taminotchilar-royxati" element={<SupplierList />} />
+
+                  <Route
+                    path="/hisob/taminotchilar-royxati"
+                    element={
+                      <PermissionRoute permission={PERMISSIONS.SUPPLIER_MANAGE}>
+                        <SupplierList />
+                      </PermissionRoute>
+                    }
+                  />
 
                   {/* --- OMBOR (TO'G'RILANGAN) --- */}
                   <Route path="/ombor/amaliyotlar" element={<WarehouseOperations />} />
                   <Route path="/ombor/boshqa-kirim" element={<InternalIncome />} />
                   <Route path="/ombor/boshqa-chiqim" element={<InternalExpense />} />
                   <Route path="/ombor/taminotchi-kirim" element={<SupplierIncomeList />} />
-                  <Route path="/ombor/taminotchi-kirim/qoshish" element={<SupplierIncome />} />
-                  <Route path="/ombor/taminotchi-kirim/tahrirlash/:id" element={<EditSupplierIncome />} />
+                  <Route path="/ombor/taminotchi-kirim/qoshish" element={ <SupplierIncome /> }/>
+
+                  <Route
+                    path="/ombor/taminotchi-kirim/tahrirlash/:id"
+                    element={
+                      <PermissionRoute permission={PERMISSIONS.PRODUCT_MANAGE}>
+                        <EditSupplierIncome />
+                      </PermissionRoute>
+                    }
+                  />
+
                   <Route path="/ombor/taminotchi-qaytarish" element={<SupplierReturn />} />
                   <Route path="/ombor/yakunlanmagan" element={<UnfinishedSales />} />
                   <Route path="/ombor/mijoz-kirim" element={<CustomerIncome />} />
-                  <Route path="/ombor/qoldiq" element={<Sklad />} /> 
-                  <Route path="/ombor/taminotchi-qaytarish/qoshish" element={<AddSupplierReturn />} />
-                  <Route path="/ombor/taminotchilar" element={<SupplierList />} />
+
+                  <Route path="/ombor/qoldiq" element={<Sklad />} />
+
+                  <Route
+                    path="/ombor/taminotchi-qaytarish/qoshish"
+                    element={
+                      <PermissionRoute permission={PERMISSIONS.PRODUCT_MANAGE}>
+                        <AddSupplierReturn />
+                      </PermissionRoute>
+                    }
+                  />
+
+                  <Route
+                    path="/ombor/taminotchilar"
+                    element={
+                      <PermissionRoute permission={PERMISSIONS.SUPPLIER_MANAGE}>
+                        <SupplierList />
+                      </PermissionRoute>
+                    }
+                  />
+
+                  <Route path="/ombor/sanoq" element={<InventoryCount />} />
+                  <Route path="/ombor/sanoq-tarixi" element={<InventoryHistory />} />
                   
                   {/* --- SANOQ --- */}
                   <Route path="/ombor/sanoq" element={<InventoryCount />} /> 
@@ -326,13 +367,39 @@ function App() {
                   <Route path="/kassa/shartnoma-tolov" element={<ContractPayment />} />
                   <Route path="/kassa/oldindan-tolov" element={<Prepayment />} />
                   <Route path="/kassa/naqd-tolov" element={<CashSalesPayment />} />
-                  <Route path="/kassa/boshqa-kirim" element={<IncomeFromOtherCash />} />
-                  <Route path="/kassa/boshqa-chiqim" element={<ExpenseToOtherCash />} />
+
+                  <Route
+                    path="/kassa/boshqa-kirim"
+                    element={
+                      <PermissionRoute permission={PERMISSIONS.CASHBOX_MANAGE}>
+                        <IncomeFromOtherCash />
+                      </PermissionRoute>
+                    }
+                  />
+
+                  <Route
+                    path="/kassa/boshqa-chiqim"
+                    element={
+                      <PermissionRoute permission={PERMISSIONS.CASHBOX_MANAGE}>
+                        <ExpenseToOtherCash />
+                      </PermissionRoute>
+                    }
+                  />
+
                   <Route path="/kassa/xarajat-kirim" element={<IncomeFromExpense />} />
                   <Route path="/kassa/xarajat-chiqim" element={<ExpenseOutput />} />
                   <Route path="/kassa/amaliyotlar" element={<AllCashOperations />} />
                   <Route path="/kassa/buyurtmalar" element={<CashOrders />} />
-                  <Route path="/kassa/boshqarish" element={<ManageCash />} />
+
+                  <Route
+                    path="/kassa/boshqarish"
+                    element={
+                      <PermissionRoute permission={PERMISSIONS.CASHBOX_MANAGE}>
+                        <ManageCash />
+                      </PermissionRoute>
+                    }
+                  />
+
                   <Route path="/kassa/qoldiq" element={<CashBalance />} />
                   <Route path="/kassa/mening-kassam" element={<MyCash />} />
                   <Route path="/kassa/tushumlar" element={<AllReceipts />} />
@@ -343,8 +410,15 @@ function App() {
                   <Route path="/sozlamalar/xodimlar" element={<StaffList />} />
                   <Route path="/xarajatlar" element={<Expenses />} />
                   <Route path="/sozlamalar/profil" element={<ProfileSettings />} />
-                  <Route path="/sozlamalar/kategoriyalar" element={<CategorySettings />} />
-                  <Route path="*" element={<NotFound />} />
+
+                  <Route
+                    path="/sozlamalar/kategoriyalar"
+                    element={
+                      <PermissionRoute permission={PERMISSIONS.CATEGORY_MANAGE}>
+                        <CategorySettings />
+                      </PermissionRoute>
+                    }
+                  />
               </Route>
           </Route>
         </Routes>

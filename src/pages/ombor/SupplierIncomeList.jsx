@@ -4,20 +4,20 @@ import {
   Plus,
   MoreVertical,
   Trash2,
-  Edit,
-  Send,
   CheckCircle,
   Eye,
   X,
   AlertTriangle,
   Printer,
-  Loader2
+  Loader2,
+  Send,
+  Lock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import ReactDOMServer from 'react-dom/server';
-import QRCode from "react-qr-code";
-import { hasPermission } from '../../utils/permissions';
+import QRCode from 'react-qr-code';
+import { hasPermission, PERMISSIONS } from '../../utils/permissions';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -31,6 +31,7 @@ const parseJsonSafe = async (response) => {
 
 const SupplierIncomeList = () => {
   const navigate = useNavigate();
+
   const [activeMenu, setActiveMenu] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,14 +41,24 @@ const SupplierIncomeList = () => {
 
   const userRole = (sessionStorage.getItem('userRole') || '').toLowerCase() || 'admin';
   const token = sessionStorage.getItem('token');
+  const isDirector = userRole === 'director';
 
-  const canApproveInvoice = hasPermission('invoice.approve');
+  const canApproveInvoice = hasPermission(PERMISSIONS.INVOICE_APPROVE);
+  const canSeeAmount = hasPermission(PERMISSIONS.INVENTORY_VIEW_AMOUNTS);
+
+  // Draft / jarayondagi invoice bilan ishlash
+  const canManageInvoiceDraft =
+    userRole === 'admin' || userRole === 'director' || canApproveInvoice;
+
+  // Yuborilgan va tasdiqlangan invoice bilan ishlash
+  const canManageSentInvoices = isDirector || canApproveInvoice;
 
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     type: null,
     invoiceId: null
   });
+
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [invoiceToPrint, setInvoiceToPrint] = useState(null);
 
@@ -57,52 +68,91 @@ const SupplierIncomeList = () => {
         setActiveMenu(null);
       }
     };
+
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const getAuthHeaders = useCallback(() => ({
-    Authorization: `Bearer ${token}`
-  }), [token]);
+  useEffect(() => {
+    const anyModalOpen =
+      printModalOpen ||
+      !!viewInvoice ||
+      confirmModal.isOpen;
 
-  const getJsonAuthHeaders = useCallback(() => ({
-    ...getAuthHeaders(),
-    'Content-Type': 'application/json'
-  }), [getAuthHeaders]);
+    if (anyModalOpen) {
+      const scrollbarWidth =
+        window.innerWidth - document.documentElement.clientWidth;
 
-  const fetchInvoices = useCallback(async (signal = undefined) => {
-    if (!token) {
-      toast.error("Tizimga kirish tokeni topilmadi!");
-      setLoading(false);
-      return;
+      document.body.style.overflow = 'hidden';
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
     }
 
-    try {
-      setLoading(true);
-      const res = await fetch(`${API_URL}/api/invoices`, {
-        headers: getAuthHeaders(),
-        signal
-      });
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    };
+  }, [printModalOpen, viewInvoice, confirmModal.isOpen]);
 
-      if (res.ok) {
+  const getAuthHeaders = useCallback(
+    () => ({
+      Authorization: `Bearer ${token}`
+    }),
+    [token]
+  );
+
+  const getJsonAuthHeaders = useCallback(
+    () => ({
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    }),
+    [getAuthHeaders]
+  );
+
+  const fetchInvoices = useCallback(
+    async (signal = undefined) => {
+      if (!token) {
+        toast.error("Tizimga kirish tokeni topilmadi!");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        const res = await fetch(`${API_URL}/api/invoices`, {
+          headers: getAuthHeaders(),
+          signal
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error('Invoices fetch error:', res.status, errText);
+          toast.error(`Fakturalarni yuklab bo'lmadi (${res.status})`);
+          setInvoices([]);
+          return;
+        }
+
         const data = await parseJsonSafe(res);
+
         if (Array.isArray(data)) {
           setInvoices(data);
         } else {
           setInvoices([]);
           toast.error("Fakturalar ro'yxati noto'g'ri formatda keldi");
         }
-      } else {
-        const errText = await res.text();
-        console.error('Invoices fetch error:', res.status, errText);
-        toast.error(`Fakturalarni yuklab bo'lmadi (${res.status})`);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          toast.error('Tarmoq xatosi yuz berdi!');
+        }
+      } finally {
+        if (!signal?.aborted) setLoading(false);
       }
-    } catch (err) {
-      if (err.name !== 'AbortError') toast.error("Tarmoq xatosi yuz berdi!");
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }, [token, getAuthHeaders]);
+    },
+    [token, getAuthHeaders]
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -112,29 +162,36 @@ const SupplierIncomeList = () => {
 
   const toggleMenu = (e, id) => {
     e.stopPropagation();
-    setActiveMenu(activeMenu === id ? null : id);
+    setActiveMenu((prev) => (prev === id ? null : id));
   };
 
   const formatDate = (d) => {
-    if (!d) return "";
+    if (!d) return '';
     return new Date(d).toLocaleDateString('uz-UZ');
   };
 
   const executeApprove = async (id) => {
+    if (!canApproveInvoice) {
+      return toast.error("Sizda fakturani tasdiqlash huquqi yo'q!");
+    }
+
     const invoice = invoices.find((inv) => inv.id === id);
-    if (!invoice) return toast.error("Faktura topilmadi!");
+    if (!invoice) return toast.error('Faktura topilmadi!');
 
     setIsProcessing(true);
+
     try {
-      const itemsToBackend = invoice.items.map((item) => ({
-        id: item.productId,
+      const itemsToBackend = (invoice.items || []).map((item) => ({
+        id: item.productId || item.id,
         customId: item.customId,
         quantity: Number(item.count) || 0,
         buyPrice: Number(item.price) || 0,
         salePrice: Number(item.salePrice) || 0,
         buyCurrency: item.currency || 'UZS',
         supplierName: invoice.supplierName || invoice.supplier || "Noma'lum",
-        invoiceNumber: invoice.invoiceNumber
+        invoiceNumber: invoice.invoiceNumber,
+        supplierInvoiceId: invoice.id,
+        supplierInvoiceItemId: item.id
       }));
 
       const stockResponse = await fetch(`${API_URL}/api/products/increase-stock`, {
@@ -145,7 +202,7 @@ const SupplierIncomeList = () => {
 
       if (!stockResponse.ok) {
         const errData = await parseJsonSafe(stockResponse);
-        throw new Error(errData?.error || "Ombor yangilanmadi!");
+        throw new Error(errData?.error || 'Ombor yangilanmadi!');
       }
 
       const statusResponse = await fetch(`${API_URL}/api/invoices/${id}/status`, {
@@ -156,15 +213,19 @@ const SupplierIncomeList = () => {
 
       if (!statusResponse.ok) {
         const errData = await parseJsonSafe(statusResponse);
-        throw new Error(errData?.error || "Faktura statusi o'zgarmadi, lekin tovarlar omborga tushgan bo'lishi mumkin!");
+        throw new Error(
+          errData?.error ||
+            "Faktura statusi o'zgarmadi, lekin tovarlar omborga tushgan bo'lishi mumkin!"
+        );
       }
 
       toast.success("Muvaffaqiyatli tasdiqlandi va omborga tushdi!");
       await fetchInvoices();
+
       if (viewInvoice) setViewInvoice(null);
     } catch (err) {
       console.error(err);
-      toast.error("Xatolik: " + err.message);
+      toast.error(`Xatolik: ${err.message}`);
     } finally {
       setIsProcessing(false);
       setConfirmModal({ isOpen: false, type: null, invoiceId: null });
@@ -172,18 +233,40 @@ const SupplierIncomeList = () => {
   };
 
   const executeDelete = async (id) => {
+    const invoice = invoices.find((i) => i.id === id);
+    if (!invoice) return toast.error('Faktura topilmadi!');
+
+    if (invoice.status === 'Jarayonda' && !canManageInvoiceDraft) {
+      return toast.error("Bu fakturani o'chirish huquqi yo'q!");
+    }
+
+    if (invoice.status === 'Yuborildi' && !canManageSentInvoices) {
+      return toast.error(
+        "Jo'natilgan fakturani faqat direktor yoki tasdiqlovchi o'chira oladi!"
+      );
+    }
+
+    if (invoice.status === 'Tasdiqlandi' && !canManageSentInvoices) {
+      return toast.error(
+        "Tasdiqlangan fakturani faqat direktor yoki tasdiqlovchi o'chira oladi!"
+      );
+    }
+
     setIsProcessing(true);
+
     try {
       const res = await fetch(`${API_URL}/api/invoices/${id}`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });
 
+      const data = await parseJsonSafe(res);
+
       if (res.ok) {
-        toast.success("Faktura o'chirildi!");
+        toast.success(data?.message || "Faktura o'chirildi!");
         await fetchInvoices();
+        if (viewInvoice) setViewInvoice(null);
       } else {
-        const data = await parseJsonSafe(res);
         toast.error(data?.error || "O'chirishda xatolik yuz berdi!");
       }
     } catch (e) {
@@ -195,18 +278,25 @@ const SupplierIncomeList = () => {
   };
 
   const executeSend = async (id) => {
+    if (!canManageInvoiceDraft) {
+      return toast.error("Sizda fakturani yuborish huquqi yo'q!");
+    }
+
     setIsProcessing(true);
+
     try {
       const res = await fetch(`${API_URL}/api/invoices/${id}/status`, {
         method: 'PATCH',
         headers: getJsonAuthHeaders(),
         body: JSON.stringify({ status: 'Yuborildi' })
       });
+
+      const data = await parseJsonSafe(res);
+
       if (res.ok) {
-        toast.success("Faktura yuborildi!");
+        toast.success('Faktura yuborildi!');
         await fetchInvoices();
       } else {
-        const data = await parseJsonSafe(res);
         toast.error(data?.error || "Fakturani yuborib bo'lmadi!");
       }
     } catch (e) {
@@ -218,62 +308,104 @@ const SupplierIncomeList = () => {
 
   const executePrintQR = (item, invoice) => {
     const printWindow = window.open('', '_blank');
+
     if (!printWindow) {
-      return toast.error("Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!");
+      return toast.error(
+        "Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!"
+      );
     }
 
     const qrValue = `ID:${item.customId}|INV:${invoice.id}|NAME:${item.name}`;
-    const qrCodeSvg = ReactDOMServer.renderToString(<QRCode value={qrValue} size={80} level="H" />);
+    const qrCodeSvg = ReactDOMServer.renderToString(
+      <QRCode value={qrValue} size={80} level="H" />
+    );
     const bgUrl = `data:image/svg+xml;base64,${btoa(qrCodeSvg)}`;
 
+    const safeName = String(item.name || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
     printWindow.document.write(`
-      <html><head><title>QR Kod</title><style>
-        @page { size: auto; margin: 0mm; } 
-        body { margin: 10mm; font-family: Arial, sans-serif; display: flex; justify-content: center; }
-        .label-card { width: 320px; border: 2px solid #000; padding: 20px; border-radius: 12px; background: white; }
-        .header { font-size: 16px; font-weight: 800; margin-bottom: 8px; text-transform: uppercase; }
-        .divider { border-bottom: 2px solid #000; margin-bottom: 12px; }
-        .content { display: flex; justify-content: space-between; align-items: flex-end; }
-        .product-id { font-size: 34px; font-weight: 900; }
-        .batch-tag { font-size: 11px; background: #000; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-top: 5px; display: inline-block; }
-        .qr-code-bg { width: 85px; height: 85px; background-image: url('${bgUrl}'); background-size: contain; background-repeat: no-repeat; }
-      </style></head><body>
-        <div class="label-card"><div class="header">${item.name}</div><div class="divider"></div><div class="content">
-        <div><div class="product-id">${item.customId}</div><div class="batch-tag">KIRIM: #${invoice.invoiceNumber}</div></div>
-        <div class="qr-code-bg"></div></div></div>
-        <script>window.onload = function() { window.print(); window.close(); }</script>
-      </body></html>
+      <html>
+        <head>
+          <title>QR Kod</title>
+          <style>
+            @page { size: auto; margin: 0mm; }
+            body { margin: 10mm; font-family: Arial, sans-serif; display: flex; justify-content: center; }
+            .label-card { width: 320px; border: 2px solid #000; padding: 20px; border-radius: 12px; background: white; }
+            .header { font-size: 16px; font-weight: 800; margin-bottom: 8px; text-transform: uppercase; }
+            .divider { border-bottom: 2px solid #000; margin-bottom: 12px; }
+            .content { display: flex; justify-content: space-between; align-items: flex-end; }
+            .product-id { font-size: 34px; font-weight: 900; }
+            .batch-tag { font-size: 11px; background: #000; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-top: 5px; display: inline-block; }
+            .qr-code-bg { width: 85px; height: 85px; background-image: url('${bgUrl}'); background-size: contain; background-repeat: no-repeat; }
+          </style>
+        </head>
+        <body>
+          <div class="label-card">
+            <div class="header">${safeName}</div>
+            <div class="divider"></div>
+            <div class="content">
+              <div>
+                <div class="product-id">${item.customId ?? '-'}</div>
+                <div class="batch-tag">KIRIM: #${invoice.invoiceNumber}</div>
+              </div>
+              <div class="qr-code-bg"></div>
+            </div>
+          </div>
+          <script>window.onload = function() { window.print(); window.close(); }</script>
+        </body>
+      </html>
     `);
+
     printWindow.document.close();
   };
 
   const handleAction = (action, id) => {
     setActiveMenu(null);
+
     if (action === 'view') {
-      setViewInvoice(invoices.find((i) => i.id === id));
+      setViewInvoice(invoices.find((i) => i.id === id) || null);
+      return;
     }
+
     if (action === 'print') {
-      setInvoiceToPrint(invoices.find((i) => i.id === id));
+      setInvoiceToPrint(invoices.find((i) => i.id === id) || null);
       setPrintModalOpen(true);
+      return;
     }
-    if (action === 'approve') setConfirmModal({ isOpen: true, type: 'approve', invoiceId: id });
-    if (action === 'delete') setConfirmModal({ isOpen: true, type: 'delete', invoiceId: id });
-    if (action === 'send') executeSend(id);
+
+    if (action === 'approve') {
+      setConfirmModal({ isOpen: true, type: 'approve', invoiceId: id });
+      return;
+    }
+
+    if (action === 'delete') {
+      setConfirmModal({ isOpen: true, type: 'delete', invoiceId: id });
+      return;
+    }
+
+    if (action === 'send') {
+      executeSend(id);
+    }
   };
 
   const filteredInvoices = useMemo(() => {
     if (!searchTerm) return invoices;
+
     const search = searchTerm.trim().toLowerCase();
 
     return invoices.filter((inv) => {
       const supplierText = inv.supplierName || inv.supplier || '';
       const supplierMatch = supplierText.toLowerCase().includes(search);
-      const invoiceNumMatch = String(inv.invoiceNumber || '').toLowerCase().includes(search);
+      const invoiceNumMatch = String(inv.invoiceNumber || '')
+        .toLowerCase()
+        .includes(search);
+
       return supplierMatch || invoiceNumMatch;
     });
   }, [invoices, searchTerm]);
-
-  const canSeeAmount = userRole === 'director';
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen animate-in fade-in duration-300">
@@ -282,6 +414,16 @@ const SupplierIncomeList = () => {
           Kirim qilingan fakturalar
         </h1>
       </div>
+
+      {!canManageInvoiceDraft && !canApproveInvoice && (
+        <div className="bg-white mb-6 p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 text-slate-500">
+          <Lock size={18} className="text-slate-400" />
+          <span className="font-bold text-sm">
+            Siz bu bo‘limni ko‘ra olasiz, lekin kirim yaratish, yuborish, tasdiqlash yoki
+            o‘chirish huquqingiz yo‘q.
+          </span>
+        </div>
+      )}
 
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex gap-4 items-center mb-6">
         <div className="relative flex-1">
@@ -294,12 +436,15 @@ const SupplierIncomeList = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <button
-          onClick={() => navigate('/ombor/taminotchi-kirim/qoshish')}
-          className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95"
-        >
-          <Plus size={18} /> Yangi Kirim (Faktura)
-        </button>
+
+        {canManageInvoiceDraft && (
+          <button
+            onClick={() => navigate('/ombor/taminotchi-kirim/qoshish')}
+            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95"
+          >
+            <Plus size={18} /> Yangi Kirim (Faktura)
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[400px] overflow-hidden">
@@ -314,6 +459,7 @@ const SupplierIncomeList = () => {
               <th className="p-5 text-center">Amal</th>
             </tr>
           </thead>
+
           <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
             {loading ? (
               <tr>
@@ -328,86 +474,103 @@ const SupplierIncomeList = () => {
                 </td>
               </tr>
             ) : (
-              filteredInvoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-blue-50/30 transition-colors">
-                  <td className="p-5 text-slate-500 font-medium">
-                    {formatDate(inv.date || inv.createdAt)}
-                  </td>
-                  <td className="p-5 font-mono text-blue-600">#{inv.invoiceNumber}</td>
-                  <td className="p-5">{inv.supplierName || inv.supplier || "Noma'lum"}</td>
-                  {canSeeAmount && (
-                    <td className="p-5 text-right text-emerald-600">
-                      {Number(inv.totalSum || 0).toLocaleString()} <span className="text-[10px] text-slate-400">UZS</span>
+              filteredInvoices.map((inv) => {
+                const canDeleteThisInvoice =
+                  (inv.status === 'Jarayonda' && canManageInvoiceDraft) ||
+                  (inv.status === 'Yuborildi' && canManageSentInvoices) ||
+                  (inv.status === 'Tasdiqlandi' && canManageSentInvoices);
+
+                const canSendThisInvoice =
+                  canManageInvoiceDraft && inv.status === 'Jarayonda';
+
+                const canApproveThisInvoice =
+                  canApproveInvoice && inv.status !== 'Tasdiqlandi';
+
+                return (
+                  <tr key={inv.id} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="p-5 text-slate-500 font-medium">
+                      {formatDate(inv.date || inv.createdAt)}
                     </td>
-                  )}
-                  <td className="p-5 text-center">
-                    <span
-                      className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider ${
-                        inv.status === 'Tasdiqlandi'
-                          ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                          : inv.status === 'Yuborildi'
-                          ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                          : 'bg-amber-50 text-amber-600 border border-amber-100'
-                      }`}
-                    >
-                      {inv.status}
-                    </span>
-                  </td>
-                  <td className="p-5 text-center relative menu-container">
-                    <button
-                      onClick={(e) => toggleMenu(e, inv.id)}
-                      className="p-2 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-xl transition-colors"
-                    >
-                      <MoreVertical size={18} />
-                    </button>
+                    <td className="p-5 font-mono text-blue-600">#{inv.invoiceNumber}</td>
+                    <td className="p-5">{inv.supplierName || inv.supplier || "Noma'lum"}</td>
 
-                    {activeMenu === inv.id && (
-                      <div className="absolute right-12 top-8 w-48 bg-white shadow-xl border border-slate-100 rounded-xl z-50 overflow-hidden font-bold text-sm animate-in zoom-in-95">
-                        <button
-                          onClick={() => handleAction('view', inv.id)}
-                          className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"
-                        >
-                          <Eye size={16} /> Ko'rish
-                        </button>
-
-                        <button
-                          onClick={() => handleAction('print', inv.id)}
-                          className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"
-                        >
-                          <Printer size={16} /> QR Chop etish
-                        </button>
-
-                        {inv.status !== 'Tasdiqlandi' && (
-                          <button
-                            onClick={() => handleAction('delete', inv.id)}
-                            className="w-full text-left px-4 py-3 hover:bg-rose-50 text-rose-600 flex items-center gap-2 transition-colors"
-                          >
-                            <Trash2 size={16} /> O'chirish
-                          </button>
-                        )}
-
-                        {canApproveInvoice && inv.status !== 'Tasdiqlandi' && (
-                          <button
-                            onClick={() => handleAction('approve', inv.id)}
-                            className="w-full text-left px-4 py-3 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 flex items-center gap-2 transition-all"
-                          >
-                            <CheckCircle size={16} /> Tasdiqlash
-                          </button>
-                        )}
-
-                        {userRole === 'admin' && inv.status === 'Jarayonda' && (
-                          <button
-                            onClick={() => handleAction('send', inv.id)}
-                            className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 flex items-center gap-2 transition-all"
-                          >
-                            <Send size={16} /> Yuborish
-                          </button>
-                        )}
-                      </div>
+                    {canSeeAmount && (
+                      <td className="p-5 text-right text-emerald-600">
+                        {Number(inv.totalSum || 0).toLocaleString('uz-UZ')}{' '}
+                        <span className="text-[10px] text-slate-400">UZS</span>
+                      </td>
                     )}
-                  </td>
-                </tr>
-              ))
+
+                    <td className="p-5 text-center">
+                      <span
+                        className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider ${
+                          inv.status === 'Tasdiqlandi'
+                            ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                            : inv.status === 'Yuborildi'
+                            ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                            : 'bg-amber-50 text-amber-600 border border-amber-100'
+                        }`}
+                      >
+                        {inv.status}
+                      </span>
+                    </td>
+
+                    <td className="p-5 text-center relative menu-container">
+                      <button
+                        onClick={(e) => toggleMenu(e, inv.id)}
+                        className="p-2 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-xl transition-colors"
+                      >
+                        <MoreVertical size={18} />
+                      </button>
+
+                      {activeMenu === inv.id && (
+                        <div className="absolute right-12 top-8 w-52 bg-white shadow-xl border border-slate-100 rounded-xl z-50 overflow-hidden font-bold text-sm animate-in zoom-in-95">
+                          <button
+                            onClick={() => handleAction('view', inv.id)}
+                            className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"
+                          >
+                            <Eye size={16} /> Ko'rish
+                          </button>
+
+                          <button
+                            onClick={() => handleAction('print', inv.id)}
+                            className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"
+                          >
+                            <Printer size={16} /> QR Chop etish
+                          </button>
+
+                          {canDeleteThisInvoice && (
+                            <button
+                              onClick={() => handleAction('delete', inv.id)}
+                              className="w-full text-left px-4 py-3 hover:bg-rose-50 text-rose-600 flex items-center gap-2 transition-colors"
+                            >
+                              <Trash2 size={16} /> O'chirish
+                            </button>
+                          )}
+
+                          {canApproveThisInvoice && (
+                            <button
+                              onClick={() => handleAction('approve', inv.id)}
+                              className="w-full text-left px-4 py-3 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 flex items-center gap-2 transition-all"
+                            >
+                              <CheckCircle size={16} /> Tasdiqlash
+                            </button>
+                          )}
+
+                          {canSendThisInvoice && (
+                            <button
+                              onClick={() => handleAction('send', inv.id)}
+                              className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 flex items-center gap-2 transition-all"
+                            >
+                              <Send size={16} /> Yuborish
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -425,6 +588,7 @@ const SupplierIncomeList = () => {
                   Faktura: #{invoiceToPrint.invoiceNumber} | Holat: {invoiceToPrint.status}
                 </p>
               </div>
+
               <button
                 onClick={() => setPrintModalOpen(false)}
                 className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
@@ -443,12 +607,15 @@ const SupplierIncomeList = () => {
                     <th className="p-4 text-center">Amal</th>
                   </tr>
                 </thead>
+
                 <tbody className="divide-y divide-slate-50 font-bold text-slate-700">
                   {(Array.isArray(invoiceToPrint.items) ? invoiceToPrint.items : []).map((item, i) => (
                     <tr key={i} className="hover:bg-slate-50 transition-colors">
                       <td className="p-4 font-mono text-blue-600">#{item.customId ?? '-'}</td>
                       <td className="p-4">{item.name}</td>
-                      <td className="p-4 text-center text-slate-500">{Number(item.count || 0)}</td>
+                      <td className="p-4 text-center text-slate-500">
+                        {Number(item.count || 0)}
+                      </td>
                       <td className="p-4 text-center">
                         <button
                           onClick={() => executePrintQR(item, invoiceToPrint)}
@@ -462,6 +629,7 @@ const SupplierIncomeList = () => {
                 </tbody>
               </table>
             </div>
+
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setPrintModalOpen(false)}
@@ -480,18 +648,29 @@ const SupplierIncomeList = () => {
             <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-6">
               <div>
                 <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2 mb-2 tracking-tight">
-                  Faktura: <span className="text-blue-600 px-3 py-1 bg-blue-50 rounded-lg ml-2">№ {viewInvoice.invoiceNumber}</span>
+                  Faktura:
+                  <span className="text-blue-600 px-3 py-1 bg-blue-50 rounded-lg ml-2">
+                    № {viewInvoice.invoiceNumber}
+                  </span>
                 </h2>
+
                 <div className="text-xs text-slate-500 font-bold flex gap-4 uppercase tracking-widest">
                   <span className="flex items-center gap-1">
-                    Ta'minotchi: <span className="text-slate-800">{viewInvoice.supplierName || viewInvoice.supplier}</span>
+                    Ta'minotchi:
+                    <span className="text-slate-800">
+                      {viewInvoice.supplierName || viewInvoice.supplier}
+                    </span>
                   </span>
                   <span>•</span>
                   <span className="flex items-center gap-1">
-                    Kiritdi: <span className="text-slate-800">{viewInvoice.userName || "Noma'lum"}</span>
+                    Kiritdi:
+                    <span className="text-slate-800">
+                      {viewInvoice.userName || "Noma'lum"}
+                    </span>
                   </span>
                 </div>
               </div>
+
               <button
                 disabled={isProcessing}
                 onClick={() => setViewInvoice(null)}
@@ -510,26 +689,43 @@ const SupplierIncomeList = () => {
                     <th className="p-4 text-center">Soni</th>
                     {canSeeAmount && <th className="p-4 text-right text-amber-600">Kirim Narx</th>}
                     <th className="p-4 text-right text-emerald-600">Sotuv Narx</th>
-                    {canSeeAmount && <th className="p-4 text-right text-slate-800">Jami Kirim Summa</th>}
+                    {canSeeAmount && (
+                      <th className="p-4 text-right text-slate-800">Jami Kirim Summa</th>
+                    )}
                   </tr>
                 </thead>
+
                 <tbody className="divide-y divide-slate-50 font-bold text-slate-700">
                   {(Array.isArray(viewInvoice.items) ? viewInvoice.items : []).map((item, i) => (
                     <tr key={i} className="hover:bg-slate-50 transition-colors">
                       <td className="p-4 font-mono text-slate-400">#{item.customId ?? '-'}</td>
                       <td className="p-4">{item.name}</td>
-                      <td className="p-4 text-center text-blue-600">{Number(item.count || 0)}</td>
+                      <td className="p-4 text-center text-blue-600">
+                        {Number(item.count || 0)}
+                      </td>
+
                       {canSeeAmount && (
                         <td className="p-4 text-right text-amber-700">
-                          {Number(item.price || 0).toLocaleString()} <span className="text-[10px] text-amber-500">{item.currency || 'UZS'}</span>
+                          {Number(item.price || 0).toLocaleString('uz-UZ')}{' '}
+                          <span className="text-[10px] text-amber-500">
+                            {item.currency || 'UZS'}
+                          </span>
                         </td>
                       )}
+
                       <td className="p-4 text-right text-emerald-600">
-                        {Number(item.salePrice || 0).toLocaleString()} <span className="text-[10px] text-emerald-400">{item.currency || 'UZS'}</span>
+                        {Number(item.salePrice || 0).toLocaleString('uz-UZ')}{' '}
+                        <span className="text-[10px] text-emerald-400">
+                          {item.currency || 'UZS'}
+                        </span>
                       </td>
+
                       {canSeeAmount && (
                         <td className="p-4 text-right font-black text-slate-800">
-                          {(Number(item.count || 0) * Number(item.price || 0)).toLocaleString()} <span className="text-[10px] text-slate-400">{item.currency || 'UZS'}</span>
+                          {(Number(item.count || 0) * Number(item.price || 0)).toLocaleString('uz-UZ')}{' '}
+                          <span className="text-[10px] text-slate-400">
+                            {item.currency || 'UZS'}
+                          </span>
                         </td>
                       )}
                     </tr>
@@ -590,8 +786,11 @@ const SupplierIncomeList = () => {
             </div>
 
             <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">
-              {confirmModal.type === 'approve' ? "Fakturani tasdiqlaysizmi?" : "O'chirilsinmi?"}
+              {confirmModal.type === 'approve'
+                ? 'Fakturani tasdiqlaysizmi?'
+                : "O'chirilsinmi?"}
             </h3>
+
             <p className="text-center text-slate-500 font-medium text-sm mb-8 leading-relaxed">
               {confirmModal.type === 'approve'
                 ? "Tasdiqlaganingizdan so'ng tovarlar omborga qo'shiladi va bu jarayonni ortga qaytarib bo'lmaydi."
@@ -606,6 +805,7 @@ const SupplierIncomeList = () => {
               >
                 Bekor qilish
               </button>
+
               <button
                 disabled={isProcessing}
                 onClick={() =>
@@ -619,7 +819,13 @@ const SupplierIncomeList = () => {
                     : 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'
                 }`}
               >
-                {isProcessing ? <Loader2 size={16} className="animate-spin" /> : confirmModal.type === 'approve' ? 'Tasdiqlash' : "O'chirish"}
+                {isProcessing ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : confirmModal.type === 'approve' ? (
+                  'Tasdiqlash'
+                ) : (
+                  "O'chirish"
+                )}
               </button>
             </div>
           </div>

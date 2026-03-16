@@ -10,10 +10,11 @@ const InventoryHistory = () => {
 
   // 1. TOKENNI OLAMIZ (Cho'ntakdan pasportni oldik)
   const token = sessionStorage.getItem('token');
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
   // 2. SERVERDAN TARIXNI YUKLASH
   useEffect(() => {
-    fetch('https://iphone-house-api.onrender.com/api/inventory/history', {
+    fetch(`${API_URL}/api/inventory/history`, {
         headers: {
             'Authorization': `Bearer ${token}` // <--- PASPORTNI KO'RSATDIK!
         }

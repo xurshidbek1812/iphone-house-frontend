@@ -12,7 +12,8 @@ import {
   CircleDollarSign,
   ArrowDownCircle,
   ArrowUpCircle,
-  History
+  History,
+  ArrowRightLeft
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { hasPermission, PERMISSIONS } from '../../utils/permissions';
@@ -34,27 +35,105 @@ const formatDateTime = (value) => {
   return new Date(value).toLocaleString('uz-UZ');
 };
 
-const getTransactionTypeBadge = (type) => {
-  const safeType = String(type || '').toUpperCase();
+const normalizeCashboxTransactions = (transactions) => {
+  const grouped = new Map();
+  const singles = [];
 
-  if (safeType === 'TRANSFER_IN') {
-    return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+  for (const item of transactions) {
+    if (item.transferGroupId) {
+      if (!grouped.has(item.transferGroupId)) {
+        grouped.set(item.transferGroupId, []);
+      }
+      grouped.get(item.transferGroupId).push(item);
+    } else {
+      const type = String(item.type || '').toUpperCase();
+
+      let title = item.type || 'Amaliyot';
+      let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+      let iconType = 'default';
+      let direction = item.cashbox?.name || '-';
+
+      if (type === 'DEPOSIT' || type === 'INCOME') {
+        title = 'Kirim';
+        badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        iconType = 'income';
+      } else if (type === 'WITHDRAW' || type === 'EXPENSE') {
+        title = 'Chiqim';
+        badgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
+        iconType = 'expense';
+      }
+
+      singles.push({
+        id: `single-${item.id}`,
+        createdAt: item.createdAt,
+        title,
+        amount: item.amount,
+        note: item.note || '-',
+        userName: item.user?.fullName || item.user?.username || '-',
+        badgeClass,
+        iconType,
+        direction,
+        cashboxName: item.cashbox?.name || '-',
+        targetCashboxName: '-',
+        raw: item
+      });
+    }
   }
 
-  if (safeType === 'TRANSFER_OUT') {
-    return 'bg-amber-100 text-amber-700 border-amber-200';
+  const transfers = [];
+
+  for (const [, items] of grouped.entries()) {
+    const outRow = items.find((x) => String(x.type).toUpperCase() === 'TRANSFER_OUT');
+    const inRow = items.find((x) => String(x.type).toUpperCase() === 'TRANSFER_IN');
+    const firstRow = items[0];
+
+    if (outRow && inRow) {
+      transfers.push({
+        id: `transfer-${firstRow.transferGroupId}`,
+        createdAt: outRow.createdAt || inRow.createdAt,
+        title: "Kassalar o'rtasida transfer",
+        amount: outRow.amount || inRow.amount,
+        note: outRow.note || inRow.note || '-',
+        userName:
+          outRow.user?.fullName ||
+          inRow.user?.fullName ||
+          outRow.user?.username ||
+          inRow.user?.username ||
+          '-',
+        badgeClass: 'bg-violet-50 text-violet-700 border-violet-200',
+        iconType: 'transfer',
+        direction: `${outRow.cashbox?.name || '-'} → ${inRow.cashbox?.name || '-'}`,
+        cashboxName: outRow.cashbox?.name || '-',
+        targetCashboxName: inRow.cashbox?.name || '-',
+        raw: items
+      });
+    } else {
+      for (const item of items) {
+        const isOut = String(item.type).toUpperCase() === 'TRANSFER_OUT';
+
+        singles.push({
+          id: `single-${item.id}`,
+          createdAt: item.createdAt,
+          title: isOut ? 'Chiqim' : 'Kirim',
+          amount: item.amount,
+          note: item.note || '-',
+          userName: item.user?.fullName || item.user?.username || '-',
+          badgeClass: isOut
+            ? 'bg-amber-50 text-amber-700 border-amber-200'
+            : 'bg-emerald-50 text-emerald-700 border-emerald-200',
+          iconType: isOut ? 'expense' : 'income',
+          direction: item.cashbox?.name || '-',
+          cashboxName: item.cashbox?.name || '-',
+          targetCashboxName: '-',
+          raw: item
+        });
+      }
+    }
   }
 
-  return 'bg-slate-100 text-slate-600 border-slate-200';
-};
-
-const getTransactionTypeLabel = (type) => {
-  const safeType = String(type || '').toUpperCase();
-
-  if (safeType === 'TRANSFER_IN') return "BOSHQA KASSADAN KIRIM";
-  if (safeType === 'TRANSFER_OUT') return "BOSHQA KASSAGA CHIQIM";
-
-  return safeType || 'AMAL';
+  return [...transfers, ...singles].sort(
+    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+  );
 };
 
 const ManageCash = () => {
@@ -102,8 +181,38 @@ const ManageCash = () => {
     name: '',
     currency: 'UZS',
     responsibleName: '',
-    isActive: true
+    isActive: true,
+    balance: 0
   });
+
+  useEffect(() => {
+    const anyModalOpen =
+      isModalOpen ||
+      transactionModal.isOpen ||
+      historyModal.isOpen ||
+      deleteModal.isOpen;
+
+    if (anyModalOpen) {
+      const scrollbarWidth =
+        window.innerWidth - document.documentElement.clientWidth;
+
+      document.body.style.overflow = 'hidden';
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    }
+
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    };
+  }, [
+    isModalOpen,
+    transactionModal.isOpen,
+    historyModal.isOpen,
+    deleteModal.isOpen
+  ]);
 
   const fetchCashboxes = async () => {
     setLoading(true);
@@ -166,7 +275,8 @@ const ManageCash = () => {
       const data = await parseJsonSafe(res);
 
       if (res.ok) {
-        setTransactions(Array.isArray(data) ? data : []);
+        const normalized = normalizeCashboxTransactions(Array.isArray(data) ? data : []);
+        setTransactions(normalized);
       } else {
         toast.error(data?.error || "Kassa tarixini yuklab bo'lmadi");
         setTransactions([]);
@@ -195,7 +305,8 @@ const ManageCash = () => {
       name: '',
       currency: 'UZS',
       responsibleName: '',
-      isActive: true
+      isActive: true,
+      balance: 0
     });
     setIsModalOpen(true);
   };
@@ -207,7 +318,8 @@ const ManageCash = () => {
       name: cashbox.name || '',
       currency: cashbox.currency || 'UZS',
       responsibleName: cashbox.responsibleName || '',
-      isActive: cashbox.isActive ?? true
+      isActive: cashbox.isActive ?? true,
+      balance: Number(cashbox.balance || 0)
     });
     setIsModalOpen(true);
   };
@@ -547,12 +659,17 @@ const ManageCash = () => {
                           </button>
 
                           <button
-                            onClick={() =>
+                            onClick={() => {
+                              if (Number(item.balance || 0) > 0) {
+                                toast.error("Balansida pul bor kassani o'chirib bo'lmaydi. Uni faolsizlantiring.");
+                                return;
+                              }
+
                               setDeleteModal({
                                 isOpen: true,
                                 cashboxId: item.id
-                              })
-                            }
+                              });
+                            }}
                             className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
                             title="O'chirish"
                           >
@@ -604,13 +721,20 @@ const ManageCash = () => {
                   Valyuta
                 </label>
                 <select
-                  className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-slate-100 disabled:text-slate-400"
                   value={formData.currency}
+                  disabled={isEditing && Number(formData.balance || 0) > 0}
                   onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                 >
                   <option value="UZS">UZS</option>
                   <option value="USD">USD</option>
                 </select>
+
+                {isEditing && Number(formData.balance || 0) > 0 && (
+                  <p className="text-xs text-amber-600 font-medium mt-2">
+                    Balansida mablag' bor kassaning valyutasini o'zgartirib bo'lmaydi.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -803,14 +927,12 @@ const ManageCash = () => {
       )}
 
       {historyModal.isOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
-          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl p-6 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+          <div className="bg-white w-full max-w-6xl rounded-[28px] shadow-2xl overflow-hidden animate-in zoom-in-95">
+            <div className="flex justify-between items-start p-6 border-b border-slate-100">
               <div>
-                <h2 className="text-xl font-bold text-gray-800">Kassa tarixi</h2>
-                <p className="text-sm text-slate-400 mt-1">
-                  {historyModal.cashboxName}
-                </p>
+                <h2 className="text-2xl font-black text-slate-800">Kassa tarixi</h2>
+                <p className="text-sm text-slate-400 mt-1">{historyModal.cashboxName}</p>
               </div>
 
               <button
@@ -821,68 +943,103 @@ const ManageCash = () => {
                     cashboxName: ''
                   })
                 }
-                className="p-2 hover:bg-gray-100 rounded-full text-gray-500"
+                className="p-2 rounded-full hover:bg-slate-100 text-slate-500"
               >
-                <X size={20} />
+                <X size={22} />
               </button>
             </div>
 
-            <div className="border border-slate-200 rounded-2xl overflow-hidden">
-              <table className="w-full text-left">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold">
-                  <tr>
-                    <th className="p-4">Turi</th>
-                    <th className="p-4">Summa</th>
-                    <th className="p-4">Izoh</th>
-                    <th className="p-4">Kim</th>
-                    <th className="p-4">Sana</th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {historyLoading ? (
+            <div className="p-6">
+              <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold">
                     <tr>
-                      <td colSpan="5" className="p-8 text-center text-slate-400">
-                        <Loader2 className="animate-spin mx-auto" size={24} />
-                      </td>
+                      <th className="p-4">Amaliyot</th>
+                      <th className="p-4">Yo'nalish</th>
+                      <th className="p-4">Summa</th>
+                      <th className="p-4">Izoh</th>
+                      <th className="p-4">Kim</th>
+                      <th className="p-4">Holat</th>
                     </tr>
-                  ) : transactions.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" className="p-8 text-center text-slate-400">
-                        Hozircha tarix mavjud emas
-                      </td>
-                    </tr>
-                  ) : (
-                    transactions.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50">
-                        <td className="p-4">
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-bold border ${getTransactionTypeBadge(item.type)}`}
-                          >
-                            {getTransactionTypeLabel(item.type)}
-                          </span>
-                        </td>
+                  </thead>
 
-                        <td className="p-4 font-bold text-slate-800">
-                          {formatMoney(item.amount)}
-                        </td>
-
-                        <td className="p-4 text-slate-600">
-                          {item.note || '-'}
-                        </td>
-
-                        <td className="p-4 text-slate-600">
-                          {item.user?.fullName || item.user?.username || '-'}
-                        </td>
-
-                        <td className="p-4 text-slate-500">
-                          {formatDateTime(item.createdAt)}
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {historyLoading ? (
+                      <tr>
+                        <td colSpan="6" className="p-8 text-center text-slate-400">
+                          <Loader2 className="animate-spin mx-auto" size={24} />
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : transactions.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="p-8 text-center text-slate-400">
+                          Hozircha tarix mavjud emas
+                        </td>
+                      </tr>
+                    ) : (
+                      transactions.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              {item.iconType === 'transfer' ? (
+                                <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center">
+                                  <ArrowRightLeft size={16} />
+                                </div>
+                              ) : (
+                                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                                  <Wallet size={16} />
+                                </div>
+                              )}
+
+                              <div>
+                                <p className="font-bold text-slate-800">{item.title}</p>
+                                <p className="text-xs text-slate-400">{formatDateTime(item.createdAt)}</p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="p-4 text-slate-700 font-medium">
+                            {item.direction}
+                          </td>
+
+                          <td className="p-4 font-black text-slate-800">
+                            {formatMoney(item.amount)}
+                          </td>
+
+                          <td className="p-4 text-slate-600 max-w-[280px] whitespace-normal break-words">
+                            {item.note || '-'}
+                          </td>
+
+                          <td className="p-4 text-slate-600">
+                            {item.userName}
+                          </td>
+
+                          <td className="p-4">
+                            <span className={`px-3 py-1.5 rounded-xl border text-xs font-black ${item.badgeClass}`}>
+                              {item.title}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button
+                onClick={() =>
+                  setHistoryModal({
+                    isOpen: false,
+                    cashboxId: null,
+                    cashboxName: ''
+                  })
+                }
+                className="px-6 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Yopish
+              </button>
             </div>
           </div>
         </div>

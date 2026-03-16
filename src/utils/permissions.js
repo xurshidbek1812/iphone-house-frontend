@@ -1,8 +1,11 @@
 export const PERMISSIONS = {
-  INVOICE_APPROVE: 'invoice.approve',
-  BLACKLIST_APPROVE: 'blacklist.approve',
-  USERS_MANAGE: 'users.manage',
-  CASHBOX_MANAGE: 'cashbox.manage'
+  CASHBOX_VIEW: 'cashbox.view',
+  CASHBOX_MANAGE: 'cashbox.manage',
+  PRODUCT_MANAGE: 'product.manage',
+  CATEGORY_MANAGE: 'category.manage',
+  SUPPLIER_MANAGE: 'supplier.manage',
+  INVENTORY_VIEW_AMOUNTS: 'inventory.view_amounts',
+  INVOICE_APPROVE: 'invoice.approve'
 };
 
 export const hasPermission = (permission) => {
