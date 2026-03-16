@@ -444,235 +444,216 @@ const Sklad = () => {
   };
 
   const handleFinalPrint = () => {
-    if (!printProduct || !selectedBatch) {
-      toast.error('Partiyani tanlang!');
-      return;
-    }
+  if (!printProduct || !selectedBatch) {
+    toast.error('Partiyani tanlang!');
+    return;
+  }
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Brauzer yangi tab ochishga ruxsat bermadi.');
-      return;
-    }
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    toast.error('Brauzer yangi tab ochishga ruxsat bermadi.');
+    return;
+  }
 
-    const qrValue = `ID:${printProduct.customId}|BATCH:${selectedBatch.id}|NAME:${printProduct.name}`;
-    const qrCodeSvg = ReactDOMServer.renderToString(
-      <QRCode value={qrValue} size={140} level="H" />
-    );
+  const qrValue = `ID:${printProduct.customId}|BATCH:${selectedBatch.id}|NAME:${printProduct.name}`;
+  const qrCodeSvg = ReactDOMServer.renderToString(
+    <QRCode value={qrValue} size={160} level="H" />
+  );
 
-    const safeName = String(printProduct.name || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+  const safeName = String(printProduct.name || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 
-    const safeCategory = String(printProduct.category || 'Tovar')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+  const html = `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="UTF-8" />
+      <title>QR Label</title>
+      <style>
+        * {
+          box-sizing: border-box;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="UTF-8" />
-          <title>QR Label</title>
-          <style>
-            * {
-              box-sizing: border-box;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
+        html, body {
+          margin: 0;
+          padding: 0;
+          background: #fff;
+          font-family: Arial, Helvetica, sans-serif;
+        }
 
-            html, body {
-              margin: 0;
-              padding: 0;
-              background: #fff;
-              font-family: Arial, Helvetica, sans-serif;
-            }
+        @page {
+          size: 58mm 40mm;
+          margin: 0;
+        }
 
-            @page {
-              size: 58mm 40mm;
-              margin: 0;
-            }
+        body {
+          width: 58mm;
+          height: 40mm;
+          overflow: hidden;
+        }
 
-            body {
-              width: 58mm;
-              min-height: 40mm;
-              overflow: hidden;
-            }
+        .page {
+          width: 58mm;
+          height: 40mm;
+          padding: 2mm;
+        }
 
-            .page {
-              width: 58mm;
-              height: 40mm;
-              padding: 2mm;
-              overflow: hidden;
-            }
+        .card {
+          width: 100%;
+          height: 100%;
+          border: 0.35mm solid #bdbdbd;
+          border-radius: 3.5mm;
+          background: #fff;
+          padding: 2.2mm 2.4mm;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
 
-            .label {
-              width: 100%;
-              height: 100%;
-              border: 1px solid #111;
-              border-radius: 3mm;
-              background: #fff;
-              padding: 2.2mm;
-              display: flex;
-              gap: 2.2mm;
-              overflow: hidden;
-            }
+        .name {
+          width: 100%;
+          text-align: center;
+          font-size: 3.15mm;
+          line-height: 1.15;
+          font-weight: 500;
+          color: #4b5563;
+          min-height: 8.5mm;
+          max-height: 8.5mm;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          word-break: break-word;
+        }
 
-            .left {
-              flex: 1;
-              min-width: 0;
-              display: flex;
-              flex-direction: column;
-              justify-content: space-between;
-              overflow: hidden;
-            }
+        .divider {
+          width: 100%;
+          height: 0.35mm;
+          background: #9f9f9f;
+          margin-top: 0.8mm;
+          margin-bottom: 1.8mm;
+          flex-shrink: 0;
+        }
 
-            .category {
-              font-size: 2.1mm;
-              font-weight: 700;
-              color: #666;
-              text-transform: uppercase;
-              letter-spacing: 0.15mm;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-              margin-bottom: 0.8mm;
-            }
+        .bottom {
+          flex: 1;
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 2mm;
+          overflow: hidden;
+        }
 
-            .name {
-              font-size: 3.1mm;
-              line-height: 1.05;
-              font-weight: 800;
-              text-transform: uppercase;
-              color: #000;
-              max-height: 9mm;
-              overflow: hidden;
-            }
+        .left {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-start;
+          padding-top: 1.2mm;
+        }
 
-            .bottom {
-              margin-top: auto;
-            }
+        .product-id {
+          font-size: 4.6mm;
+          line-height: 1;
+          font-weight: 800;
+          color: #000;
+          letter-spacing: 0.02mm;
+          margin-bottom: 0.9mm;
+          white-space: nowrap;
+        }
 
-            .code-label {
-              font-size: 1.7mm;
-              font-weight: 700;
-              color: #777;
-              text-transform: uppercase;
-              letter-spacing: 0.12mm;
-              margin-bottom: 0.3mm;
-            }
+        .batch {
+          font-size: 2.25mm;
+          line-height: 1;
+          font-weight: 600;
+          color: #6b7280;
+          white-space: nowrap;
+        }
 
-            .product-id {
-              font-size: 4.6mm;
-              line-height: 1;
-              font-weight: 800;
-              color: #000;
-              white-space: nowrap;
-            }
+        .qr {
+          width: 18mm;
+          height: 18mm;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-top: 0.2mm;
+        }
 
-            .batch {
-              margin-top: 0.8mm;
-              display: inline-block;
-              background: #111;
-              color: #fff;
-              border-radius: 1mm;
-              padding: 0.7mm 1.4mm;
-              font-size: 2mm;
-              line-height: 1;
-              font-weight: 700;
-            }
+        .qr svg {
+          width: 100%;
+          height: 100%;
+          display: block;
+        }
 
-            .right {
-              width: 24mm;
-              height: 100%;
-              flex-shrink: 0;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-            }
+        .print-note {
+          display: none;
+        }
 
-            .qr {
-              width: 24mm;
-              height: 24mm;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-            }
+        @media screen {
+          .print-note {
+            display: block;
+            position: fixed;
+            right: 12px;
+            bottom: 12px;
+            font-size: 12px;
+            color: #666;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 8px 10px;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="page">
+        <div class="card">
+          <div class="name">${safeName}</div>
 
-            .qr svg {
-              width: 100%;
-              height: 100%;
-            }
+          <div class="divider"></div>
 
-            .print-note {
-              display: none;
-            }
+          <div class="bottom">
+            <div class="left">
+              <div class="product-id">${printProduct.customId}</div>
+              <div class="batch">Partiya #${selectedBatch.id}</div>
+            </div>
 
-            @media screen {
-              .print-note {
-                display: block;
-                position: fixed;
-                right: 12px;
-                bottom: 12px;
-                font-size: 12px;
-                color: #666;
-                background: #f8fafc;
-                border: 1px solid #e2e8f0;
-                border-radius: 10px;
-                padding: 8px 10px;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="page">
-            <div class="label">
-              <div class="left">
-                <div>
-                  <div class="category">${safeCategory}</div>
-                  <div class="name">${safeName}</div>
-                </div>
-
-                <div class="bottom">
-                  <div class="code-label">Mahsulot kodi</div>
-                  <div class="product-id">${printProduct.customId}</div>
-                  <div class="batch">PARTIYA #${selectedBatch.id}</div>
-                </div>
-              </div>
-
-              <div class="right">
-                <div class="qr">
-                  ${qrCodeSvg}
-                </div>
-              </div>
+            <div class="qr">
+              ${qrCodeSvg}
             </div>
           </div>
+        </div>
+      </div>
 
-          <div class="print-note">Print oynasi ochilmasa Ctrl+P bosing</div>
+      <div class="print-note">Print oynasi ochilmasa Ctrl+P bosing</div>
 
-          <script>
-            setTimeout(() => {
-              window.focus();
-              window.print();
-            }, 300);
+      <script>
+        setTimeout(() => {
+          window.focus();
+          window.print();
+        }, 300);
 
-            window.onafterprint = () => {
-              setTimeout(() => window.close(), 100);
-            };
-          </script>
-        </body>
-      </html>
-    `;
+        window.onafterprint = () => {
+          setTimeout(() => window.close(), 100);
+        };
+      </script>
+    </body>
+  </html>
+`;
 
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
 
-    setPrintProduct(null);
-    setSelectedBatch(null);
-  };
+  setPrintProduct(null);
+  setSelectedBatch(null);
+};
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
