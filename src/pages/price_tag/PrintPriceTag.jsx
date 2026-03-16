@@ -230,10 +230,6 @@ const PrintPriceTag = () => {
                 <div class="price-label">Narxi:</div>
                 <div class="price-value">${Number(item.discountPrice || 0).toLocaleString('uz-UZ')} so'm</div>
               </div>
-
-              <div class="footer">
-                <div class="id-text">ID: ${item.customId ?? '-'}</div>
-              </div>
             </div>
           `;
         }
@@ -280,7 +276,7 @@ const PrintPriceTag = () => {
               border: 1px solid #cfcfcf;
               border-radius: 3.2mm;
               background: #fff;
-              padding: 2.8mm 3mm 2.5mm 3mm;
+              padding: 2.4mm 2.8mm 2.4mm 2.8mm;
               overflow: hidden;
               page-break-inside: avoid;
               display: flex;
@@ -290,72 +286,63 @@ const PrintPriceTag = () => {
 
             .brand {
               text-align: center;
-              font-size: 4.2mm;
+              font-size: 3.8mm;
               line-height: 1;
               font-weight: 900;
-              letter-spacing: 0.2mm;
+              letter-spacing: 0.15mm;
               color: #111827;
               text-transform: uppercase;
-              margin-bottom: 2.1mm;
+              margin-bottom: 1.5mm;
             }
 
             .product-name {
               text-align: center;
-              font-size: 2.8mm;
-              line-height: 1.15;
+              font-size: 2.2mm;
+              line-height: 1.18;
               font-weight: 700;
               color: #374151;
-              min-height: 7.5mm;
-              max-height: 7.5mm;
+              min-height: 8.5mm;
+              max-height: 8.5mm;
               overflow: hidden;
               word-break: break-word;
               display: flex;
               align-items: center;
               justify-content: center;
               text-transform: uppercase;
+              padding: 0 1mm;
             }
 
             .divider {
               width: 100%;
               height: 0;
-              border-top: 0.45mm solid #8f8f8f;
-              margin: 1.8mm 0 2.2mm 0;
+              border-top: 0.4mm solid #8f8f8f;
+              margin: 1.4mm 0 1.8mm 0;
             }
 
             .price-block {
               text-align: center;
-              margin-top: 0.5mm;
+              margin-top: 0.3mm;
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              flex: 1;
             }
 
             .price-label {
-              font-size: 2.4mm;
+              font-size: 2.3mm;
               line-height: 1;
               font-weight: 700;
               color: #6b7280;
-              margin-bottom: 1.2mm;
+              margin-bottom: 1mm;
             }
 
             .price-value {
-              font-size: 4.5mm;
-              line-height: 1.1;
+              font-size: 3.9mm;
+              line-height: 1.08;
               font-weight: 900;
               color: #111827;
               word-break: break-word;
-            }
-
-            .footer {
-              margin-top: auto;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              padding-top: 1.4mm;
-            }
-
-            .id-text {
-              font-size: 2.4mm;
-              line-height: 1;
-              font-weight: 800;
-              color: #374151;
+              padding: 0 1mm;
             }
 
             @media screen {
