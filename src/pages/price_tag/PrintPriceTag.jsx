@@ -197,171 +197,346 @@ const PrintPriceTag = () => {
 
   // --- 6. CHOP ETISH LOGIKASI ---
   const handlePrint = () => {
-    const itemsToPrint = printList.filter(i => i.isChecked);
-    if (itemsToPrint.length === 0) return toast.error("Chop etish uchun tovar tanlanmagan!");
+  const itemsToPrint = printList.filter((i) => i.isChecked);
+  if (itemsToPrint.length === 0) {
+    return toast.error("Chop etish uchun tovar tanlanmagan!");
+  }
 
-    // Popup Blocker himoyasi
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-        return toast.error("Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!");
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    return toast.error("Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!");
+  }
+
+  const today = new Date().toLocaleDateString('ru-RU');
+
+  const escapeHtml = (value) =>
+    String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const renderCompactPriceLabel = (item) => {
+    const safeName = escapeHtml(item.name);
+    const safePrice = Number(item.discountPrice || 0).toLocaleString('uz-UZ');
+    const safeId = escapeHtml(item.customId ?? '-');
+    const safeDate = escapeHtml(today);
+
+    let copiesHtml = '';
+
+    for (let i = 0; i < (Number(item.copies) || 1); i++) {
+      copiesHtml += `
+        <div class="mini-label">
+          <div class="mini-inner">
+            <div class="mini-logo">IPHONE HOUSE</div>
+
+            <div class="mini-name">
+              ${safeName}
+            </div>
+
+            <div class="mini-line"></div>
+
+            <div class="mini-price-row">
+              <span class="mini-price-label">Narxi:</span>
+              <span class="mini-price-value">${safePrice} so'm</span>
+            </div>
+
+            <div class="mini-footer">
+              <span class="mini-date">${safeDate}</span>
+              <span class="mini-id">ID: ${safeId}</span>
+            </div>
+          </div>
+        </div>
+      `;
     }
 
-    const today = new Date().toLocaleDateString('ru-RU');
-
-    let pageCss = '@page { size: A4 landscape; margin: 0mm; }'; 
-    if (paperType === 'Portret (A4)') pageCss = '@page { size: A4 portrait; margin: 0mm; }';
-    
-    const content = itemsToPrint.map(item => {
-        const { prepayment, monthly } = calculateLoan(item.discountPrice, item.prepaymentPercent);
-        const qrCodeSvg = ReactDOMServer.renderToString(
-            <QRCode value={`ID:${item.customId}|${item.name}|${item.discountPrice}`} size={50} level="M"/>
-        );
-        const bgUrl = `data:image/svg+xml;base64,${btoa(qrCodeSvg)}`;
-
-        let itemsHtml = '';
-        for(let i=0; i < (Number(item.copies) || 1); i++) {
-            itemsHtml += `
-                <div class="label-card">
-                    <div class="header">
-                        <div class="logo">iPhone House</div>
-                    </div>
-                    
-                    <div class="product-name">${item.name}</div>
-                    
-                    <div class="price-row">
-                        Narxi: <b>${Number(item.discountPrice).toLocaleString()} so'm</b>
-                    </div>
-
-                    <div class="credit-box">
-                        12 oy : ${monthly.toLocaleString()} so'm
-                    </div>
-
-                    <div class="prepayment-row">
-                        Oldindan to'lov: ${prepayment.toLocaleString()} so'm
-                    </div>
-
-                    <div class="footer">
-                        <div class="qr-code" style="background-image: url('${bgUrl}')"></div>
-                        <div class="date">${today}</div>
-                        <div class="id">ID: ${item.customId ?? '-'}</div>
-                    </div>
-                </div>
-            `;
-        }
-        return itemsHtml;
-    }).join('');
-
-    printWindow.document.write(`
-        <html>
-        <head>
-            <title>Narx Yorliqlari</title>
-            <style>
-                ${pageCss}
-                body { 
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                    display: flex; 
-                    flex-wrap: wrap; 
-                    gap: 15px; 
-                    justify-content: flex-start;
-                    align-content: flex-start;
-                    padding: 15mm; 
-                }
-                
-                .label-card {
-                    width: 320px;
-                    height: 230px; 
-                    border: 2px solid #e0e0e0;
-                    border-radius: 8px;
-                    padding: 15px 15px 25px 15px; 
-                    box-sizing: border-box;
-                    display: flex; 
-                    flex-direction: column; 
-                    align-items: center;
-                    position: relative;
-                    page-break-inside: avoid;
-                    background: white;
-                }
-
-                .logo {
-                    font-size: 22px;
-                    font-weight: 900;
-                    color: #4338ca;
-                    text-transform: uppercase;
-                    margin-bottom: 5px;
-                    letter-spacing: 1px;
-                }
-
-                .product-name {
-                    font-size: 13px;
-                    font-weight: 600;
-                    text-align: center;
-                    margin-bottom: 10px;
-                    line-height: 1.3;
-                    height: 34px;
-                    overflow: hidden;
-                    color: #333;
-                    width: 100%;
-                }
-
-                .price-row {
-                    font-size: 14px;
-                    color: #555;
-                    margin-bottom: 5px;
-                }
-
-                .credit-box {
-                    border: 2px solid #4338ca;
-                    border-radius: 6px;
-                    padding: 8px 15px;
-                    font-size: 18px;
-                    font-weight: bold;
-                    color: #000;
-                    margin: 5px 0 10px 0;
-                    width: 90%;
-                    text-align: center;
-                }
-
-                .prepayment-row {
-                    font-size: 12px;
-                    color: #666;
-                    margin-bottom: 10px;
-                }
-
-                .footer {
-                    width: 100%;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: end;
-                    margin-top: auto;
-                    border-top: 1px solid #f0f0f0;
-                    padding-top: 8px; 
-                }
-
-                .qr-code {
-                    width: 45px;
-                    height: 45px;
-                    background-size: contain;
-                    background-repeat: no-repeat;
-                }
-
-                .date {
-                    font-size: 11px;
-                    color: #888;
-                }
-
-                .id {
-                    font-size: 14px;
-                    font-weight: bold;
-                    color: #000;
-                }
-            </style>
-        </head>
-        <body>${content}</body>
-        <script>window.onload = function() { window.print(); window.close(); }</script>
-        </html>
-    `);
-    printWindow.document.close();
+    return copiesHtml;
   };
+
+  const renderQrLabel = (item) => {
+    const safeName = escapeHtml(item.name || '');
+    const safeCategory = escapeHtml(item.category || 'Tovar');
+    const qrValue = `ID:${item.customId}|NAME:${item.name}|PRICE:${item.discountPrice}`;
+
+    const qrCodeSvg = ReactDOMServer.renderToString(
+      <QRCode value={qrValue} size={140} level="H" />
+    );
+
+    let copiesHtml = '';
+
+    for (let i = 0; i < (Number(item.copies) || 1); i++) {
+      copiesHtml += `
+        <div class="page58">
+          <div class="label58">
+            <div class="left58">
+              <div>
+                <div class="category58">${safeCategory}</div>
+                <div class="name58">${safeName}</div>
+              </div>
+
+              <div class="bottom58">
+                <div class="code-label58">Mahsulot kodi</div>
+                <div class="product-id58">${item.customId ?? '-'}</div>
+              </div>
+            </div>
+
+            <div class="right58">
+              <div class="qr58">
+                ${qrCodeSvg}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    return copiesHtml;
+  };
+
+  const content = itemsToPrint
+    .map((item) => {
+      if (item.template === 'Yorliq (58x40)' || paperType === 'Yorliq (58x40)') {
+        return renderQrLabel(item);
+      }
+
+      return renderCompactPriceLabel(item);
+    })
+    .join('');
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>Narx Yorliqlari</title>
+        <style>
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+            font-family: Arial, Helvetica, sans-serif;
+          }
+
+          body {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4mm;
+            padding: 4mm;
+            align-content: flex-start;
+          }
+
+          @page {
+            size: A4;
+            margin: 4mm;
+          }
+
+          /* ======= YANGI NARX YORLIG'I (QRsiz) ======= */
+          .mini-label {
+            width: 58mm;
+            height: 40mm;
+            page-break-inside: avoid;
+          }
+
+          .mini-inner {
+            width: 58mm;
+            height: 40mm;
+            border: 1px solid #bdbdbd;
+            border-radius: 3mm;
+            background: #fff;
+            padding: 2.5mm 3mm 2mm 3mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+          }
+
+          .mini-logo {
+            text-align: center;
+            font-size: 4.1mm;
+            line-height: 1;
+            font-weight: 900;
+            letter-spacing: 0.2mm;
+            color: #222;
+            text-transform: uppercase;
+            margin-top: 0.4mm;
+          }
+
+          .mini-name {
+            margin-top: 1.4mm;
+            text-align: center;
+            font-size: 2.9mm;
+            line-height: 1.18;
+            font-weight: 700;
+            color: #333;
+            min-height: 8.5mm;
+            max-height: 8.5mm;
+            overflow: hidden;
+            word-break: break-word;
+          }
+
+          .mini-line {
+            width: 100%;
+            border-top: 0.35mm solid #7b7b7b;
+            margin-top: 1.2mm;
+            margin-bottom: 1.6mm;
+          }
+
+          .mini-price-row {
+            text-align: center;
+            margin-top: 0.4mm;
+          }
+
+          .mini-price-label {
+            font-size: 2.6mm;
+            font-weight: 700;
+            color: #555;
+            margin-right: 1mm;
+          }
+
+          .mini-price-value {
+            font-size: 3.5mm;
+            line-height: 1;
+            font-weight: 900;
+            color: #222;
+          }
+
+          .mini-footer {
+            margin-top: auto;
+            padding-top: 1.2mm;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 2mm;
+          }
+
+          .mini-date {
+            font-size: 2mm;
+            color: #8a8a8a;
+            font-weight: 600;
+          }
+
+          .mini-id {
+            font-size: 2.5mm;
+            color: #111;
+            font-weight: 800;
+          }
+
+          /* ======= 58x40 QR LABEL ======= */
+          .page58 {
+            width: 58mm;
+            height: 40mm;
+          }
+
+          .label58 {
+            width: 58mm;
+            height: 40mm;
+            border: 1px solid #111;
+            border-radius: 3mm;
+            background: #fff;
+            padding: 2.2mm;
+            display: flex;
+            gap: 2.2mm;
+            overflow: hidden;
+          }
+
+          .left58 {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+          }
+
+          .category58 {
+            font-size: 2.1mm;
+            font-weight: 700;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.15mm;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 0.8mm;
+          }
+
+          .name58 {
+            font-size: 3.1mm;
+            line-height: 1.05;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: #000;
+            max-height: 9mm;
+            overflow: hidden;
+          }
+
+          .bottom58 {
+            margin-top: auto;
+          }
+
+          .code-label58 {
+            font-size: 1.7mm;
+            font-weight: 700;
+            color: #777;
+            text-transform: uppercase;
+            letter-spacing: 0.12mm;
+            margin-bottom: 0.3mm;
+          }
+
+          .product-id58 {
+            font-size: 4.6mm;
+            line-height: 1;
+            font-weight: 800;
+            color: #000;
+            white-space: nowrap;
+          }
+
+          .right58 {
+            width: 24mm;
+            height: 100%;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .qr58 {
+            width: 24mm;
+            height: 24mm;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .qr58 svg {
+            width: 100%;
+            height: 100%;
+          }
+        </style>
+      </head>
+      <body>
+        ${content}
+        <script>
+          window.onload = function() {
+            setTimeout(() => {
+              window.print();
+              window.close();
+            }, 250);
+          }
+        </script>
+      </body>
+    </html>
+  `);
+
+  printWindow.document.close();
+};
 
   const checkedCount = printList.filter(i => i.isChecked).length;
 
