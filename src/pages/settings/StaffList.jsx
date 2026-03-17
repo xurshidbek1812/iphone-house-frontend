@@ -14,6 +14,7 @@ import {
   CheckSquare
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiFetch } from '../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -55,6 +56,14 @@ const PERMISSION_GROUPS = [
     ]
   },
   {
+    title: 'Xarajatlar',
+    color: 'rose',
+    items: [
+      { key: 'expense.create', label: "Xarajat yaratish" },
+      { key: 'expense.approve', label: "Xarajatni tasdiqlash" }
+    ]
+  },
+  {
     title: 'Ombor',
     color: 'amber',
     items: [
@@ -90,6 +99,12 @@ const groupColorClasses = {
     title: 'text-red-700',
     checked: 'bg-red-50 border-red-300',
     unchecked: 'bg-white border-gray-200 hover:border-red-200'
+  },
+    rose: {
+    box: 'border-rose-200 bg-rose-50/40',
+    title: 'text-rose-700',
+    checked: 'bg-rose-50 border-rose-300',
+    unchecked: 'bg-white border-gray-200 hover:border-rose-200'
   },
   purple: {
     box: 'border-purple-200 bg-purple-50/40',

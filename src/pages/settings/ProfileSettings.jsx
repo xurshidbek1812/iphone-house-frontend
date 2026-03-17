@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Edit, X, User, Phone, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { clearAuthData } from '../../utils/authStorage';
+import { apiFetch } from '../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -172,7 +174,7 @@ const ProfileSettings = () => {
       toast.success("Login muvaffaqiyatli o'zgartirildi!");
 
       setTimeout(() => {
-        sessionStorage.clear();
+        clearAuthData();
         window.location.reload();
       }, 1500);
     } catch (err) {
@@ -225,7 +227,7 @@ const ProfileSettings = () => {
       toast.success("Parol muvaffaqiyatli o'zgartirildi! Qayta kiring.");
 
       setTimeout(() => {
-        sessionStorage.clear();
+        clearAuthData();
         window.location.reload();
       }, 1500);
     } catch (err) {

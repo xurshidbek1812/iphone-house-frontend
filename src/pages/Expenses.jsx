@@ -56,32 +56,42 @@ const Expenses = () => {
               <th className="p-4 border-b text-right">Amallar</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 text-sm">
+          <tbody className="divide-y divide-slate-50 text-sm font-bold text-slate-700">
             {expenses.map((item) => (
-              <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                <td className="p-4 text-gray-500">{item.id}</td>
-                <td className="p-4 font-medium text-gray-900">{item.date}</td>
-                <td className="p-4 text-gray-600">{item.branch}</td>
-                <td className="p-4 font-medium text-gray-800">{item.name}</td>
-                <td className="p-4 font-bold text-gray-900">{item.amount}</td>
-                <td className="p-4">
-                    {/* The "Chiqim" indicator with the Red Arrow */}
-                    <div className="flex items-center gap-1 text-red-500 font-medium">
-                        <ArrowUpRight size={16} />
-                        <span>{item.type}</span>
-                    </div>
+              <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                <td className="p-4 text-slate-500">
+                  {formatDate(item.createdAt)}
                 </td>
-                <td className="p-4 text-gray-500 text-xs">{item.note}</td>
+
                 <td className="p-4">
-                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border border-blue-200 text-blue-600 bg-blue-50">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
+                  {item.cashbox?.name || '-'}
+                </td>
+
+                <td className="p-4 text-right text-rose-600 font-black">
+                  {Number(item.amount || 0).toLocaleString('uz-UZ')} UZS
+                </td>
+
+                <td className="p-4 text-slate-600 whitespace-normal break-words max-w-[320px]">
+                  {item.note || '-'}
+                </td>
+
+                <td className="p-4 text-center">
+                  <span
+                    className={`px-3 py-1.5 rounded-xl text-[10px] uppercase tracking-wider font-black border ${
+                      item.status === 'Tasdiqlandi'
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                        : 'bg-blue-50 text-blue-600 border-blue-200'
+                    }`}
+                  >
                     {item.status}
                   </span>
                 </td>
-                <td className="p-4 text-right">
-                  <button className="p-1 hover:bg-gray-100 rounded">
-                    <MoreVertical size={18} className="text-gray-400" />
-                  </button>
+
+                <td className="p-4">{item.createdByName || '-'}</td>
+                <td className="p-4">{item.approvedByName || '-'}</td>
+
+                <td className="p-4 text-center">
+                  {/* action menu */}
                 </td>
               </tr>
             ))}

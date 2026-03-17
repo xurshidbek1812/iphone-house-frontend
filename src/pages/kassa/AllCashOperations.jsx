@@ -27,6 +27,49 @@ const parseJsonSafe = async (response) => {
   }
 };
 
+const getOperationMeta = (type) => {
+  const safeType = String(type || '').toUpperCase();
+
+  switch (safeType) {
+    case 'INCOME':
+    case 'DEPOSIT':
+      return {
+        title: 'Kirim',
+        statusLabel: 'Bajarildi',
+        statusBadge: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      };
+
+    case 'EXPENSE':
+    case 'WITHDRAW':
+      return {
+        title: 'Xarajat',
+        statusLabel: 'Bajarildi',
+        statusBadge: 'bg-rose-50 text-rose-700 border-rose-200'
+      };
+
+    case 'TRANSFER_OUT':
+      return {
+        title: "Boshqa kassaga chiqim",
+        statusLabel: 'Chiqim',
+        statusBadge: 'bg-amber-50 text-amber-700 border-amber-200'
+      };
+
+    case 'TRANSFER_IN':
+      return {
+        title: "Boshqa kassadan kirim",
+        statusLabel: 'Kirim',
+        statusBadge: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      };
+
+    default:
+      return {
+        title: type || 'Amaliyot',
+        statusLabel: 'Bajarildi',
+        statusBadge: 'bg-blue-50 text-blue-700 border-blue-200'
+      };
+  }
+};
+
 const normalizeOperations = (transactions) => {
   const grouped = new Map();
   const singles = [];
@@ -38,21 +81,22 @@ const normalizeOperations = (transactions) => {
       }
       grouped.get(item.transferGroupId).push(item);
     } else {
+      const meta = getOperationMeta(item.type);
+
       singles.push({
         id: `single-${item.id}`,
         createdAt: item.createdAt,
         type: item.type,
-        statusLabel: 'Bajarildi',
-        statusClass: 'text-blue-600',
-        statusBadge: 'bg-blue-50 text-blue-700 border-blue-200',
-        title: item.type || 'Amaliyot',
+        title: meta.title,
+        statusLabel: meta.statusLabel,
+        statusBadge: meta.statusBadge,
         cashboxName: item.cashbox?.name || '-',
         targetCashboxName: '-',
         amount: item.amount,
         currency: item.cashbox?.currency || '',
         note: item.note || '-',
         userName: item.user?.fullName || item.user?.username || '-',
-        direction: '-',
+        direction: item.cashbox?.name || '-',
         raw: item
       });
     }
@@ -71,7 +115,6 @@ const normalizeOperations = (transactions) => {
         createdAt: outRow.createdAt || inRow.createdAt,
         type: 'TRANSFER',
         statusLabel: 'Transfer',
-        statusClass: 'text-violet-600',
         statusBadge: 'bg-violet-50 text-violet-700 border-violet-200',
         title: "Kassalar o'rtasida transfer",
         cashboxName: outRow.cashbox?.name || '-',
@@ -90,25 +133,22 @@ const normalizeOperations = (transactions) => {
       });
     } else {
       for (const item of items) {
-        const isOut = String(item.type).toUpperCase() === 'TRANSFER_OUT';
+        const meta = getOperationMeta(item.type);
 
         singles.push({
           id: `single-${item.id}`,
           createdAt: item.createdAt,
           type: item.type,
-          statusLabel: isOut ? 'Chiqim' : 'Kirim',
-          statusClass: isOut ? 'text-amber-600' : 'text-emerald-600',
-          statusBadge: isOut
-            ? 'bg-amber-50 text-amber-700 border-amber-200'
-            : 'bg-emerald-50 text-emerald-700 border-emerald-200',
-          title: isOut ? "Boshqa kassaga chiqim" : "Boshqa kassadan kirim",
+          title: meta.title,
+          statusLabel: meta.statusLabel,
+          statusBadge: meta.statusBadge,
           cashboxName: item.cashbox?.name || '-',
           targetCashboxName: '-',
           amount: item.amount,
           currency: item.cashbox?.currency || '',
           note: item.note || '-',
           userName: item.user?.fullName || item.user?.username || '-',
-          direction: '-',
+          direction: item.cashbox?.name || '-',
           raw: item
         });
       }

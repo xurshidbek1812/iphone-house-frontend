@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { saveAuthData } from '../utils/authStorage';
+import { apiFetch } from '../utils/api';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -33,21 +35,13 @@ const Login = () => {
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
-        sessionStorage.setItem('token', data.token);
-        sessionStorage.setItem('user', JSON.stringify(data.user));
-        sessionStorage.setItem('userRole', String(data.user.role || '').toLowerCase());
-        sessionStorage.setItem('userName', data.user.fullName);
-        sessionStorage.setItem('currentUserLogin', data.user.username);
-        sessionStorage.setItem(
-          'userPermissions',
-          JSON.stringify(Array.isArray(data.user.permissions) ? data.user.permissions : [])
-        );
+      if (response.ok && data.token && data.user) {
+        saveAuthData(data);
 
-        toast.success(`Xush kelibsiz, ${data.user.fullName}!`);
+        toast.success(`Xush kelibsiz, ${data.user.fullName || data.user.username}!`);
         navigate('/');
       } else {
-        toast.error(data.message || "Login yoki parol noto'g'ri!");
+        toast.error(data.error || data.message || "Login yoki parol noto'g'ri!");
       }
     } catch (error) {
       console.error("Login xatosi:", error);
@@ -63,18 +57,25 @@ const Login = () => {
         <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-200">
           <span className="text-3xl font-black text-white">I</span>
         </div>
-        <h2 className="text-2xl font-black text-center text-slate-800 mb-8 tracking-tight">IPHONE HOUSE</h2>
+        <h2 className="text-2xl font-black text-center text-slate-800 mb-8 tracking-tight">
+          IPHONE HOUSE
+        </h2>
 
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Tizimga kirish (Login)</label>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+              Tizimga kirish (Login)
+            </label>
             <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
+              <User
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                size={20}
+              />
               <input
                 type="text"
                 className="w-full pl-12 pr-4 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-blue-500 transition-all font-bold text-slate-800"
                 value={username}
-                onChange={e => setUsername(e.target.value)}
+                onChange={(e) => setUsername(e.target.value)}
                 placeholder="Login kiriting..."
                 disabled={isLoading}
               />
@@ -82,14 +83,19 @@ const Login = () => {
           </div>
 
           <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Maxfiy Parol</label>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+              Maxfiy Parol
+            </label>
             <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
+              <Lock
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                size={20}
+              />
               <input
-                type={showPassword ? "text" : "password"}
+                type={showPassword ? 'text' : 'password'}
                 className="w-full pl-12 pr-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-blue-500 transition-all font-black tracking-widest text-slate-800"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••"
                 disabled={isLoading}
               />
@@ -106,9 +112,13 @@ const Login = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className={`w-full py-4 mt-4 text-white rounded-2xl font-black shadow-xl shadow-blue-200 transition-all tracking-wide ${isLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 active:scale-95'}`}
+            className={`w-full py-4 mt-4 text-white rounded-2xl font-black shadow-xl shadow-blue-200 transition-all tracking-wide ${
+              isLoading
+                ? 'bg-blue-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 active:scale-95'
+            }`}
           >
-            {isLoading ? "TEKSHIRILMOQDA..." : "KIRISH"}
+            {isLoading ? 'TEKSHIRILMOQDA...' : 'KIRISH'}
           </button>
         </form>
       </div>

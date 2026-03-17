@@ -12,6 +12,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { apiFetch } from '../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
 

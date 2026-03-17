@@ -12,28 +12,16 @@ import {
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { hasPermission, PERMISSIONS } from '../../utils/permissions';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
-const parseJsonSafe = async (response) => {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-};
+import { apiFetch } from '../../utils/api';
 
 const SupplierIncome = () => {
   const navigate = useNavigate();
-  const token = sessionStorage.getItem('token');
   const currentUserName = sessionStorage.getItem('userName') || 'Hodim';
   const userRole = (sessionStorage.getItem('userRole') || '').toLowerCase() || 'admin';
 
   const canSeeAmount = hasPermission(PERMISSIONS.INVENTORY_VIEW_AMOUNTS);
   const canApproveInvoice = hasPermission(PERMISSIONS.INVOICE_APPROVE);
 
-  // Yangi kirim yaratish huquqi:
-  // oddiy admin yaratadi, director yaratadi, approver ham yaratadi
   const canManageInvoiceDraft =
     userRole === 'admin' || userRole === 'director' || canApproveInvoice;
 
@@ -60,92 +48,36 @@ const SupplierIncome = () => {
   const [inputCurrency, setInputCurrency] = useState('UZS');
 
   useEffect(() => {
-    const anyModalLikeOpen = false;
-
-    if (anyModalLikeOpen) {
-      const scrollbarWidth =
-        window.innerWidth - document.documentElement.clientWidth;
-
-      document.body.style.overflow = 'hidden';
-      document.body.style.paddingRight = `${scrollbarWidth}px`;
-    } else {
-      document.body.style.overflow = '';
-      document.body.style.paddingRight = '';
-    }
-
     return () => {
       document.body.style.overflow = '';
       document.body.style.paddingRight = '';
     };
   }, []);
 
-  const getAuthHeaders = useCallback(
-    () => ({
-      Authorization: `Bearer ${token}`
-    }),
-    [token]
-  );
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
 
-  const getJsonAuthHeaders = useCallback(
-    () => ({
-      ...getAuthHeaders(),
-      'Content-Type': 'application/json'
-    }),
-    [getAuthHeaders]
-  );
+      const [productsData, suppliersData] = await Promise.all([
+        apiFetch('/api/products'),
+        apiFetch('/api/suppliers')
+      ]);
 
-  const fetchData = useCallback(
-    async (signal = undefined) => {
-      if (!token) return;
-
-      try {
-        setLoading(true);
-
-        const [prodRes, suppRes] = await Promise.allSettled([
-          fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal }),
-          fetch(`${API_URL}/api/suppliers`, { headers: getAuthHeaders(), signal })
-        ]);
-
-        if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
-          const data = await parseJsonSafe(prodRes.value);
-          if (Array.isArray(data)) {
-            setAllProducts(data);
-          } else {
-            setAllProducts([]);
-          }
-        } else {
-          setAllProducts([]);
-        }
-
-        if (suppRes.status === 'fulfilled' && suppRes.value.ok) {
-          const data = await parseJsonSafe(suppRes.value);
-          if (Array.isArray(data)) {
-            setSuppliersList(data);
-          } else {
-            setSuppliersList([]);
-            toast.error("Ta'minotchilar ro'yxati noto'g'ri keldi");
-          }
-        } else {
-          setSuppliersList([]);
-          toast.error("Ta'minotchilarni serverdan yuklab bo'lmadi!");
-        }
-      } catch (error) {
-        if (error.name !== 'AbortError') {
-          console.error('Yuklashda xato', error);
-          toast.error("Ma'lumotlarni yuklashda xatolik yuz berdi");
-        }
-      } finally {
-        if (!signal?.aborted) setLoading(false);
-      }
-    },
-    [token, getAuthHeaders]
-  );
+      setAllProducts(Array.isArray(productsData) ? productsData : []);
+      setSuppliersList(Array.isArray(suppliersData) ? suppliersData : []);
+    } catch (error) {
+      console.error('Yuklashda xato', error);
+      toast.error(error.message || "Ma'lumotlarni yuklashda xatolik yuz berdi");
+      setAllProducts([]);
+      setSuppliersList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchData(controller.signal);
+    fetchData();
     setInvoiceNumber(Date.now().toString().slice(-6));
-    return () => controller.abort();
   }, [fetchData]);
 
   const getCostInUZS = (price, currency, rate) => {
@@ -399,22 +331,16 @@ const SupplierIncome = () => {
         }))
       };
 
-      const response = await fetch(`${API_URL}/api/invoices`, {
+      await apiFetch('/api/invoices', {
         method: 'POST',
-        headers: getJsonAuthHeaders(),
         body: JSON.stringify(payload)
       });
 
-      const data = await parseJsonSafe(response);
-
-      if (response.ok) {
-        toast.success("Kirim 'Jarayonda' holatida saqlandi!");
-        navigate('/ombor/taminotchi-kirim');
-      } else {
-        toast.error(data?.error || `Saqlashda xatolik (${response.status})`);
-      }
+      toast.success("Kirim 'Jarayonda' holatida saqlandi!");
+      navigate('/ombor/taminotchi-kirim');
     } catch (error) {
-      toast.error("Server bilan aloqa yo'q!");
+      console.error(error);
+      toast.error(error.message || "Saqlashda xatolik yuz berdi");
     } finally {
       setIsSubmitting(false);
     }

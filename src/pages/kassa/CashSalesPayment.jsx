@@ -12,6 +12,7 @@ import {
   Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiFetch } from '../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -49,13 +50,6 @@ const CashSalesPayment = () => {
     amount: '',
     note: ''
   });
-
-  const statusMap = {
-  DRAFT: "Qoralama",
-  PAYMENT_PENDING: "To'lov kutilmoqda",
-  COMPLETED: "Yakunlangan",
-  CANCELLED: "Bekor qilingan"
-};
 
   const token = sessionStorage.getItem('token');
 
@@ -228,7 +222,7 @@ const CashSalesPayment = () => {
     return sales.filter((s) => {
       const customerName = s.customer
         ? `${s.customer.firstName || ''} ${s.customer.lastName || ''}`
-        : `${s.otherName || ''} ${s.otherPhone || ''}`;
+        : `${s.otherName || ''}`;
 
       return (
         customerName.toLowerCase().includes(search) ||
@@ -250,7 +244,7 @@ const CashSalesPayment = () => {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
             <input
               type="text"
-              placeholder="Mijoz ismi, telefoni, order raqami yoki ID bo'yicha qidirish..."
+              placeholder="Mijoz ismi, order raqami yoki ID bo'yicha qidirish..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700"
@@ -267,23 +261,21 @@ const CashSalesPayment = () => {
                   <th className="p-5">Order raqam</th>
                   <th className="p-5">Sanasi</th>
                   <th className="p-5">Mijoz</th>
-                  <th className="p-5 text-center">Telefon</th>
                   <th className="p-5 text-right">Jami summa</th>
                   <th className="p-5 text-right text-emerald-600">To'langan</th>
                   <th className="p-5 text-right text-rose-600">Qolgan</th>
-                  <th className="p-5 text-center">Holati</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-sm font-bold text-slate-700">
                 {loading ? (
                   <tr>
-                    <td colSpan="9" className="p-20 text-center">
+                    <td colSpan="7" className="p-20 text-center">
                       <Loader2 className="animate-spin mx-auto text-blue-500" size={32} />
                     </td>
                   </tr>
                 ) : filteredSales.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="p-20 text-center text-slate-400 font-medium">
+                    <td colSpan="7" className="p-20 text-center text-slate-400 font-medium">
                       To'lov kutilayotgan savdolar topilmadi.
                     </td>
                   </tr>
@@ -292,12 +284,6 @@ const CashSalesPayment = () => {
                     const customerName = item.customer
                       ? `${item.customer.lastName || ''} ${item.customer.firstName || ''}`
                       : item.otherName || "Noma'lum";
-
-                    const phone =
-                      item.customer?.phones?.[0]?.phone ||
-                      item.otherPhone ||
-                      item.customer?.phone ||
-                      '-';
 
                     const paid = Number(item.paidAmount || 0);
                     const due = Number(item.dueAmount || 0);
@@ -319,7 +305,6 @@ const CashSalesPayment = () => {
                         <td className="p-5 font-black text-slate-800 group-hover:text-blue-700 transition-colors">
                           {customerName}
                         </td>
-                        <td className="p-5 text-center text-slate-500 font-mono">{phone}</td>
                         <td className="p-5 text-right text-slate-800">
                           {Number(item.totalAmount).toLocaleString()}{' '}
                           <span className="text-[10px] text-slate-400">UZS</span>
@@ -331,11 +316,6 @@ const CashSalesPayment = () => {
                         <td className="p-5 text-right text-rose-600">
                           {due.toLocaleString()}{' '}
                           <span className="text-[10px] text-rose-400">UZS</span>
-                        </td>
-                        <td className="p-5 text-center">
-                          <span className="px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-black bg-amber-50 text-amber-600 border border-amber-200">
-                            ● {statusMap[item.status] || item.status}
-                          </span>
                         </td>
                       </tr>
                     );
@@ -408,12 +388,9 @@ const CashSalesPayment = () => {
                 Savdo raqami
               </span>
             </div>
-            <div className="text-xl font-black text-slate-800 mb-2">
+            <div className="text-xl font-black text-slate-800">
               {selectedSale.orderNumber || selectedSale.id}
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest bg-amber-50 text-amber-600 px-2 py-1 rounded-md border border-amber-200">
-              Holati: {selectedSale.status}
-            </span>
           </div>
 
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">

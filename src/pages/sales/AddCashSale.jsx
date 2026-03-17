@@ -19,6 +19,7 @@ import {
   Layers
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiFetch } from '../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -147,6 +148,47 @@ const AddCashSale = () => {
     }),
     [getAuthHeaders]
   );
+
+  const updateCartItemQty = (batchId, value) => {
+    const numericValue = Number(value);
+
+    if (value === '') {
+      setSaleData((prev) => ({
+        ...prev,
+        items: prev.items.map((item) =>
+          item.batchId === batchId ? { ...item, qty: '' } : item
+        )
+      }));
+      return;
+    }
+
+    if (isNaN(numericValue)) return;
+
+    const targetItem = saleData.items.find((item) => item.batchId === batchId);
+    if (!targetItem) return;
+
+    if (numericValue <= 0) {
+      toast.error("Mahsulot soni 1 tadan kam bo'lishi mumkin emas!");
+      return;
+    }
+
+    if (!Number.isInteger(numericValue)) {
+      toast.error("Mahsulot soni butun son bo'lishi kerak!");
+      return;
+    }
+
+    if (numericValue > Number(targetItem.quantity || 0)) {
+      toast.error("Ombordagi qoldiqdan ko'p mahsulot soni kiritildi!");
+      return;
+    }
+
+    setSaleData((prev) => ({
+      ...prev,
+      items: prev.items.map((item) =>
+        item.batchId === batchId ? { ...item, qty: numericValue } : item
+      )
+    }));
+  };
 
   const fetchData = useCallback(
     async (signal = undefined) => {
@@ -355,6 +397,19 @@ const AddCashSale = () => {
 
     if (disc > grandTotal) {
       return toast.error("Chegirma summasi tovarlar narxidan ko'p bo'lishi mumkin emas!");
+    }
+
+    const invalidQtyItem = saleData.items.find(
+      (item) =>
+        !Number(item.qty) ||
+        Number(item.qty) <= 0 ||
+        Number(item.qty) > Number(item.quantity || 0)
+    );
+
+    if (invalidQtyItem) {
+      return toast.error(
+        `${invalidQtyItem.name} uchun ombordagi qoldiqdan ko'p mahsulot soni kiritildi!`
+      );
     }
 
     setIsLoading(true);
@@ -865,8 +920,21 @@ const AddCashSale = () => {
                               </td>
 
                               <td className="p-3 text-center">
-                                <div className="w-full p-2.5 border border-gray-200 rounded-xl text-center font-black text-blue-600 bg-blue-50">
-                                  {item.qty}
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={item.quantity}
+                                  value={item.qty}
+                                  onChange={(e) => updateCartItemQty(item.batchId, e.target.value)}
+                                  onBlur={(e) => {
+                                    if (!e.target.value || Number(e.target.value) <= 0) {
+                                      updateCartItemQty(item.batchId, 1);
+                                    }
+                                  }}
+                                  className="w-24 p-2.5 border border-gray-200 rounded-xl text-center font-black text-blue-600 bg-blue-50 outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <div className="text-[10px] text-gray-400 mt-1">
+                                  Omborda: {item.quantity} ta
                                 </div>
                               </td>
 

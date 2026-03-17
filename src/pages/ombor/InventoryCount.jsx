@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { QrCode, RotateCcw, CheckCircle, AlertTriangle, Search, Play, StopCircle, CheckSquare, Square, Layers, Plus, Minus, Loader2 } from 'lucide-react';
-import toast from 'react-hot-toast'; 
+import toast from 'react-hot-toast';
+import { apiFetch } from '../../utils/api'; 
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { clearAuthData } from '../utils/authStorage';
 
 // 🚨 YANGI: 100% xavfsiz va ishonchli JWT dekoder
 const isTokenValid = (token) => {
@@ -33,7 +34,7 @@ const ProtectedRoute = ({ children }) => {
 
     if (!isTokenValid(token)) {
         if (token) {
-            sessionStorage.clear();
+            clearAuthData();
             toast.error("Seans muddati tugadi yoki xatolik yuz berdi. Iltimos, tizimga qayta kiring!", { duration: 4000 });
         }
         return <Navigate to="/login" replace />;

@@ -23,21 +23,11 @@ import Calculator from '../../components/Calculator';
 import toast from 'react-hot-toast';
 import usePermission from '../../hooks/usePermission';
 import { PERMISSIONS } from '../../utils/permissions';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
-const parseJsonSafe = async (response) => {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-};
+import { apiFetch } from '../../utils/api';
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('uz-UZ');
 
 const Sklad = () => {
-  const token = sessionStorage.getItem('token');
   const { can } = usePermission();
 
   const canViewAmounts = can(PERMISSIONS.INVENTORY_VIEW_AMOUNTS);
@@ -99,60 +89,33 @@ const Sklad = () => {
     stockStatus: ''
   });
 
-  const getAuthHeaders = useCallback(
-    () => ({
-      Authorization: `Bearer ${token}`
-    }),
-    [token]
-  );
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
 
-  const getJsonAuthHeaders = useCallback(
-    () => ({
-      ...getAuthHeaders(),
-      'Content-Type': 'application/json'
-    }),
-    [getAuthHeaders]
-  );
+      const [productsData, categoriesData] = await Promise.all([
+        apiFetch('/api/products'),
+        apiFetch('/api/categories')
+      ]);
 
-  const fetchData = useCallback(
-    async (signal = undefined) => {
-      if (!token) return;
+      const safeProducts = Array.isArray(productsData) ? productsData : [];
+      const safeCategories = Array.isArray(categoriesData) ? categoriesData : [];
 
-      try {
-        setLoading(true);
-
-        const [prodRes, catRes] = await Promise.allSettled([
-          fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal }),
-          fetch(`${API_URL}/api/categories`, { headers: getAuthHeaders(), signal })
-        ]);
-
-        if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
-          const data = await parseJsonSafe(prodRes.value);
-          if (Array.isArray(data)) setProducts(data);
-        }
-
-        if (catRes.status === 'fulfilled' && catRes.value.ok) {
-          const data = await parseJsonSafe(catRes.value);
-          if (Array.isArray(data)) {
-            setCategories(data);
-            sessionStorage.setItem('categoryList', JSON.stringify(data));
-          }
-        }
-      } catch (error) {
-        if (error.name !== 'AbortError') {
-          toast.error("Tarmoq xatosi yuz berdi!");
-        }
-      } finally {
-        if (!signal?.aborted) setLoading(false);
-      }
-    },
-    [token, getAuthHeaders]
-  );
+      setProducts(safeProducts);
+      setCategories(safeCategories);
+      sessionStorage.setItem('categoryList', JSON.stringify(safeCategories));
+    } catch (error) {
+      console.error(error);
+      toast.error(error.message || "Tarmoq xatosi yuz berdi!");
+      setProducts([]);
+      setCategories([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchData(controller.signal);
-    return () => controller.abort();
+    fetchData();
   }, [fetchData]);
 
   useEffect(() => {
@@ -226,37 +189,31 @@ const Sklad = () => {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/products`, {
+      await apiFetch('/api/products', {
         method: 'POST',
-        headers: getJsonAuthHeaders(),
         body: JSON.stringify(payload)
       });
 
-      const data = await parseJsonSafe(res);
+      setIsModalOpen(false);
+      setIsSuccessOpen(true);
+      await fetchData();
 
-      if (res.ok) {
-        setIsModalOpen(false);
-        setIsSuccessOpen(true);
-        await fetchData();
-
-        setTimeout(() => {
-          setIsSuccessOpen(false);
-          setFormData({
-            name: '',
-            category: '',
-            buyPrice: '',
-            salePrice: '',
-            quantity: '0',
-            unit: 'Dona',
-            buyCurrency: 'USD',
-            saleCurrency: 'UZS'
-          });
-        }, 2500);
-      } else {
-        toast.error(data?.error || `Saqlashda xatolik (${res.status})`);
-      }
+      setTimeout(() => {
+        setIsSuccessOpen(false);
+        setFormData({
+          name: '',
+          category: '',
+          buyPrice: '',
+          salePrice: '',
+          quantity: '0',
+          unit: 'Dona',
+          buyCurrency: 'USD',
+          saleCurrency: 'UZS'
+        });
+      }, 2500);
     } catch (err) {
-      toast.error("Server bilan aloqa yo'q!");
+      console.error(err);
+      toast.error(err.message || "Server bilan aloqa yo'q!");
     } finally {
       setIsSubmitting(false);
     }
@@ -270,20 +227,15 @@ const Sklad = () => {
     setIsActionLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/products/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
+      await apiFetch(`/api/products/${id}`, {
+        method: 'DELETE'
       });
 
-      if (res.ok) {
-        toast.success("Tovar o'chirildi!");
-        await fetchData();
-      } else {
-        const data = await parseJsonSafe(res);
-        toast.error(data?.error || "O'chirib bo'lmaydi! (Bog'langan ma'lumotlar mavjud)");
-      }
+      toast.success("Tovar o'chirildi!");
+      await fetchData();
     } catch (err) {
-      toast.error('Tarmoq xatosi!');
+      console.error(err);
+      toast.error(err.message || "O'chirib bo'lmaydi! (Bog'langan ma'lumotlar mavjud)");
     } finally {
       setIsActionLoading(false);
       setDeleteModal({ isOpen: false, productId: null });
@@ -326,23 +278,17 @@ const Sklad = () => {
         salePrice: Number(editData.salePrice) || 0
       };
 
-      const res = await fetch(`${API_URL}/api/products/${editData.id}`, {
+      await apiFetch(`/api/products/${editData.id}`, {
         method: 'PUT',
-        headers: getJsonAuthHeaders(),
         body: JSON.stringify(payload)
       });
 
-      const data = await parseJsonSafe(res);
-
-      if (res.ok) {
-        toast.success('Tovar muvaffaqiyatli tahrirlandi!');
-        setIsEditModalOpen(false);
-        await fetchData();
-      } else {
-        toast.error(data?.error || `Tahrirlashda xatolik (${res.status})`);
-      }
+      toast.success('Tovar muvaffaqiyatli tahrirlandi!');
+      setIsEditModalOpen(false);
+      await fetchData();
     } catch (error) {
-      toast.error("Server bilan aloqa yo'q");
+      console.error(error);
+      toast.error(error.message || "Server bilan aloqa yo'q");
     } finally {
       setIsActionLoading(false);
     }
@@ -357,30 +303,25 @@ const Sklad = () => {
     setIsActionLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/products/batches/${batchId}/archive`, {
-        method: 'PATCH',
-        headers: getAuthHeaders()
+      await apiFetch(`/api/products/batches/${batchId}/archive`, {
+        method: 'PATCH'
       });
 
-      if (res.ok) {
-        toast.success('Partiya muvaffaqiyatli yashirildi!');
-        await fetchData();
-        setSelectedProduct((prev) =>
-          prev
-            ? {
-                ...prev,
-                batches: prev.batches.map((b) =>
-                  b.id === batchId ? { ...b, isArchived: true } : b
-                )
-              }
-            : prev
-        );
-      } else {
-        const data = await parseJsonSafe(res);
-        toast.error(data?.error || 'Xatolik yuz berdi');
-      }
+      toast.success('Partiya muvaffaqiyatli yashirildi!');
+      await fetchData();
+      setSelectedProduct((prev) =>
+        prev
+          ? {
+              ...prev,
+              batches: prev.batches.map((b) =>
+                b.id === batchId ? { ...b, isArchived: true } : b
+              )
+            }
+          : prev
+      );
     } catch (error) {
-      toast.error("Server bilan aloqa yo'q");
+      console.error(error);
+      toast.error(error.message || 'Xatolik yuz berdi');
     } finally {
       setIsActionLoading(false);
       setArchiveModal({ isOpen: false, batchId: null });
@@ -399,34 +340,28 @@ const Sklad = () => {
     setIsActionLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/products/batches/${batchId}/price`, {
+      await apiFetch(`/api/products/batches/${batchId}/price`, {
         method: 'PATCH',
-        headers: getJsonAuthHeaders(),
         body: JSON.stringify({ salePrice: editBatch.salePrice })
       });
 
-      const data = await parseJsonSafe(res);
+      toast.success('Partiya narxi yangilandi!');
+      const newSalePrice = Number(editBatch.salePrice);
+      setEditBatch({ id: null, salePrice: '' });
+      await fetchData();
 
-      if (res.ok) {
-        toast.success('Partiya narxi yangilandi!');
-        const newSalePrice = Number(editBatch.salePrice);
-        setEditBatch({ id: null, salePrice: '' });
-        await fetchData();
-
-        setSelectedProduct((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            batches: prev.batches.map((b) =>
-              b.id === batchId ? { ...b, salePrice: newSalePrice } : b
-            )
-          };
-        });
-      } else {
-        toast.error(data?.error || "Partiya narxini yangilab bo'lmadi");
-      }
+      setSelectedProduct((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          batches: prev.batches.map((b) =>
+            b.id === batchId ? { ...b, salePrice: newSalePrice } : b
+          )
+        };
+      });
     } catch (error) {
-      toast.error("Server bilan aloqa yo'q");
+      console.error(error);
+      toast.error(error.message || "Partiya narxini yangilab bo'lmadi");
     } finally {
       setIsActionLoading(false);
     }
@@ -444,216 +379,216 @@ const Sklad = () => {
   };
 
   const handleFinalPrint = () => {
-  if (!printProduct || !selectedBatch) {
-    toast.error('Partiyani tanlang!');
-    return;
-  }
+    if (!printProduct || !selectedBatch) {
+      toast.error('Partiyani tanlang!');
+      return;
+    }
 
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    toast.error('Brauzer yangi tab ochishga ruxsat bermadi.');
-    return;
-  }
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Brauzer yangi tab ochishga ruxsat bermadi.');
+      return;
+    }
 
-  const qrValue = `ID:${printProduct.customId}|BATCH:${selectedBatch.id}|NAME:${printProduct.name}`;
-  const qrCodeSvg = ReactDOMServer.renderToString(
-    <QRCode value={qrValue} size={160} level="H" />
-  );
+    const qrValue = `ID:${printProduct.customId}|BATCH:${selectedBatch.id}|NAME:${printProduct.name}`;
+    const qrCodeSvg = ReactDOMServer.renderToString(
+      <QRCode value={qrValue} size={160} level="H" />
+    );
 
-  const safeName = String(printProduct.name || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    const safeName = String(printProduct.name || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
 
-  const html = `
-  <!DOCTYPE html>
-  <html>
-    <head>
-      <meta charset="UTF-8" />
-      <title>QR Label</title>
-      <style>
-        * {
-          box-sizing: border-box;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-
-        html, body {
-          margin: 0;
-          padding: 0;
-          background: #fff;
-          font-family: Arial, Helvetica, sans-serif;
-        }
-
-        @page {
-          size: 58mm 40mm;
-          margin: 0;
-        }
-
-        body {
-          width: 58mm;
-          height: 40mm;
-          overflow: hidden;
-        }
-
-        .page {
-          width: 58mm;
-          height: 40mm;
-          padding: 2mm;
-        }
-
-        .card {
-          width: 100%;
-          height: 100%;
-          border: 0.35mm solid #bdbdbd;
-          border-radius: 3.5mm;
-          background: #fff;
-          padding: 2.2mm 2.4mm;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-        }
-
-        .name {
-          width: 100%;
-          text-align: center;
-          font-size: 3.15mm;
-          line-height: 1.15;
-          font-weight: 500;
-          color: #4b5563;
-          min-height: 8.5mm;
-          max-height: 8.5mm;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
-          word-break: break-word;
-        }
-
-        .divider {
-          width: 100%;
-          height: 0.35mm;
-          background: #9f9f9f;
-          margin-top: 0.8mm;
-          margin-bottom: 1.8mm;
-          flex-shrink: 0;
-        }
-
-        .bottom {
-          flex: 1;
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 2mm;
-          overflow: hidden;
-        }
-
-        .left {
-          flex: 1;
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-          justify-content: flex-start;
-          padding-top: 1.2mm;
-        }
-
-        .product-id {
-          font-size: 4.6mm;
-          line-height: 1;
-          font-weight: 800;
-          color: #000;
-          letter-spacing: 0.02mm;
-          margin-bottom: 0.9mm;
-          white-space: nowrap;
-        }
-
-        .batch {
-          font-size: 2.25mm;
-          line-height: 1;
-          font-weight: 600;
-          color: #6b7280;
-          white-space: nowrap;
-        }
-
-        .qr {
-          width: 18mm;
-          height: 18mm;
-          flex-shrink: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin-top: 0.2mm;
-        }
-
-        .qr svg {
-          width: 100%;
-          height: 100%;
-          display: block;
-        }
-
-        .print-note {
-          display: none;
-        }
-
-        @media screen {
-          .print-note {
-            display: block;
-            position: fixed;
-            right: 12px;
-            bottom: 12px;
-            font-size: 12px;
-            color: #666;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            padding: 8px 10px;
+    const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>QR Label</title>
+        <style>
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="page">
-        <div class="card">
-          <div class="name">${safeName}</div>
 
-          <div class="divider"></div>
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+            font-family: Arial, Helvetica, sans-serif;
+          }
 
-          <div class="bottom">
-            <div class="left">
-              <div class="product-id">${printProduct.customId}</div>
-              <div class="batch">Partiya #${selectedBatch.id}</div>
-            </div>
+          @page {
+            size: 58mm 40mm;
+            margin: 0;
+          }
 
-            <div class="qr">
-              ${qrCodeSvg}
+          body {
+            width: 58mm;
+            height: 40mm;
+            overflow: hidden;
+          }
+
+          .page {
+            width: 58mm;
+            height: 40mm;
+            padding: 2mm;
+          }
+
+          .card {
+            width: 100%;
+            height: 100%;
+            border: 0.35mm solid #bdbdbd;
+            border-radius: 3.5mm;
+            background: #fff;
+            padding: 2.2mm 2.4mm;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+          }
+
+          .name {
+            width: 100%;
+            text-align: center;
+            font-size: 3.15mm;
+            line-height: 1.15;
+            font-weight: 500;
+            color: #4b5563;
+            min-height: 8.5mm;
+            max-height: 8.5mm;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            word-break: break-word;
+          }
+
+          .divider {
+            width: 100%;
+            height: 0.35mm;
+            background: #9f9f9f;
+            margin-top: 0.8mm;
+            margin-bottom: 1.8mm;
+            flex-shrink: 0;
+          }
+
+          .bottom {
+            flex: 1;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 2mm;
+            overflow: hidden;
+          }
+
+          .left {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            padding-top: 1.2mm;
+          }
+
+          .product-id {
+            font-size: 4.6mm;
+            line-height: 1;
+            font-weight: 800;
+            color: #000;
+            letter-spacing: 0.02mm;
+            margin-bottom: 0.9mm;
+            white-space: nowrap;
+          }
+
+          .batch {
+            font-size: 2.25mm;
+            line-height: 1;
+            font-weight: 600;
+            color: #6b7280;
+            white-space: nowrap;
+          }
+
+          .qr {
+            width: 18mm;
+            height: 18mm;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 0.2mm;
+          }
+
+          .qr svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+          }
+
+          .print-note {
+            display: none;
+          }
+
+          @media screen {
+            .print-note {
+              display: block;
+              position: fixed;
+              right: 12px;
+              bottom: 12px;
+              font-size: 12px;
+              color: #666;
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 10px;
+              padding: 8px 10px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="card">
+            <div class="name">${safeName}</div>
+
+            <div class="divider"></div>
+
+            <div class="bottom">
+              <div class="left">
+                <div class="product-id">${printProduct.customId}</div>
+                <div class="batch">Partiya #${selectedBatch.id}</div>
+              </div>
+
+              <div class="qr">
+                ${qrCodeSvg}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="print-note">Print oynasi ochilmasa Ctrl+P bosing</div>
+        <div class="print-note">Print oynasi ochilmasa Ctrl+P bosing</div>
 
-      <script>
-        setTimeout(() => {
-          window.focus();
-          window.print();
-        }, 300);
+        <script>
+          setTimeout(() => {
+            window.focus();
+            window.print();
+          }, 300);
 
-        window.onafterprint = () => {
-          setTimeout(() => window.close(), 100);
-        };
-      </script>
-    </body>
-  </html>
-`;
+          window.onafterprint = () => {
+            setTimeout(() => window.close(), 100);
+          };
+        </script>
+      </body>
+    </html>
+  `;
 
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
 
-  setPrintProduct(null);
-  setSelectedBatch(null);
-};
+    setPrintProduct(null);
+    setSelectedBatch(null);
+  };
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {

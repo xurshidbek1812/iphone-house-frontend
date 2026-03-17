@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Filter, Image as ImageIcon, Loader2, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiFetch } from '../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
 

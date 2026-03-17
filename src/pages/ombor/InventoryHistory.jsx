@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, Calendar, ArrowLeft, Search, FileText, CheckCircle, DatabaseBackup, X } from 'lucide-react'; // <--- X QO'SHILDI
 import { useNavigate } from 'react-router-dom';
+import { apiFetch } from '../../utils/api';
 
 const InventoryHistory = () => {
   const navigate = useNavigate();

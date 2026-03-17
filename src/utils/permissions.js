@@ -5,7 +5,9 @@ export const PERMISSIONS = {
   CATEGORY_MANAGE: 'category.manage',
   SUPPLIER_MANAGE: 'supplier.manage',
   INVENTORY_VIEW_AMOUNTS: 'inventory.view_amounts',
-  INVOICE_APPROVE: 'invoice.approve'
+  INVOICE_APPROVE: 'invoice.approve',
+  EXPENSE_CREATE: 'expense.create',
+  EXPENSE_APPROVE: 'expense.approve',
 };
 
 export const hasPermission = (permission) => {

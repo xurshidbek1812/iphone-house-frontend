@@ -18,16 +18,7 @@ import toast from 'react-hot-toast';
 import ReactDOMServer from 'react-dom/server';
 import QRCode from 'react-qr-code';
 import { hasPermission, PERMISSIONS } from '../../utils/permissions';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
-const parseJsonSafe = async (response) => {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-};
+import { apiFetch } from '../../utils/api';
 
 const SupplierIncomeList = () => {
   const navigate = useNavigate();
@@ -40,17 +31,14 @@ const SupplierIncomeList = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const userRole = (sessionStorage.getItem('userRole') || '').toLowerCase() || 'admin';
-  const token = sessionStorage.getItem('token');
   const isDirector = userRole === 'director';
 
   const canApproveInvoice = hasPermission(PERMISSIONS.INVOICE_APPROVE);
   const canSeeAmount = hasPermission(PERMISSIONS.INVENTORY_VIEW_AMOUNTS);
 
-  // Draft / jarayondagi invoice bilan ishlash
   const canManageInvoiceDraft =
     userRole === 'admin' || userRole === 'director' || canApproveInvoice;
 
-  // Yuborilgan va tasdiqlangan invoice bilan ishlash
   const canManageSentInvoices = isDirector || canApproveInvoice;
 
   const [confirmModal, setConfirmModal] = useState({
@@ -74,10 +62,7 @@ const SupplierIncomeList = () => {
   }, []);
 
   useEffect(() => {
-    const anyModalOpen =
-      printModalOpen ||
-      !!viewInvoice ||
-      confirmModal.isOpen;
+    const anyModalOpen = printModalOpen || !!viewInvoice || confirmModal.isOpen;
 
     if (anyModalOpen) {
       const scrollbarWidth =
@@ -96,68 +81,22 @@ const SupplierIncomeList = () => {
     };
   }, [printModalOpen, viewInvoice, confirmModal.isOpen]);
 
-  const getAuthHeaders = useCallback(
-    () => ({
-      Authorization: `Bearer ${token}`
-    }),
-    [token]
-  );
-
-  const getJsonAuthHeaders = useCallback(
-    () => ({
-      ...getAuthHeaders(),
-      'Content-Type': 'application/json'
-    }),
-    [getAuthHeaders]
-  );
-
-  const fetchInvoices = useCallback(
-    async (signal = undefined) => {
-      if (!token) {
-        toast.error("Tizimga kirish tokeni topilmadi!");
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-
-        const res = await fetch(`${API_URL}/api/invoices`, {
-          headers: getAuthHeaders(),
-          signal
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error('Invoices fetch error:', res.status, errText);
-          toast.error(`Fakturalarni yuklab bo'lmadi (${res.status})`);
-          setInvoices([]);
-          return;
-        }
-
-        const data = await parseJsonSafe(res);
-
-        if (Array.isArray(data)) {
-          setInvoices(data);
-        } else {
-          setInvoices([]);
-          toast.error("Fakturalar ro'yxati noto'g'ri formatda keldi");
-        }
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          toast.error('Tarmoq xatosi yuz berdi!');
-        }
-      } finally {
-        if (!signal?.aborted) setLoading(false);
-      }
-    },
-    [token, getAuthHeaders]
-  );
+  const fetchInvoices = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await apiFetch('/api/invoices');
+      setInvoices(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Invoices fetch error:', error);
+      toast.error(error.message || "Fakturalarni yuklab bo'lmadi");
+      setInvoices([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchInvoices(controller.signal);
-    return () => controller.abort();
+    fetchInvoices();
   }, [fetchInvoices]);
 
   const toggleMenu = (e, id) => {
@@ -175,49 +114,13 @@ const SupplierIncomeList = () => {
       return toast.error("Sizda fakturani tasdiqlash huquqi yo'q!");
     }
 
-    const invoice = invoices.find((inv) => inv.id === id);
-    if (!invoice) return toast.error('Faktura topilmadi!');
-
     setIsProcessing(true);
 
     try {
-      const itemsToBackend = (invoice.items || []).map((item) => ({
-        id: item.productId || item.id,
-        customId: item.customId,
-        quantity: Number(item.count) || 0,
-        buyPrice: Number(item.price) || 0,
-        salePrice: Number(item.salePrice) || 0,
-        buyCurrency: item.currency || 'UZS',
-        supplierName: invoice.supplierName || invoice.supplier || "Noma'lum",
-        invoiceNumber: invoice.invoiceNumber,
-        supplierInvoiceId: invoice.id,
-        supplierInvoiceItemId: item.id
-      }));
-
-      const stockResponse = await fetch(`${API_URL}/api/products/increase-stock`, {
-        method: 'POST',
-        headers: getJsonAuthHeaders(),
-        body: JSON.stringify(itemsToBackend)
-      });
-
-      if (!stockResponse.ok) {
-        const errData = await parseJsonSafe(stockResponse);
-        throw new Error(errData?.error || 'Ombor yangilanmadi!');
-      }
-
-      const statusResponse = await fetch(`${API_URL}/api/invoices/${id}/status`, {
+      await apiFetch(`/api/invoices/${id}/status`, {
         method: 'PATCH',
-        headers: getJsonAuthHeaders(),
         body: JSON.stringify({ status: 'Tasdiqlandi' })
       });
-
-      if (!statusResponse.ok) {
-        const errData = await parseJsonSafe(statusResponse);
-        throw new Error(
-          errData?.error ||
-            "Faktura statusi o'zgarmadi, lekin tovarlar omborga tushgan bo'lishi mumkin!"
-        );
-      }
 
       toast.success("Muvaffaqiyatli tasdiqlandi va omborga tushdi!");
       await fetchInvoices();
@@ -255,22 +158,16 @@ const SupplierIncomeList = () => {
     setIsProcessing(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/invoices/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
+      const data = await apiFetch(`/api/invoices/${id}`, {
+        method: 'DELETE'
       });
 
-      const data = await parseJsonSafe(res);
-
-      if (res.ok) {
-        toast.success(data?.message || "Faktura o'chirildi!");
-        await fetchInvoices();
-        if (viewInvoice) setViewInvoice(null);
-      } else {
-        toast.error(data?.error || "O'chirishda xatolik yuz berdi!");
-      }
+      toast.success(data?.message || "Faktura o'chirildi!");
+      await fetchInvoices();
+      if (viewInvoice) setViewInvoice(null);
     } catch (e) {
-      toast.error("Server bilan aloqa yo'q!");
+      console.error(e);
+      toast.error(e.message || "O'chirishda xatolik yuz berdi!");
     } finally {
       setIsProcessing(false);
       setConfirmModal({ isOpen: false, type: null, invoiceId: null });
@@ -285,22 +182,16 @@ const SupplierIncomeList = () => {
     setIsProcessing(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/invoices/${id}/status`, {
+      await apiFetch(`/api/invoices/${id}/status`, {
         method: 'PATCH',
-        headers: getJsonAuthHeaders(),
         body: JSON.stringify({ status: 'Yuborildi' })
       });
 
-      const data = await parseJsonSafe(res);
-
-      if (res.ok) {
-        toast.success('Faktura yuborildi!');
-        await fetchInvoices();
-      } else {
-        toast.error(data?.error || "Fakturani yuborib bo'lmadi!");
-      }
+      toast.success('Faktura yuborildi!');
+      await fetchInvoices();
     } catch (e) {
-      toast.error("Server bilan aloqa yo'q!");
+      console.error(e);
+      toast.error(e.message || "Fakturani yuborib bo'lmadi!");
     } finally {
       setIsProcessing(false);
     }
@@ -387,7 +278,7 @@ const SupplierIncomeList = () => {
     }
 
     if (action === 'send') {
-      executeSend(id);
+      void executeSend(id);
     }
   };
 

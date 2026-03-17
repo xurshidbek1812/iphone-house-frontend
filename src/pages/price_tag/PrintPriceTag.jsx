@@ -9,16 +9,7 @@ import {
   Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
-
-const parseJsonSafe = async (response) => {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-};
+import { apiFetch } from '../../utils/api';
 
 const PrintPriceTag = () => {
   const [allProducts, setAllProducts] = useState([]);
@@ -31,57 +22,29 @@ const PrintPriceTag = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState([]);
 
-  const token = sessionStorage.getItem('token');
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
 
-  const getAuthHeaders = useCallback(
-    () => ({
-      Authorization: `Bearer ${token}`
-    }),
-    [token]
-  );
+      const data = await apiFetch('/api/products');
 
-  const fetchData = useCallback(
-    async (signal = undefined) => {
-      if (!token) {
-        toast.error("Tizimga kirish tokeni topilmadi!");
-        setLoading(false);
-        return;
+      if (Array.isArray(data)) {
+        setAllProducts(data);
+      } else {
+        setAllProducts([]);
+        toast.error("Mahsulotlar formati noto'g'ri keldi");
       }
-
-      try {
-        setLoading(true);
-
-        const res = await fetch(`${API_URL}/api/products`, {
-          headers: getAuthHeaders(),
-          signal
-        });
-
-        if (res.ok) {
-          const data = await parseJsonSafe(res);
-          if (Array.isArray(data)) {
-            setAllProducts(data);
-          } else {
-            setAllProducts([]);
-            toast.error("Mahsulotlar formati noto'g'ri keldi");
-          }
-        } else {
-          toast.error(`Tovarlarni yuklab bo'lmadi (${res.status})`);
-        }
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          console.error(err);
-          toast.error("Server bilan aloqa yo'q!");
-        }
-      } finally {
-        if (!signal?.aborted) setLoading(false);
-      }
-    },
-    [token, getAuthHeaders]
-  );
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || "Server bilan aloqa yo'q!");
+      setAllProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchData(controller.signal);
+    fetchData();
 
     const handleClickOutside = (event) => {
       if (!event.target.closest('.search-container')) {
@@ -92,7 +55,6 @@ const PrintPriceTag = () => {
     document.addEventListener('mousedown', handleClickOutside);
 
     return () => {
-      controller.abort();
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [fetchData]);

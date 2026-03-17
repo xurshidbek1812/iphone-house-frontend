@@ -28,6 +28,8 @@ import {
   Bell
 } from 'lucide-react';
 import { hasPermission, PERMISSIONS } from '../utils/permissions';
+import { clearAuthData } from '../utils/authStorage';
+import { apiFetch } from '../utils/api';
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
   const [openSubmenu, setOpenSubmenu] = useState(null);
@@ -36,8 +38,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   const userRole = ((sessionStorage.getItem('userRole') || '').toLowerCase() || 'admin').toLowerCase();
   const userName = sessionStorage.getItem('userName') || 'Foydalanuvchi';
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-  const token = sessionStorage.getItem('token');
 
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
@@ -99,7 +99,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     }, 15000);
 
     return () => clearInterval(interval);
-  }, [token, userRole]);
+  }, [userRole]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -130,9 +130,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   };
 
   const confirmLogout = () => {
-    sessionStorage.clear();
-    localStorage.clear();
-    navigate('/login');
+    clearAuthData();
+    navigate('/login', { replace: true });
     window.location.reload();
   };
 
@@ -154,19 +153,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   };
 
   const refreshCurrentUser = async () => {
-    const token = sessionStorage.getItem('token');
-    if (!token) return;
-
     try {
-      const res = await fetch(`${API_URL}/api/users/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) return;
+      const data = await apiFetch('/api/users/me');
 
       sessionStorage.setItem('user', JSON.stringify(data));
       sessionStorage.setItem('userRole', String(data.role || '').toLowerCase());
@@ -182,23 +170,13 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   const fetchUnreadNotifications = async () => {
     try {
-      if (!token || userRole !== 'director') {
+      if (userRole !== 'director') {
         setUnreadCount(0);
         setNotifications([]);
         return;
       }
 
-      const res = await fetch(`${API_URL}/api/notifications`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.error || 'Notification yuklanmadi');
-      }
+      const data = await apiFetch('/api/notifications');
 
       const list = Array.isArray(data) ? data : [];
       const unread = list.filter((n) => !n.isRead).length;
@@ -207,16 +185,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       setUnreadCount(unread);
     } catch (error) {
       console.error('Notification count xatosi:', error);
+      setUnreadCount(0);
+      setNotifications([]);
     }
   };
 
   const handleReadNotification = async (id) => {
     try {
-      await fetch(`${API_URL}/api/notifications/${id}/read`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+      await apiFetch(`/api/notifications/${id}/read`, {
+        method: 'PATCH'
       });
 
       setNotifications((prev) =>
@@ -233,11 +210,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   const handleReadAllNotifications = async () => {
     try {
-      await fetch(`${API_URL}/api/notifications/read-all/all`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+      await apiFetch('/api/notifications/read-all/all', {
+        method: 'PATCH'
       });
 
       setNotifications((prev) =>

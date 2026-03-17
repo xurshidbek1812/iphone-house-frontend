@@ -17,16 +17,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { hasPermission, PERMISSIONS } from '../../utils/permissions';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
-const parseJsonSafe = async (response) => {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-};
+import { apiFetch } from '../../utils/api';
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('uz-UZ');
 
@@ -137,7 +128,6 @@ const normalizeCashboxTransactions = (transactions) => {
 };
 
 const ManageCash = () => {
-  const token = sessionStorage.getItem('token');
   const canManageCashbox = hasPermission(PERMISSIONS.CASHBOX_MANAGE);
 
   const [cashboxes, setCashboxes] = useState([]);
@@ -218,23 +208,11 @@ const ManageCash = () => {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/cashboxes`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      const data = await parseJsonSafe(res);
-
-      if (res.ok) {
-        setCashboxes(Array.isArray(data) ? data : []);
-      } else {
-        toast.error(data?.error || "Kassalarni yuklab bo'lmadi");
-        setCashboxes([]);
-      }
+      const data = await apiFetch('/api/cashboxes');
+      setCashboxes(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error(error);
-      toast.error("Server bilan ulanishda xatolik");
+      toast.error(error.message || "Kassalarni yuklab bo'lmadi");
       setCashboxes([]);
     } finally {
       setLoading(false);
@@ -243,19 +221,8 @@ const ManageCash = () => {
 
   const fetchStaffOptions = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/users/simple-list`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      const data = await parseJsonSafe(res);
-
-      if (res.ok) {
-        setStaffOptions(Array.isArray(data) ? data : []);
-      } else {
-        setStaffOptions([]);
-      }
+      const data = await apiFetch('/api/users/simple-list');
+      setStaffOptions(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('fetchStaffOptions xatosi:', error);
       setStaffOptions([]);
@@ -266,24 +233,12 @@ const ManageCash = () => {
     setHistoryLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/cashboxes/${cashboxId}/transactions`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      const data = await parseJsonSafe(res);
-
-      if (res.ok) {
-        const normalized = normalizeCashboxTransactions(Array.isArray(data) ? data : []);
-        setTransactions(normalized);
-      } else {
-        toast.error(data?.error || "Kassa tarixini yuklab bo'lmadi");
-        setTransactions([]);
-      }
+      const data = await apiFetch(`/api/cashboxes/${cashboxId}/transactions`);
+      const normalized = normalizeCashboxTransactions(Array.isArray(data) ? data : []);
+      setTransactions(normalized);
     } catch (error) {
       console.error(error);
-      toast.error("Tarixni yuklashda xatolik");
+      toast.error(error.message || "Kassa tarixini yuklab bo'lmadi");
       setTransactions([]);
     } finally {
       setHistoryLoading(false);
@@ -296,7 +251,7 @@ const ManageCash = () => {
     if (canManageCashbox) {
       fetchStaffOptions();
     }
-  }, []);
+  }, [canManageCashbox]);
 
   const openCreateModal = () => {
     setIsEditing(false);
@@ -339,16 +294,16 @@ const ManageCash = () => {
     });
   };
 
-  const openHistoryModal = async (cashbox) => {
+  const openHistoryModal = (cashbox) => {
     setHistoryModal({
       isOpen: true,
       cashboxId: cashbox.id,
       cashboxName: cashbox.name
     });
 
-    await fetchTransactions(cashbox.id);
+    fetchTransactions(cashbox.id);
   };
-
+  
   const handleSave = async () => {
     if (!formData.name.trim()) {
       return toast.error("Kassa nomini kiriting!");
@@ -356,38 +311,26 @@ const ManageCash = () => {
 
     setSaving(true);
 
-    const method = isEditing ? 'PUT' : 'POST';
-    const url = isEditing
-      ? `${API_URL}/api/cashboxes/${formData.id}`
-      : `${API_URL}/api/cashboxes`;
-
     try {
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          currency: formData.currency,
-          responsibleName: formData.responsibleName,
-          isActive: formData.isActive
-        })
-      });
+      await apiFetch(
+        isEditing ? `/api/cashboxes/${formData.id}` : '/api/cashboxes',
+        {
+          method: isEditing ? 'PUT' : 'POST',
+          body: JSON.stringify({
+            name: formData.name,
+            currency: formData.currency,
+            responsibleName: formData.responsibleName,
+            isActive: formData.isActive
+          })
+        }
+      );
 
-      const data = await parseJsonSafe(res);
-
-      if (res.ok) {
-        toast.success(isEditing ? "Kassa yangilandi!" : "Yangi kassa yaratildi!");
-        setIsModalOpen(false);
-        fetchCashboxes();
-      } else {
-        toast.error(data?.error || "Saqlashda xatolik yuz berdi");
-      }
+      toast.success(isEditing ? "Kassa yangilandi!" : "Yangi kassa yaratildi!");
+      setIsModalOpen(false);
+      await fetchCashboxes();
     } catch (error) {
       console.error(error);
-      toast.error("Serverga ulanib bo'lmadi");
+      toast.error(error.message || "Saqlashda xatolik yuz berdi");
     } finally {
       setSaving(false);
     }
@@ -423,12 +366,8 @@ const ManageCash = () => {
     setSaving(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/cashboxes/transfer`, {
+      await apiFetch('/api/cashboxes/transfer', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
         body: JSON.stringify({
           fromCashboxId,
           toCashboxId,
@@ -437,35 +376,29 @@ const ManageCash = () => {
         })
       });
 
-      const data = await parseJsonSafe(res);
+      toast.success(
+        transactionModal.type === 'deposit'
+          ? "Boshqa kassadan kirim qilindi!"
+          : "Boshqa kassaga chiqim qilindi!"
+      );
 
-      if (res.ok) {
-        toast.success(
-          transactionModal.type === 'deposit'
-            ? "Boshqa kassadan kirim qilindi!"
-            : "Boshqa kassaga chiqim qilindi!"
-        );
+      setTransactionModal({
+        isOpen: false,
+        type: 'deposit',
+        cashboxId: null,
+        cashboxName: ''
+      });
 
-        setTransactionModal({
-          isOpen: false,
-          type: 'deposit',
-          cashboxId: null,
-          cashboxName: ''
-        });
+      setTransactionForm({
+        amount: '',
+        note: '',
+        selectedCashboxId: ''
+      });
 
-        setTransactionForm({
-          amount: '',
-          note: '',
-          selectedCashboxId: ''
-        });
-
-        fetchCashboxes();
-      } else {
-        toast.error(data?.error || "O'tkazmani bajarib bo'lmadi");
-      }
+      await fetchCashboxes();
     } catch (error) {
       console.error(error);
-      toast.error("Server bilan ulanishda xatolik");
+      toast.error(error.message || "O'tkazmani bajarib bo'lmadi");
     } finally {
       setSaving(false);
     }
@@ -475,25 +408,16 @@ const ManageCash = () => {
     setSaving(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/cashboxes/${deleteModal.cashboxId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+      await apiFetch(`/api/cashboxes/${deleteModal.cashboxId}`, {
+        method: 'DELETE'
       });
 
-      const data = await parseJsonSafe(res);
-
-      if (res.ok) {
-        toast.success("Kassa o'chirildi!");
-        setDeleteModal({ isOpen: false, cashboxId: null });
-        fetchCashboxes();
-      } else {
-        toast.error(data?.error || "O'chirishda xatolik yuz berdi");
-      }
+      toast.success("Kassa o'chirildi!");
+      setDeleteModal({ isOpen: false, cashboxId: null });
+      await fetchCashboxes();
     } catch (error) {
       console.error(error);
-      toast.error("Server bilan ulanishda xatolik");
+      toast.error(error.message || "O'chirishda xatolik yuz berdi");
     } finally {
       setSaving(false);
     }
@@ -513,9 +437,7 @@ const ManageCash = () => {
 
   const selectableCashboxes = useMemo(() => {
     return cashboxes.filter(
-      (item) =>
-        item.id !== transactionModal.cashboxId &&
-        item.isActive === true
+      (item) => item.id !== transactionModal.cashboxId && item.isActive === true
     );
   }, [cashboxes, transactionModal.cashboxId]);
 
@@ -661,7 +583,9 @@ const ManageCash = () => {
                           <button
                             onClick={() => {
                               if (Number(item.balance || 0) > 0) {
-                                toast.error("Balansida pul bor kassani o'chirib bo'lmaydi. Uni faolsizlantiring.");
+                                toast.error(
+                                  "Balansida pul bor kassani o'chirib bo'lmaydi. Uni faolsizlantiring."
+                                );
                                 return;
                               }
 
@@ -827,7 +751,8 @@ const ManageCash = () => {
             </div>
 
             <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm font-medium text-slate-600">
-              Asosiy kassa: <span className="font-black text-slate-800">{transactionModal.cashboxName}</span>
+              Asosiy kassa:{' '}
+              <span className="font-black text-slate-800">{transactionModal.cashboxName}</span>
             </div>
 
             <div className="space-y-4">
@@ -998,9 +923,7 @@ const ManageCash = () => {
                             </div>
                           </td>
 
-                          <td className="p-4 text-slate-700 font-medium">
-                            {item.direction}
-                          </td>
+                          <td className="p-4 text-slate-700 font-medium">{item.direction}</td>
 
                           <td className="p-4 font-black text-slate-800">
                             {formatMoney(item.amount)}
@@ -1010,12 +933,12 @@ const ManageCash = () => {
                             {item.note || '-'}
                           </td>
 
-                          <td className="p-4 text-slate-600">
-                            {item.userName}
-                          </td>
+                          <td className="p-4 text-slate-600">{item.userName}</td>
 
                           <td className="p-4">
-                            <span className={`px-3 py-1.5 rounded-xl border text-xs font-black ${item.badgeClass}`}>
+                            <span
+                              className={`px-3 py-1.5 rounded-xl border text-xs font-black ${item.badgeClass}`}
+                            >
                               {item.title}
                             </span>
                           </td>

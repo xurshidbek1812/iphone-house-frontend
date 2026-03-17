@@ -3,6 +3,7 @@ import { ArrowUpRight, ArrowDownLeft, Wallet, CreditCard, Activity } from 'lucid
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
+import { apiFetch } from '../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
 
