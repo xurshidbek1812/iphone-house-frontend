@@ -64,6 +64,13 @@ const PERMISSION_GROUPS = [
     ]
   },
   {
+    title: 'Xarajat moddalari',
+    color: 'rose',
+    items: [
+      { key: 'expense_category.manage', label: "Xarajat moddasini boshqarish" }
+    ]
+  },
+  {
     title: 'Ombor',
     color: 'amber',
     items: [

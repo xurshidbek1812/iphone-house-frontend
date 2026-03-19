@@ -28,6 +28,8 @@ const InventoryCount = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState([]); 
+  const [invoices, setInvoices] = useState([]);
+  const [allBatches, setAllBatches] = useState([]);
 
   const inputRef = useRef(null);
   const token = sessionStorage.getItem('token');
@@ -62,23 +64,64 @@ const InventoryCount = () => {
 
   const fetchProducts = useCallback(async (signal = undefined) => {
     if (!token) return;
+
     try {
         setLoading(true);
-        const res = await fetch(`${API_URL}/api/products`, { 
+
+        const [productsRes, invoicesRes] = await Promise.all([
+        fetch(`${API_URL}/api/products`, {
             headers: getAuthHeaders(),
             signal
+        }),
+        fetch(`${API_URL}/api/invoices`, {
+            headers: getAuthHeaders(),
+            signal
+        })
+        ]);
+
+        const productsData = await parseJsonSafe(productsRes);
+        const invoicesData = await parseJsonSafe(invoicesRes);
+
+        if (productsRes.ok && Array.isArray(productsData)) {
+        setProducts(productsData);
+
+        const extractedBatches = [];
+        productsData.forEach((prod) => {
+            if (Array.isArray(prod.batches)) {
+            prod.batches.forEach((batch) => {
+                if (!batch.isArchived) {
+                extractedBatches.push({
+                    id: prod.id,
+                    batchId: batch.id,
+                    customId: prod.customId,
+                    name: prod.name,
+                    quantity: batch.quantity,
+                    unit: prod.unit
+                });
+                }
+            });
+            }
         });
 
-        if (res.ok) {
-            const data = await parseJsonSafe(res);
-            if (Array.isArray(data)) setProducts(data);
+        setAllBatches(extractedBatches);
+        } else {
+        setProducts([]);
+        setAllBatches([]);
+        }
+
+        if (invoicesRes.ok && Array.isArray(invoicesData)) {
+        setInvoices(invoicesData);
+        } else {
+        setInvoices([]);
         }
     } catch (error) {
-        if (error.name !== 'AbortError') toast.error("Tarmoq xatosi!");
+        if (error.name !== 'AbortError') {
+        toast.error("Tarmoq xatosi!");
+        }
     } finally {
         if (!signal?.aborted) setLoading(false);
     }
-  }, [token, getAuthHeaders]);
+    }, [token, getAuthHeaders]);
 
   useEffect(() => {
       const controller = new AbortController();
@@ -118,42 +161,148 @@ const InventoryCount = () => {
   // 🚨 SKANER QILISH MANTIQI (PARTIYA BILAN)
   const processCode = useCallback((code) => {
     if (!code) return;
+
     let searchKey = code.trim();
-    let batchKey = ""; 
+    let batchKey = '';
+    let invoiceKey = '';
 
     if (code.includes('|')) {
         const parts = code.split('|');
-        searchKey = parts.find(p => p.startsWith('ID:'))?.replace('ID:', '').trim() || searchKey;
-        batchKey = parts.find(p => p.startsWith('BATCH:'))?.replace('BATCH:', '').trim() || "";
+
+        searchKey =
+        parts.find((p) => p.startsWith('ID:'))?.replace('ID:', '').trim() || searchKey;
+
+        batchKey =
+        parts.find((p) => p.startsWith('BATCH:'))?.replace('BATCH:', '').trim() || '';
+
+        invoiceKey =
+        parts.find((p) => p.startsWith('INV:'))?.replace('INV:', '').trim() || '';
     }
 
-    const product = products.find(p => String(p.customId) === searchKey || String(p.id) === searchKey);
+    // 1) Tasdiqlangan batch QR bo'lsa
+    if (batchKey) {
+        const foundBatch = allBatches.find(
+        (b) => String(b.batchId) === String(batchKey) && String(b.customId) === String(searchKey)
+        );
+
+        if (!foundBatch) {
+        toast.error("QR kod bo'yicha tasdiqlangan partiya topilmadi!");
+        playBeep('error');
+        return;
+        }
+
+        if (!selectedIds.includes(foundBatch.id)) {
+        toast.error(`❌ "${foundBatch.name}" bu sanoq ro'yxatiga kiritilmagan!`);
+        playBeep('error');
+        return;
+        }
+
+        const uniqueKey = `${foundBatch.id}-${foundBatch.batchId}`;
+
+        setScannedItems((prev) => {
+        const currentCount = prev[uniqueKey] || 0;
+        return { ...prev, [uniqueKey]: currentCount + 1 };
+        });
+
+        setLastScanned({
+        ...foundBatch,
+        scannedBatch: foundBatch.batchId,
+        scanType: 'BATCH'
+        });
+
+        playBeep('success');
+        return;
+    }
+
+    // 2) Tasdiqlanmagan kirim (invoice) QR bo'lsa
+    if (invoiceKey) {
+        const foundInvoice = invoices.find((inv) => String(inv.id) === String(invoiceKey));
+
+        if (!foundInvoice) {
+        toast.error("QR koddagi kirim fakturasi topilmadi!");
+        playBeep('error');
+        return;
+        }
+
+        const foundItem = (foundInvoice.items || []).find(
+        (item) => String(item.customId) === String(searchKey)
+        );
+
+        if (!foundItem) {
+        toast.error("QR kod bo'yicha kirim ichidagi mahsulot topilmadi!");
+        playBeep('error');
+        return;
+        }
+
+        const product = products.find(
+        (p) => String(p.customId) === String(searchKey) || String(p.id) === String(foundItem.productId)
+        );
+
+        if (!product) {
+        toast.error("Kirimdagi mahsulot bazadagi tovar bilan bog'lanmadi!");
+        playBeep('error');
+        return;
+        }
+
+        if (!selectedIds.includes(product.id)) {
+        toast.error(`❌ "${product.name}" bu sanoq ro'yxatiga kiritilmagan!`);
+        playBeep('error');
+        return;
+        }
+
+        const uniqueKey = `${product.id}-none`;
+
+        setScannedItems((prev) => {
+        const currentCount = prev[uniqueKey] || 0;
+        return { ...prev, [uniqueKey]: currentCount + 1 };
+        });
+
+        setLastScanned({
+        ...product,
+        scannedBatch: null,
+        scanType: 'INV',
+        scannedInvoice: foundInvoice.id
+        });
+
+        playBeep('success');
+        return;
+    }
+
+    // 3) Oddiy fallback
+    const product = products.find(
+        (p) => String(p.customId) === String(searchKey) || String(p.id) === String(searchKey)
+    );
 
     if (product) {
         if (!selectedIds.includes(product.id)) {
-            toast.error(`❌ "${product.name}" bu sanoq ro'yxatiga kiritilmagan!`);
-            playBeep('error');
-            return;
+        toast.error(`❌ "${product.name}" bu sanoq ro'yxatiga kiritilmagan!`);
+        playBeep('error');
+        return;
         }
 
-        // Agar partiya o'qitilmagan bo'lsa va tovarning bitta aktiv partiyasi bo'lsa, o'shani oladi
-        if (!batchKey && Array.isArray(product.batches) && product.batches.filter(b=>!b.isArchived).length === 1) {
-            batchKey = String(product.batches.filter(b=>!b.isArchived)[0].id);
+        if (!batchKey && Array.isArray(product.batches) && product.batches.filter((b) => !b.isArchived).length === 1) {
+        batchKey = String(product.batches.filter((b) => !b.isArchived)[0].id);
         }
 
         const uniqueKey = `${product.id}-${batchKey || 'none'}`;
 
-        setScannedItems(prev => {
-            const currentCount = prev[uniqueKey] || 0;
-            return { ...prev, [uniqueKey]: currentCount + 1 };
+        setScannedItems((prev) => {
+        const currentCount = prev[uniqueKey] || 0;
+        return { ...prev, [uniqueKey]: currentCount + 1 };
         });
-        setLastScanned({ ...product, scannedBatch: batchKey });
+
+        setLastScanned({
+        ...product,
+        scannedBatch: batchKey || null,
+        scanType: batchKey ? 'BATCH' : 'PRODUCT'
+        });
+
         playBeep('success');
     } else {
-        toast.error(`Diqqat! Kodli tovar bazada yo'q!`);
+        toast.error("Diqqat! Kodli tovar bazada yo'q!");
         playBeep('error');
     }
-  }, [products, selectedIds, playBeep]);
+    }, [products, invoices, allBatches, selectedIds, playBeep]);
 
   const handleScan = (e) => {
     if (e.key === 'Enter') {
@@ -408,9 +557,15 @@ const InventoryCount = () => {
                         </span>
                         <span className="text-emerald-800 font-black text-xl tracking-tight">{lastScanned.name}</span>
                         {lastScanned.scannedBatch && (
-                            <span className="text-emerald-700 font-bold px-3 py-1 bg-emerald-100 rounded-lg text-xs uppercase tracking-widest">
-                                Partiya: P-{lastScanned.scannedBatch}
-                            </span>
+                        <span className="text-emerald-700 font-bold px-3 py-1 bg-emerald-100 rounded-lg text-xs uppercase tracking-widest">
+                            Partiya: P-{lastScanned.scannedBatch}
+                        </span>
+                        )}
+
+                        {lastScanned.scanType === 'INV' && lastScanned.scannedInvoice && (
+                        <span className="text-amber-700 font-bold px-3 py-1 bg-amber-100 rounded-lg text-xs uppercase tracking-widest">
+                            Kirim: INV-{lastScanned.scannedInvoice}
+                        </span>
                         )}
                         <span className="text-white bg-emerald-500 px-3 py-1 rounded-lg font-black text-sm shadow-md shadow-emerald-200">+1 qo'shildi</span>
                     </div>

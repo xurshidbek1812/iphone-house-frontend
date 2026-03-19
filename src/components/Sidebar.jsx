@@ -339,7 +339,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         {
           title: "Ta'minotchidan tovar kirim",
           path: '/ombor/taminotchi-kirim',
-          permissions: [PERMISSIONS.PRODUCT_MANAGE, PERMISSIONS.INVENTORY_VIEW_AMOUNTS]
         },
         { title: "Ta'minotchiga tovar qaytarish", path: '/ombor/taminotchi-qaytarish' },
         { title: 'Savdosi yakunlanmaganlar', path: '/ombor/yakunlanmagan' },
@@ -348,7 +347,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         {
           title: "Tovarlar qoldig'i",
           path: '/ombor/qoldiq',
-          permissions: [PERMISSIONS.PRODUCT_MANAGE, PERMISSIONS.INVENTORY_VIEW_AMOUNTS]
         },
         { title: 'Sanoq (Skaner)', path: '/ombor/sanoq', icon: <ScanLine size={18} /> }
       ]
@@ -470,6 +468,11 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           title: 'Kategoriyalar',
           path: '/sozlamalar/kategoriyalar',
           permissions: [PERMISSIONS.CATEGORY_MANAGE]
+        },
+        {
+          title: 'Xarajat moddalari',
+          path: '/sozlamalar/xarajat-moddalari',
+          permissions: [PERMISSIONS.EXPENSE_CATEGORY_MANAGE]
         },
         {
           title: "Xodimlar boshqaruvi",

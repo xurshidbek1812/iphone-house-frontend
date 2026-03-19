@@ -13,10 +13,10 @@ import {
   Trash2,
   Plus,
   Clock,
-  Tag,
   MessageSquare,
   Loader2,
-  Layers
+  Layers,
+  BadgePercent
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../../utils/api';
@@ -50,7 +50,8 @@ const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
     if (!search) return customers;
     const lowerSearch = search.toLowerCase();
     return customers.filter((c) => {
-      const text = `${c.firstName} ${c.lastName} ${c.pinfl} ${c.document?.number || ''}`.toLowerCase();
+      const text =
+        `${c.firstName} ${c.lastName} ${c.pinfl} ${c.document?.number || ''}`.toLowerCase();
       return text.includes(lowerSearch);
     });
   }, [customers, search]);
@@ -127,7 +128,6 @@ const AddCashSale = () => {
     otherName: '',
     otherPhone: '+998 ',
     items: [],
-    discount: '',
     note: ''
   });
 
@@ -148,6 +148,27 @@ const AddCashSale = () => {
     }),
     [getAuthHeaders]
   );
+
+  const getItemSubtotal = useCallback((item) => {
+    return Number(item.salePrice || 0) * Number(item.qty || 0);
+  }, []);
+
+  const getItemDiscount = useCallback((item) => {
+    return Number(item.discount || 0);
+  }, []);
+
+  const getItemTotal = useCallback(
+    (item) => {
+      return Math.max(0, getItemSubtotal(item) - getItemDiscount(item));
+    },
+    [getItemSubtotal, getItemDiscount]
+  );
+
+  const getPerUnitDiscount = useCallback((item) => {
+    const qty = Number(item.qty || 0);
+    if (!qty) return 0;
+    return Math.floor(Number(item.discount || 0) / qty);
+  }, []);
 
   const updateCartItemQty = (batchId, value) => {
     const numericValue = Number(value);
@@ -182,10 +203,85 @@ const AddCashSale = () => {
       return;
     }
 
+    const currentDiscount = Number(targetItem.discount || 0);
+    const maxDiscount = Number(targetItem.salePrice || 0) * numericValue;
+
     setSaleData((prev) => ({
       ...prev,
       items: prev.items.map((item) =>
-        item.batchId === batchId ? { ...item, qty: numericValue } : item
+        item.batchId === batchId
+          ? {
+              ...item,
+              qty: numericValue,
+              discount: currentDiscount > maxDiscount ? maxDiscount : currentDiscount
+            }
+          : item
+      )
+    }));
+  };
+
+  const updateItemTotalDiscount = (batchId, value) => {
+    if (value === '') {
+      setSaleData((prev) => ({
+        ...prev,
+        items: prev.items.map((item) =>
+          item.batchId === batchId ? { ...item, discount: '' } : item
+        )
+      }));
+      return;
+    }
+
+    const numericValue = Number(value);
+    if (isNaN(numericValue) || numericValue < 0) return;
+
+    const targetItem = saleData.items.find((item) => item.batchId === batchId);
+    if (!targetItem) return;
+
+    const maxDiscount = Number(targetItem.salePrice || 0) * Number(targetItem.qty || 0);
+
+    if (numericValue > maxDiscount) {
+      toast.error("Chegirma tovar summasidan katta bo'lishi mumkin emas!");
+      return;
+    }
+
+    setSaleData((prev) => ({
+      ...prev,
+      items: prev.items.map((item) =>
+        item.batchId === batchId ? { ...item, discount: numericValue } : item
+      )
+    }));
+  };
+
+  const updateItemPerUnitDiscount = (batchId, value) => {
+    if (value === '') {
+      setSaleData((prev) => ({
+        ...prev,
+        items: prev.items.map((item) =>
+          item.batchId === batchId ? { ...item, discount: '' } : item
+        )
+      }));
+      return;
+    }
+
+    const numericValue = Number(value);
+    if (isNaN(numericValue) || numericValue < 0) return;
+
+    const targetItem = saleData.items.find((item) => item.batchId === batchId);
+    if (!targetItem) return;
+
+    const qty = Number(targetItem.qty || 0);
+    const totalDiscount = numericValue * qty;
+    const maxDiscount = Number(targetItem.salePrice || 0) * qty;
+
+    if (totalDiscount > maxDiscount) {
+      toast.error("Chegirma tovar summasidan katta bo'lishi mumkin emas!");
+      return;
+    }
+
+    setSaleData((prev) => ({
+      ...prev,
+      items: prev.items.map((item) =>
+        item.batchId === batchId ? { ...item, discount: totalDiscount } : item
       )
     }));
   };
@@ -281,13 +377,29 @@ const AddCashSale = () => {
   const handleBarcodeScan = (e) => {
     if (e.key === 'Enter' && e.target.value.trim() !== '') {
       const code = e.target.value.trim();
+
       let searchKey = code;
       let batchKey = '';
+      let invoiceKey = '';
 
       if (code.includes('|')) {
         const parts = code.split('|');
-        searchKey = parts.find((p) => p.startsWith('ID:'))?.replace('ID:', '').trim() || searchKey;
-        batchKey = parts.find((p) => p.startsWith('BATCH:'))?.replace('BATCH:', '').trim() || '';
+
+        searchKey =
+          parts.find((p) => p.startsWith('ID:'))?.replace('ID:', '').trim() || searchKey;
+
+        batchKey =
+          parts.find((p) => p.startsWith('BATCH:'))?.replace('BATCH:', '').trim() || '';
+
+        invoiceKey =
+          parts.find((p) => p.startsWith('INV:'))?.replace('INV:', '').trim() || '';
+      }
+
+      if (invoiceKey) {
+        toast.error("Bu QR kod hali tasdiqlanmagan kirimga tegishli. U faqat sanoq bo'limida ishlatiladi.");
+        e.target.value = '';
+        barcodeInputRef.current?.focus();
+        return;
       }
 
       if (batchKey) {
@@ -298,18 +410,10 @@ const AddCashSale = () => {
         if (foundBatch) {
           addBatchToCart(foundBatch);
         } else {
-          toast.error(`Kod bo'yicha aktiv partiya topilmadi!`);
+          toast.error("QR kod bo'yicha tasdiqlangan partiya topilmadi!");
         }
       } else {
-        const foundProduct = products.find(
-          (p) => String(p.customId) === searchKey || String(p.id) === searchKey
-        );
-
-        if (foundProduct) {
-          setSelectedProductForBatches(foundProduct);
-        } else {
-          toast.error(`Kod bo'yicha tovar topilmadi!`);
-        }
+        toast.error("Savdoda faqat tasdiqlangan partiya QR kodi ishlaydi!");
       }
 
       e.target.value = '';
@@ -317,16 +421,17 @@ const AddCashSale = () => {
     }
   };
 
-  const grandTotal = useMemo(() => {
-    return saleData.items.reduce(
-      (sum, item) => sum + (Number(item.salePrice || 0) * Number(item.qty || 1)),
-      0
-    );
-  }, [saleData.items]);
+  const grossTotal = useMemo(() => {
+    return saleData.items.reduce((sum, item) => sum + getItemSubtotal(item), 0);
+  }, [saleData.items, getItemSubtotal]);
+
+  const totalDiscount = useMemo(() => {
+    return saleData.items.reduce((sum, item) => sum + getItemDiscount(item), 0);
+  }, [saleData.items, getItemDiscount]);
 
   const finalAmount = useMemo(() => {
-    return Math.max(0, grandTotal - (Number(saleData.discount) || 0));
-  }, [grandTotal, saleData.discount]);
+    return saleData.items.reduce((sum, item) => sum + getItemTotal(item), 0);
+  }, [saleData.items, getItemTotal]);
 
   const addBatchToCart = (batch) => {
     if (Number(batch.quantity) <= 0) {
@@ -336,25 +441,25 @@ const AddCashSale = () => {
     const existingItem = saleData.items.find((i) => i.batchId === batch.batchId);
 
     if (existingItem) {
-      if (existingItem.qty + 1 > batch.quantity) {
+      if (Number(existingItem.qty || 0) + 1 > Number(batch.quantity)) {
         return toast.error(`Ushbu partiyada faqat ${batch.quantity} ta qolgan!`);
       }
 
       setSaleData((prev) => ({
         ...prev,
         items: prev.items.map((item) =>
-          item.batchId === batch.batchId ? { ...item, qty: item.qty + 1 } : item
+          item.batchId === batch.batchId ? { ...item, qty: Number(item.qty || 0) + 1 } : item
         )
       }));
 
-      toast.success(`Soni oshirildi`);
+      toast.success('Soni oshirildi');
     } else {
       setSaleData((prev) => ({
         ...prev,
-        items: [...prev.items, { ...batch, qty: 1 }]
+        items: [...prev.items, { ...batch, qty: 1, discount: 0 }]
       }));
 
-      toast.success(`Savatga qo'shildi`);
+      toast.success("Savatga qo'shildi");
     }
   };
 
@@ -371,7 +476,7 @@ const AddCashSale = () => {
     }
 
     if (step === 1 && saleData.isAnonymous && !saleData.otherName.trim()) {
-      return toast.error("Xaridor ismini yozing!");
+      return toast.error('Xaridor ismini yozing!');
     }
 
     if (step === 2 && saleData.items.length === 0) {
@@ -389,16 +494,6 @@ const AddCashSale = () => {
   };
 
   const submitSale = async () => {
-    const disc = Number(saleData.discount) || 0;
-
-    if (disc > 0 && (!saleData.note || saleData.note.trim() === '')) {
-      return toast.error("Chegirma berilganda sababini (izoh) yozish majburiy!");
-    }
-
-    if (disc > grandTotal) {
-      return toast.error("Chegirma summasi tovarlar narxidan ko'p bo'lishi mumkin emas!");
-    }
-
     const invalidQtyItem = saleData.items.find(
       (item) =>
         !Number(item.qty) ||
@@ -412,20 +507,31 @@ const AddCashSale = () => {
       );
     }
 
+    const invalidDiscountItem = saleData.items.find((item) => {
+      const subtotal = Number(item.salePrice || 0) * Number(item.qty || 0);
+      const discount = Number(item.discount || 0);
+      return discount < 0 || discount > subtotal;
+    });
+
+    if (invalidDiscountItem) {
+      return toast.error(
+        `${invalidDiscountItem.name} uchun chegirma tovar summasidan katta bo'lishi mumkin emas!`
+      );
+    }
+
     setIsLoading(true);
 
     try {
       const payload = {
-        customerId: saleData.isAnonymous ? null : (saleData.mainCustomer?.id || null),
+        customerId: saleData.isAnonymous ? null : saleData.mainCustomer?.id || null,
         otherName: saleData.isAnonymous ? saleData.otherName.trim() : null,
         otherPhone: saleData.isAnonymous ? saleData.otherPhone.trim() : null,
         note: saleData.note.trim() || null,
-        discountAmount: disc,
-        items: saleData.items.map(item => ({
-            productId: item.id,
-            quantity: Number(item.qty),
-            unitPrice: Number(item.salePrice),
-            discountAmount: 0
+        items: saleData.items.map((item) => ({
+          productId: item.id,
+          quantity: Number(item.qty),
+          unitPrice: Number(item.salePrice),
+          discountAmount: Number(item.discount || 0)
         }))
       };
 
@@ -464,8 +570,12 @@ const AddCashSale = () => {
 
   const getCustomerPhone = (customer) => {
     if (!customer) return 'Tel kiritilmagan';
-    if (Array.isArray(customer.phones) && customer.phones.length > 0) return customer.phones[0].phone;
-    if (typeof customer.phones === 'string' && customer.phones.trim() !== '') return customer.phones;
+    if (Array.isArray(customer.phones) && customer.phones.length > 0) {
+      return customer.phones[0].phone;
+    }
+    if (typeof customer.phones === 'string' && customer.phones.trim() !== '') {
+      return customer.phones;
+    }
     if (customer.phone) return customer.phone;
     return 'Tel kiritilmagan';
   };
@@ -510,7 +620,8 @@ const AddCashSale = () => {
                 {allBatches
                   .filter((b) => b.id === selectedProductForBatches.id)
                   .map((batch) => {
-                    const qtyInCart = saleData.items.find((i) => i.batchId === batch.batchId)?.qty || 0;
+                    const qtyInCart =
+                      saleData.items.find((i) => i.batchId === batch.batchId)?.qty || 0;
                     const isFullyAdded = qtyInCart >= batch.quantity;
 
                     return (
@@ -532,7 +643,8 @@ const AddCashSale = () => {
                           </div>
                           <div className="text-sm font-bold text-gray-600 mt-2 flex items-center gap-4">
                             <span>
-                              Qoldiq: <span className="text-blue-600 font-black">{batch.quantity} ta</span>
+                              Qoldiq:{' '}
+                              <span className="text-blue-600 font-black">{batch.quantity} ta</span>
                             </span>
                             {qtyInCart > 0 && (
                               <span className="text-rose-500 bg-rose-50 px-2 py-0.5 rounded-md">
@@ -548,7 +660,8 @@ const AddCashSale = () => {
                               Sotuv narxi
                             </p>
                             <p className="font-black text-emerald-600 text-lg">
-                              {Number(batch.salePrice).toLocaleString()} <span className="text-xs">UZS</span>
+                              {Number(batch.salePrice).toLocaleString()}{' '}
+                              <span className="text-xs">UZS</span>
                             </p>
                           </div>
 
@@ -561,7 +674,11 @@ const AddCashSale = () => {
                                 : 'bg-white border-2 border-gray-200 text-gray-500 hover:border-blue-500 hover:text-blue-500'
                             } disabled:opacity-40 disabled:cursor-not-allowed`}
                           >
-                            {isFullyAdded ? <Check size={24} strokeWidth={3} /> : <Plus size={24} strokeWidth={2.5} />}
+                            {isFullyAdded ? (
+                              <Check size={24} strokeWidth={3} />
+                            ) : (
+                              <Plus size={24} strokeWidth={2.5} />
+                            )}
                           </button>
                         </div>
                       </div>
@@ -618,10 +735,14 @@ const AddCashSale = () => {
                   {saleData.mainCustomer.lastName} <br />
                   {saleData.mainCustomer.firstName}
                 </h3>
-                <p className="text-sm font-bold text-gray-400">{getCustomerPhone(saleData.mainCustomer)}</p>
+                <p className="text-sm font-bold text-gray-400">
+                  {getCustomerPhone(saleData.mainCustomer)}
+                </p>
               </div>
             ) : (
-              <p className="text-sm text-gray-400 font-medium italic relative z-10">Mijoz tanlanmagan</p>
+              <p className="text-sm text-gray-400 font-medium italic relative z-10">
+                Mijoz tanlanmagan
+              </p>
             )}
           </div>
 
@@ -639,14 +760,19 @@ const AddCashSale = () => {
                 <div className="flex justify-between text-sm mb-3">
                   <span className="text-gray-400 font-medium">Tovarlar soni:</span>
                   <span className="font-black text-white">
-                    {saleData.items.reduce((s, i) => s + i.qty, 0)} ta
+                    {saleData.items.reduce((s, i) => s + Number(i.qty || 0), 0)} ta
                   </span>
                 </div>
 
-                {Number(saleData.discount) > 0 && (
+                <div className="flex justify-between text-sm mb-3">
+                  <span className="text-gray-400 font-medium">Umumiy summa:</span>
+                  <span className="font-black text-white">{grossTotal.toLocaleString()} UZS</span>
+                </div>
+
+                {totalDiscount > 0 && (
                   <div className="flex justify-between text-sm mb-3 text-amber-400 border-t border-gray-700/50 pt-3">
                     <span className="font-medium">Chegirma:</span>
-                    <span className="font-black">- {Number(saleData.discount).toLocaleString()} UZS</span>
+                    <span className="font-black">- {totalDiscount.toLocaleString()} UZS</span>
                   </div>
                 )}
 
@@ -655,7 +781,8 @@ const AddCashSale = () => {
                     Yakuniy summa
                   </p>
                   <p className="text-3xl font-black text-emerald-400 tracking-tight">
-                    {finalAmount.toLocaleString()} <span className="text-sm font-bold text-emerald-600/50">UZS</span>
+                    {finalAmount.toLocaleString()}{' '}
+                    <span className="text-sm font-bold text-emerald-600/50">UZS</span>
                   </p>
                 </div>
               </div>
@@ -676,7 +803,9 @@ const AddCashSale = () => {
                 <div
                   key={s}
                   className={`w-10 h-10 flex items-center justify-center rounded-full text-sm font-black border-4 transition-all mx-auto bg-white ${
-                    step >= s ? 'border-blue-600 text-blue-600 shadow-md shadow-blue-100' : 'border-gray-200 text-gray-400'
+                    step >= s
+                      ? 'border-blue-600 text-blue-600 shadow-md shadow-blue-100'
+                      : 'border-gray-200 text-gray-400'
                   }`}
                 >
                   {step > s ? <Check size={16} strokeWidth={3} /> : s}
@@ -731,7 +860,9 @@ const AddCashSale = () => {
                     <input
                       type="text"
                       value={saleData.otherName}
-                      onChange={(e) => setSaleData((prev) => ({ ...prev, otherName: e.target.value }))}
+                      onChange={(e) =>
+                        setSaleData((prev) => ({ ...prev, otherName: e.target.value }))
+                      }
                       className="w-full p-4 border border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 ring-blue-50 font-bold text-gray-700 transition-all"
                       placeholder="Masalan: Alisher"
                     />
@@ -744,7 +875,9 @@ const AddCashSale = () => {
                     <input
                       type="text"
                       value={saleData.otherPhone}
-                      onChange={(e) => setSaleData((prev) => ({ ...prev, otherPhone: e.target.value }))}
+                      onChange={(e) =>
+                        setSaleData((prev) => ({ ...prev, otherPhone: e.target.value }))
+                      }
                       className="w-full p-4 border border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 ring-blue-50 font-bold font-mono text-gray-700 transition-all"
                       placeholder="+998"
                     />
@@ -758,7 +891,10 @@ const AddCashSale = () => {
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[650px] animate-in slide-in-from-right-8 duration-300">
               <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50/50 border-b border-gray-100">
                 <div className="relative max-w-xl mx-auto">
-                  <ScanLine className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-500" size={24} />
+                  <ScanLine
+                    className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-500"
+                    size={24}
+                  />
                   <input
                     ref={barcodeInputRef}
                     type="text"
@@ -801,7 +937,10 @@ const AddCashSale = () => {
               {productTab === 'catalog' && (
                 <div className="p-6 flex flex-col flex-1 overflow-hidden bg-white">
                   <div className="relative mb-6 shrink-0">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                    <Search
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                      size={20}
+                    />
                     <input
                       type="text"
                       placeholder="Nomi bo'yicha tezkor qidiruv..."
@@ -826,7 +965,7 @@ const AddCashSale = () => {
                         {filteredProducts.map((product) => {
                           const qtyInCart = saleData.items
                             .filter((i) => i.id === product.id)
-                            .reduce((s, i) => s + i.qty, 0);
+                            .reduce((s, i) => s + Number(i.qty || 0), 0);
 
                           return (
                             <tr
@@ -943,7 +1082,7 @@ const AddCashSale = () => {
                               </td>
 
                               <td className="p-4 text-right font-black text-gray-800">
-                                {(Number(item.salePrice) * item.qty).toLocaleString()}
+                                {getItemSubtotal(item).toLocaleString()}
                               </td>
 
                               <td className="p-4 text-center">
@@ -976,95 +1115,138 @@ const AddCashSale = () => {
 
                   <div>
                     <h2 className="text-2xl font-black text-gray-800 mb-1 tracking-tight">
-                      Qo'shimcha va Saqlash
+                      Chegirma va Saqlash
                     </h2>
                     <p className="text-gray-400 text-sm font-medium">
-                      Savdoni jarayonda holatida saqlashdan oldin chegirma va izoh kiritishingiz mumkin.
+                      Har bir mahsulot uchun alohida chegirma kiriting va savdoni saqlang.
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                      <Tag size={12} /> Chegirma berish (UZS)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max={grandTotal}
-                      disabled={isLoading}
-                      value={saleData.discount}
-                      onChange={(e) => setSaleData({ ...saleData, discount: e.target.value })}
-                      className="w-full p-4 bg-amber-50 border-2 border-amber-100 rounded-2xl outline-none focus:border-amber-400 font-black text-amber-600 text-xl transition-colors disabled:opacity-50"
-                      placeholder="0"
-                    />
-                  </div>
+              <div className="space-y-6 mb-8">
+                <div className="overflow-x-auto border border-gray-100 rounded-3xl shadow-sm">
+                  <table className="w-full text-left text-sm bg-white">
+                    <thead className="bg-gray-50 text-[10px] text-gray-400 uppercase font-black tracking-widest border-b border-gray-100">
+                      <tr>
+                        <th className="p-4">Tovar</th>
+                        <th className="p-4 text-center">Soni</th>
+                        <th className="p-4 text-right">Dona narxi</th>
+                        <th className="p-4 text-center">1 dona chegirma</th>
+                        <th className="p-4 text-center">Jami chegirma</th>
+                        <th className="p-4 text-right">Jami</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
+                      {saleData.items.map((item) => (
+                        <tr key={item.batchId}>
+                          <td className="p-4 min-w-[260px]">
+                            <div className="font-bold text-gray-800">{item.name}</div>
+                            <div className="text-[10px] text-indigo-500 mt-1 uppercase font-black bg-indigo-50 w-fit px-2 py-0.5 rounded">
+                              Partiya:{' '}
+                              {!String(item.batchId).startsWith('old-')
+                                ? `P-${item.batchId}`
+                                : 'ESKI TOVAR'}
+                            </div>
+                          </td>
 
-                  {Number(saleData.discount) > 0 ? (
-                    <div className="animate-in fade-in slide-in-from-top-2">
-                      <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                        <MessageSquare size={12} /> Chegirma sababi (Izoh){' '}
-                        <span className="text-rose-500 text-base leading-none">*</span>
-                      </label>
-                      <textarea
-                        disabled={isLoading}
-                        value={saleData.note}
-                        onChange={(e) => setSaleData({ ...saleData, note: e.target.value })}
-                        className="w-full p-4 bg-rose-50/50 border border-rose-200 rounded-2xl outline-none focus:border-rose-400 focus:ring-4 ring-rose-50 text-rose-800 font-bold resize-none h-28 transition-all disabled:opacity-50"
-                        placeholder="Nima uchun chegirma qilinganini yozish majburiy..."
-                      ></textarea>
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                        <MessageSquare size={12} /> Savdo uchun izoh (ixtiyoriy)
-                      </label>
-                      <textarea
-                        disabled={isLoading}
-                        value={saleData.note}
-                        onChange={(e) => setSaleData({ ...saleData, note: e.target.value })}
-                        className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-blue-400 focus:ring-4 ring-blue-50 text-gray-700 font-medium resize-none h-28 transition-all disabled:opacity-50"
-                        placeholder="Eslatma qoldirishingiz mumkin..."
-                      ></textarea>
-                    </div>
-                  )}
+                          <td className="p-4 text-center text-blue-600">
+                            {item.qty} ta
+                          </td>
+
+                          <td className="p-4 text-right">
+                            {Number(item.salePrice).toLocaleString()}
+                          </td>
+
+                          <td className="p-4 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <input
+                                type="number"
+                                min="0"
+                                value={getPerUnitDiscount(item)}
+                                onChange={(e) =>
+                                  updateItemPerUnitDiscount(item.batchId, e.target.value)
+                                }
+                                className="w-28 p-3 border border-amber-200 rounded-2xl text-center font-black text-amber-600 bg-amber-50 outline-none focus:ring-2 focus:ring-amber-500"
+                              />
+                              <div className="text-[10px] text-gray-400">har dona</div>
+                            </div>
+                          </td>
+
+                          <td className="p-4 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.discount || ''}
+                                onChange={(e) =>
+                                  updateItemTotalDiscount(item.batchId, e.target.value)
+                                }
+                                className="w-28 p-3 border border-amber-200 rounded-2xl text-center font-black text-amber-600 bg-amber-50 outline-none focus:ring-2 focus:ring-amber-500"
+                              />
+                              <div className="text-[10px] text-gray-400">shu item uchun</div>
+                            </div>
+                          </td>
+
+                          <td className="p-4 text-right font-black text-gray-800">
+                            {getItemTotal(item).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
 
-                <div className="bg-gray-900 rounded-[32px] p-8 flex flex-col justify-center relative overflow-hidden shadow-2xl">
-                  <div className="absolute -right-8 -top-8 text-gray-800">
-                    <ShoppingCart size={180} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                      <MessageSquare size={12} /> Savdo uchun izoh (ixtiyoriy)
+                    </label>
+                    <textarea
+                      disabled={isLoading}
+                      value={saleData.note}
+                      onChange={(e) => setSaleData({ ...saleData, note: e.target.value })}
+                      className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-blue-400 focus:ring-4 ring-blue-50 text-gray-700 font-medium resize-none h-32 transition-all disabled:opacity-50"
+                      placeholder="Eslatma qoldirishingiz mumkin..."
+                    ></textarea>
                   </div>
 
-                  <div className="relative z-10 space-y-6">
-                    <div className="flex justify-between items-center text-gray-400 text-sm">
-                      <span className="font-bold">
-                        Tovarlar ({saleData.items.reduce((s, i) => s + i.qty, 0)} ta):
-                      </span>
-                      <span className="font-black text-white text-lg">{grandTotal.toLocaleString()} UZS</span>
+                  <div className="bg-gray-900 rounded-[32px] p-8 flex flex-col justify-center relative overflow-hidden shadow-2xl">
+                    <div className="absolute -right-8 -top-8 text-gray-800">
+                      <ShoppingCart size={180} />
                     </div>
 
-                    {Number(saleData.discount) > 0 && (
-                      <div className="flex justify-between items-center text-amber-400 text-sm border-b border-gray-700/50 pb-5">
-                        <span className="font-bold">Chegirma:</span>
-                        <span className="font-black text-lg">
-                          - {Number(saleData.discount).toLocaleString()} UZS
+                    <div className="relative z-10 space-y-6">
+                      <div className="flex justify-between items-center text-gray-400 text-sm">
+                        <span className="font-bold">
+                          Tovarlar ({saleData.items.reduce((s, i) => s + Number(i.qty || 0), 0)} ta):
+                        </span>
+                        <span className="font-black text-white text-lg">
+                          {grossTotal.toLocaleString()} UZS
                         </span>
                       </div>
-                    )}
 
-                    <div className="pt-2">
-                      <p className="text-gray-500 text-[10px] font-black uppercase mb-1 tracking-widest">
-                        Yakuniy summa
-                      </p>
-                      <p
-                        className="text-4xl lg:text-5xl font-black text-emerald-400 tracking-tighter truncate"
-                        title={`${finalAmount.toLocaleString()} UZS`}
-                      >
-                        {finalAmount.toLocaleString()} <span className="text-lg font-bold text-emerald-600">UZS</span>
-                      </p>
+                      {totalDiscount > 0 && (
+                        <div className="flex justify-between items-center text-amber-400 text-sm border-b border-gray-700/50 pb-5">
+                          <span className="font-bold">Chegirma:</span>
+                          <span className="font-black text-lg">
+                            - {totalDiscount.toLocaleString()} UZS
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="pt-2">
+                        <p className="text-gray-500 text-[10px] font-black uppercase mb-1 tracking-widest">
+                          Yakuniy summa
+                        </p>
+                        <p
+                          className="text-4xl lg:text-5xl font-black text-emerald-400 tracking-tighter truncate"
+                          title={`${finalAmount.toLocaleString()} UZS`}
+                        >
+                          {finalAmount.toLocaleString()}{' '}
+                          <span className="text-lg font-bold text-emerald-600">UZS</span>
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>

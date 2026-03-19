@@ -11,10 +11,10 @@ import {
   User,
   Loader2,
   Edit2,
-  CheckCircle
+  CheckCircle,
+  BadgePercent
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { apiFetch } from '../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -49,12 +49,12 @@ const CashSales = () => {
   );
 
   const getJsonAuthHeaders = useCallback(
-  () => ({
-    ...getAuthHeaders(),
-    'Content-Type': 'application/json'
-  }),
-  [getAuthHeaders]
-);
+    () => ({
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    }),
+    [getAuthHeaders]
+  );
 
   const fetchSales = useCallback(
     async (signal = undefined) => {
@@ -123,122 +123,210 @@ const CashSales = () => {
   };
 
   const handleConfirmOrder = async () => {
-  const id = sendToPaymentModal.id;
-  if (!id) return;
+    const id = sendToPaymentModal.id;
+    if (!id) return;
 
-  setIsActionLoading(true);
+    setIsActionLoading(true);
 
-  try {
-    const res = await fetch(`${API_URL}/api/orders/${id}/confirm`, {
-      method: 'PATCH',
-      headers: getAuthHeaders()
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${id}/confirm`, {
+        method: 'PATCH',
+        headers: getAuthHeaders()
+      });
+
+      const data = await parseJsonSafe(res);
+
+      if (res.ok) {
+        toast.success("Savdo to'lov kutilmoqda holatiga o'tdi!");
+        await fetchSales();
+      } else {
+        toast.error(data?.error || "Tasdiqlashda xatolik yuz berdi");
+      }
+    } catch (err) {
+      console.error('Confirm order error:', err);
+      toast.error("Server xatosi!");
+    } finally {
+      setIsActionLoading(false);
+      setSendToPaymentModal({ isOpen: false, id: null });
+    }
+  };
+
+  const openEditModal = (sale) => {
+    setEditModal({
+      isOpen: true,
+      data: {
+        id: sale.id,
+        note: sale.note || '',
+        items: (sale.items || []).map((item) => ({
+          productId: item.productId,
+          name: item.product?.name || "Noma'lum tovar",
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+          discountAmount: Number(item.discountAmount || 0)
+        }))
+      }
+    });
+  };
+
+  const updateEditQty = (productId, newQty) => {
+    if (!newQty || newQty < 1 || !Number.isInteger(newQty)) return;
+
+    setEditModal((prev) => ({
+      ...prev,
+      data: {
+        ...prev.data,
+        items: prev.data.items.map((item) => {
+          if (item.productId !== productId) return item;
+
+          const currentSubtotal = Number(item.unitPrice) * newQty;
+          const currentDiscount = Number(item.discountAmount || 0);
+
+          return {
+            ...item,
+            quantity: newQty,
+            discountAmount: currentDiscount > currentSubtotal ? currentSubtotal : currentDiscount
+          };
+        })
+      }
+    }));
+  };
+
+  const updateEditItemTotalDiscount = (productId, value) => {
+    if (value === '') {
+      setEditModal((prev) => ({
+        ...prev,
+        data: {
+          ...prev.data,
+          items: prev.data.items.map((item) =>
+            item.productId === productId ? { ...item, discountAmount: '' } : item
+          )
+        }
+      }));
+      return;
+    }
+
+    const numericValue = Number(value);
+    if (isNaN(numericValue) || numericValue < 0) return;
+
+    setEditModal((prev) => ({
+      ...prev,
+      data: {
+        ...prev.data,
+        items: prev.data.items.map((item) => {
+          if (item.productId !== productId) return item;
+
+          const maxDiscount = Number(item.unitPrice) * Number(item.quantity);
+          if (numericValue > maxDiscount) return item;
+
+          return { ...item, discountAmount: numericValue };
+        })
+      }
+    }));
+  };
+
+  const updateEditItemPerUnitDiscount = (productId, value) => {
+    if (value === '') {
+      setEditModal((prev) => ({
+        ...prev,
+        data: {
+          ...prev.data,
+          items: prev.data.items.map((item) =>
+            item.productId === productId ? { ...item, discountAmount: '' } : item
+          )
+        }
+      }));
+      return;
+    }
+
+    const numericValue = Number(value);
+    if (isNaN(numericValue) || numericValue < 0) return;
+
+    setEditModal((prev) => ({
+      ...prev,
+      data: {
+        ...prev.data,
+        items: prev.data.items.map((item) => {
+          if (item.productId !== productId) return item;
+
+          const totalDiscount = numericValue * Number(item.quantity);
+          const maxDiscount = Number(item.unitPrice) * Number(item.quantity);
+          if (totalDiscount > maxDiscount) return item;
+
+          return { ...item, discountAmount: totalDiscount };
+        })
+      }
+    }));
+  };
+
+  const saveEdit = async () => {
+    const { id, note, items } = editModal.data;
+
+    const invalidItem = items.find((item) => {
+      const qty = Number(item.quantity || 0);
+      const price = Number(item.unitPrice || 0);
+      const discount = Number(item.discountAmount || 0);
+      const subtotal = qty * price;
+
+      return qty <= 0 || price < 0 || discount < 0 || discount > subtotal;
     });
 
-    const data = await parseJsonSafe(res);
-
-    if (res.ok) {
-      toast.success("Savdo to'lov kutilmoqda holatiga o'tdi!");
-      await fetchSales();
-    } else {
-      toast.error(data?.error || "Tasdiqlashda xatolik yuz berdi");
+    if (invalidItem) {
+      return toast.error(
+        `${invalidItem.name} uchun chegirma tovar summasidan katta bo'lishi mumkin emas!`
+      );
     }
-  } catch (err) {
-    console.error('Confirm order error:', err);
-    toast.error("Server xatosi!");
-  } finally {
-    setIsActionLoading(false);
-    setSendToPaymentModal({ isOpen: false, id: null });
-  }
-};
 
-const openEditModal = (sale) => {
-  setEditModal({
-    isOpen: true,
-    data: {
-      id: sale.id,
-      discountAmount: Number(sale.discountAmount || 0),
-      note: sale.note || '',
-      items: (sale.items || []).map((item) => ({
-        productId: item.productId,
-        name: item.product?.name || "Noma'lum tovar",
-        quantity: Number(item.quantity),
-        unitPrice: Number(item.unitPrice),
-        discountAmount: Number(item.discountAmount || 0)
-      }))
+    const subtotal = items.reduce(
+      (sum, item) => sum + Number(item.unitPrice) * Number(item.quantity),
+      0
+    );
+
+    const totalDiscount = items.reduce(
+      (sum, item) => sum + Number(item.discountAmount || 0),
+      0
+    );
+
+    const totalAmount = Math.max(0, subtotal - totalDiscount);
+
+    if (totalAmount < 0) {
+      return toast.error("Yakuniy summa noto'g'ri!");
     }
-  });
-};
 
-const updateEditQty = (productId, newQty) => {
-  if (newQty < 1) return;
+    setIsActionLoading(true);
 
-  setEditModal((prev) => ({
-    ...prev,
-    data: {
-      ...prev.data,
-      items: prev.data.items.map((item) =>
-        item.productId === productId
-          ? { ...item, quantity: newQty }
-          : item
-      )
+    try {
+      const payload = {
+        note: note.trim() || null,
+        items: items.map((item) => ({
+          productId: item.productId,
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+          discountAmount: Number(item.discountAmount || 0)
+        }))
+      };
+
+      const res = await fetch(`${API_URL}/api/orders/${id}`, {
+        method: 'PUT',
+        headers: getJsonAuthHeaders(),
+        body: JSON.stringify(payload)
+      });
+
+      const data = await parseJsonSafe(res);
+
+      if (res.ok) {
+        toast.success("Savdo muvaffaqiyatli tahrirlandi!");
+        setEditModal({ isOpen: false, data: null });
+        await fetchSales();
+      } else {
+        toast.error(data?.error || "Tahrirlashda xatolik yuz berdi");
+      }
+    } catch (err) {
+      console.error('Update order error:', err);
+      toast.error("Server xatosi!");
+    } finally {
+      setIsActionLoading(false);
     }
-  }));
-};
-
-const saveEdit = async () => {
-  const { id, discountAmount, note, items } = editModal.data;
-
-  const subtotal = items.reduce(
-    (sum, item) => sum + (Number(item.unitPrice) * Number(item.quantity)),
-    0
-  );
-
-  const totalAmount = Math.max(0, subtotal - Number(discountAmount || 0));
-
-  if (Number(discountAmount) > 0 && (!note || note.trim() === '')) {
-    return toast.error("Chegirma uchun izoh majburiy!");
-  }
-
-  if (Number(discountAmount) > subtotal) {
-    return toast.error("Chegirma summasi jami summadan ko'p bo'lishi mumkin emas!");
-  }
-
-  setIsActionLoading(true);
-
-  try {
-    const payload = {
-      note: note.trim() || null,
-      discountAmount: Number(discountAmount || 0),
-      items: items.map((item) => ({
-        productId: item.productId,
-        quantity: Number(item.quantity),
-        unitPrice: Number(item.unitPrice),
-        discountAmount: Number(item.discountAmount || 0)
-      }))
-    };
-
-    const res = await fetch(`${API_URL}/api/orders/${id}`, {
-      method: 'PUT',
-      headers: getJsonAuthHeaders(),
-      body: JSON.stringify(payload)
-    });
-
-    const data = await parseJsonSafe(res);
-
-    if (res.ok) {
-      toast.success("Savdo muvaffaqiyatli tahrirlandi!");
-      setEditModal({ isOpen: false, data: null });
-      await fetchSales();
-    } else {
-      toast.error(data?.error || "Tahrirlashda xatolik yuz berdi");
-    }
-  } catch (err) {
-    console.error('Update order error:', err);
-    toast.error("Server xatosi!");
-  } finally {
-    setIsActionLoading(false);
-  }
-};
+  };
 
   const filteredSales = useMemo(() => {
     return sales.filter((sale) => {
@@ -434,47 +522,47 @@ const saveEdit = async () => {
                     </td>
 
                     <td className="p-5">
-                        <div className="flex justify-center gap-2">
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => setDetailsModal({ isOpen: true, sale })}
+                          className="p-2 text-slate-400 bg-slate-100 hover:bg-slate-800 hover:text-white rounded-xl transition-all"
+                          title="Batafsil ko'rish"
+                        >
+                          <Eye size={18} />
+                        </button>
+
+                        {statusUpper === 'DRAFT' && (
+                          <>
                             <button
-                            onClick={() => setDetailsModal({ isOpen: true, sale })}
-                            className="p-2 text-slate-400 bg-slate-100 hover:bg-slate-800 hover:text-white rounded-xl transition-all"
-                            title="Batafsil ko'rish"
+                              disabled={isActionLoading}
+                              onClick={() => openEditModal(sale)}
+                              className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-xl transition-all disabled:opacity-50"
+                              title="Tahrirlash"
                             >
-                            <Eye size={18} />
+                              <Edit2 size={18} />
                             </button>
 
-                            {statusUpper === 'DRAFT' && (
-                            <>
-                                <button
-                                disabled={isActionLoading}
-                                onClick={() => openEditModal(sale)}
-                                className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-xl transition-all disabled:opacity-50"
-                                title="Tahrirlash"
-                                >
-                                <Edit2 size={18} />
-                                </button>
-
-                                <button
-                                disabled={isActionLoading}
-                                onClick={() => setSendToPaymentModal({ isOpen: true, id: sale.id })}
-                                className="p-2 text-amber-600 bg-amber-50 hover:bg-amber-600 hover:text-white rounded-xl transition-all disabled:opacity-50"
-                                title="Tasdiqlash"
-                                >
-                                <CheckCircle size={18} />
-                                </button>
-                            </>
-                            )}
-
                             <button
-                            disabled={isActionLoading}
-                            onClick={() => setDeleteModal({ isOpen: true, sale })}
-                            className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl transition-all disabled:opacity-50"
-                            title="O'chirish"
+                              disabled={isActionLoading}
+                              onClick={() => setSendToPaymentModal({ isOpen: true, id: sale.id })}
+                              className="p-2 text-amber-600 bg-amber-50 hover:bg-amber-600 hover:text-white rounded-xl transition-all disabled:opacity-50"
+                              title="Tasdiqlash"
                             >
-                            <Trash2 size={18} />
+                              <CheckCircle size={18} />
                             </button>
-                        </div>
-                      </td>
+                          </>
+                        )}
+
+                        <button
+                          disabled={isActionLoading}
+                          onClick={() => setDeleteModal({ isOpen: true, sale })}
+                          className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl transition-all disabled:opacity-50"
+                          title="O'chirish"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })
@@ -498,7 +586,7 @@ const saveEdit = async () => {
             }
           }}
         >
-          <div className="bg-white w-full max-w-3xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+          <div className="bg-white w-full max-w-4xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
               <div>
                 <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
@@ -584,6 +672,7 @@ const saveEdit = async () => {
                       <th className="p-4">Tovar Nomi</th>
                       <th className="p-4 text-center">Soni</th>
                       <th className="p-4 text-right">Dona narxi</th>
+                      <th className="p-4 text-right">Chegirma</th>
                       <th className="p-4 text-right">Jami</th>
                     </tr>
                   </thead>
@@ -597,6 +686,9 @@ const saveEdit = async () => {
                         <td className="p-4 text-center">{item.quantity} ta</td>
                         <td className="p-4 text-right text-slate-500 font-medium">
                           {Number(item.unitPrice).toLocaleString()}
+                        </td>
+                        <td className="p-4 text-right text-amber-600">
+                          {Number(item.discountAmount || 0).toLocaleString()}
                         </td>
                         <td className="p-4 text-right text-blue-600">
                           {Number(item.totalAmount).toLocaleString()}
@@ -640,156 +732,223 @@ const saveEdit = async () => {
       )}
 
       {sendToPaymentModal.isOpen && (
-  <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-    <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-10 animate-in zoom-in-95 text-center">
-      <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 bg-amber-50 text-amber-500 rotate-3 shadow-lg shadow-amber-100">
-        <CheckCircle size={40} strokeWidth={2.5} />
-      </div>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-10 animate-in zoom-in-95 text-center">
+            <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 bg-amber-50 text-amber-500 rotate-3 shadow-lg shadow-amber-100">
+              <CheckCircle size={40} strokeWidth={2.5} />
+            </div>
 
-      <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">
-        Tasdiqlaysizmi?
-      </h3>
+            <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">
+              Tasdiqlaysizmi?
+            </h3>
 
-      <p className="text-slate-500 font-medium text-sm mb-8 leading-relaxed">
-        Ushbu amal bajarilgach, savdo <b>"To'lov kutilmoqda"</b> holatiga o'tadi.
-      </p>
+            <p className="text-slate-500 font-medium text-sm mb-8 leading-relaxed">
+              Ushbu amal bajarilgach, savdo <b>"To'lov kutilmoqda"</b> holatiga o'tadi.
+            </p>
 
-      <div className="flex gap-3">
-        <button
-          disabled={isActionLoading}
-          onClick={() => setSendToPaymentModal({ isOpen: false, id: null })}
-          className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs disabled:opacity-50"
-        >
-          Bekor qilish
-        </button>
+            <div className="flex gap-3">
+              <button
+                disabled={isActionLoading}
+                onClick={() => setSendToPaymentModal({ isOpen: false, id: null })}
+                className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs disabled:opacity-50"
+              >
+                Bekor qilish
+              </button>
 
-        <button
-          disabled={isActionLoading}
-          onClick={handleConfirmOrder}
-          className="flex-1 py-4 bg-amber-500 text-white rounded-2xl font-black shadow-xl shadow-amber-200 hover:bg-amber-600 active:scale-95 transition-all uppercase text-xs tracking-widest flex justify-center items-center disabled:opacity-70 disabled:cursor-not-allowed"
-        >
-          {isActionLoading ? <Loader2 size={16} className="animate-spin" /> : 'Tasdiqlash'}
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-{editModal.isOpen && editModal.data && (
-  <div
-    className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4"
-    onClick={(e) => {
-      if (e.target === e.currentTarget && !isActionLoading) {
-        setEditModal({ isOpen: false, data: null });
-      }
-    }}
-  >
-    <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-8 animate-in zoom-in-95">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-          <Edit2 className="text-blue-600" /> Savdoni tahrirlash
-        </h2>
-        <button
-          disabled={isActionLoading}
-          onClick={() => setEditModal({ isOpen: false, data: null })}
-          className="p-2 hover:bg-slate-100 rounded-full text-slate-400 disabled:opacity-50"
-        >
-          <X size={24} />
-        </button>
-      </div>
-
-      <div className="max-h-60 overflow-y-auto mb-6 border border-slate-100 rounded-xl custom-scrollbar">
-        <table className="w-full text-left text-sm whitespace-nowrap">
-          <thead className="bg-slate-50 sticky top-0 text-[10px] text-slate-400 uppercase font-black">
-            <tr>
-              <th className="p-3">Tovar</th>
-              <th className="p-3 text-center">Soni</th>
-              <th className="p-3 text-right">Jami (UZS)</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 font-bold">
-            {editModal.data.items.map((item) => (
-              <tr key={item.productId}>
-                <td className="p-3 text-slate-700">{item.name}</td>
-                <td className="p-3 w-28">
-                  <input
-                    type="number"
-                    min="1"
-                    disabled={isActionLoading}
-                    value={item.quantity}
-                    onChange={(e) => updateEditQty(item.productId, Number(e.target.value))}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-center outline-blue-500 font-black text-blue-600 bg-slate-50 focus:bg-white disabled:opacity-50"
-                  />
-                </td>
-                <td className="p-3 text-right text-slate-600">
-                  {(item.unitPrice * item.quantity).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="grid grid-cols-2 gap-6 mb-8">
-        <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
-            Chegirma (UZS)
-          </label>
-          <input
-            type="number"
-            min="0"
-            disabled={isActionLoading}
-            value={editModal.data.discountAmount}
-            onChange={(e) =>
-              setEditModal((prev) => ({
-                ...prev,
-                data: {
-                  ...prev.data,
-                  discountAmount: e.target.value
-                }
-              }))
-            }
-            className="w-full p-4 bg-amber-50 border border-amber-200 rounded-xl outline-none focus:border-amber-400 font-black text-amber-700 text-lg disabled:opacity-50"
-          />
+              <button
+                disabled={isActionLoading}
+                onClick={handleConfirmOrder}
+                className="flex-1 py-4 bg-amber-500 text-white rounded-2xl font-black shadow-xl shadow-amber-200 hover:bg-amber-600 active:scale-95 transition-all uppercase text-xs tracking-widest flex justify-center items-center disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isActionLoading ? <Loader2 size={16} className="animate-spin" /> : 'Tasdiqlash'}
+              </button>
+            </div>
+          </div>
         </div>
+      )}
 
-        <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
-            Izoh
-          </label>
-          <textarea
-            disabled={isActionLoading}
-            value={editModal.data.note}
-            onChange={(e) =>
-              setEditModal((prev) => ({
-                ...prev,
-                data: {
-                  ...prev.data,
-                  note: e.target.value
-                }
-              }))
+      {editModal.isOpen && editModal.data && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isActionLoading) {
+              setEditModal({ isOpen: false, data: null });
             }
-            className="w-full p-3 border rounded-xl outline-none resize-none h-16 bg-slate-50 border-slate-200 focus:border-blue-500 text-slate-700 disabled:opacity-50"
-          ></textarea>
-        </div>
-      </div>
+          }}
+        >
+          <div className="bg-white w-full max-w-4xl rounded-[32px] shadow-2xl p-8 animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                <Edit2 className="text-blue-600" /> Savdoni tahrirlash
+              </h2>
+              <button
+                disabled={isActionLoading}
+                onClick={() => setEditModal({ isOpen: false, data: null })}
+                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 disabled:opacity-50"
+              >
+                <X size={24} />
+              </button>
+            </div>
 
-      <button
-        disabled={isActionLoading}
-        onClick={saveEdit}
-        className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex justify-center items-center gap-2 uppercase tracking-widest disabled:opacity-70 disabled:cursor-not-allowed"
-      >
-        {isActionLoading ? (
-          <Loader2 size={20} className="animate-spin" />
-        ) : (
-          <>
-            <Edit2 size={20} /> O'zgarishlarni saqlash
-          </>
-        )}
-      </button>
-    </div>
-  </div>
-)}
+            <div className="max-h-[420px] overflow-y-auto mb-6 border border-slate-100 rounded-xl custom-scrollbar">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="bg-slate-50 sticky top-0 text-[10px] text-slate-400 uppercase font-black">
+                  <tr>
+                    <th className="p-3">Tovar</th>
+                    <th className="p-3 text-center">Soni</th>
+                    <th className="p-3 text-right">Dona narxi</th>
+                    <th className="p-3 text-center">1 dona chegirma</th>
+                    <th className="p-3 text-center">Jami chegirma</th>
+                    <th className="p-3 text-right">Jami</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-bold">
+                  {editModal.data.items.map((item) => {
+                    const subtotal = Number(item.unitPrice) * Number(item.quantity);
+                    const total = Math.max(0, subtotal - Number(item.discountAmount || 0));
+                    const perUnitDiscount = item.quantity
+                      ? Math.floor(Number(item.discountAmount || 0) / Number(item.quantity))
+                      : 0;
+
+                    return (
+                      <tr key={item.productId}>
+                        <td className="p-3 text-slate-700">{item.name}</td>
+
+                        <td className="p-3 w-28">
+                          <input
+                            type="number"
+                            min="1"
+                            disabled={isActionLoading}
+                            value={item.quantity}
+                            onChange={(e) =>
+                              updateEditQty(item.productId, Number(e.target.value))
+                            }
+                            className="w-full p-2 border border-slate-200 rounded-lg text-center outline-blue-500 font-black text-blue-600 bg-slate-50 focus:bg-white disabled:opacity-50"
+                          />
+                        </td>
+
+                        <td className="p-3 text-right text-slate-600">
+                          {Number(item.unitPrice).toLocaleString()}
+                        </td>
+
+                        <td className="p-3 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            disabled={isActionLoading}
+                            value={perUnitDiscount}
+                            onChange={(e) =>
+                              updateEditItemPerUnitDiscount(item.productId, e.target.value)
+                            }
+                            className="w-24 p-2 border border-amber-200 rounded-lg text-center outline-amber-500 font-black text-amber-600 bg-amber-50 disabled:opacity-50"
+                          />
+                        </td>
+
+                        <td className="p-3 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            disabled={isActionLoading}
+                            value={item.discountAmount}
+                            onChange={(e) =>
+                              updateEditItemTotalDiscount(item.productId, e.target.value)
+                            }
+                            className="w-24 p-2 border border-amber-200 rounded-lg text-center outline-amber-500 font-black text-amber-600 bg-amber-50 disabled:opacity-50"
+                          />
+                        </td>
+
+                        <td className="p-3 text-right text-slate-600">
+                          {total.toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                  Izoh
+                </label>
+                <textarea
+                  disabled={isActionLoading}
+                  value={editModal.data.note}
+                  onChange={(e) =>
+                    setEditModal((prev) => ({
+                      ...prev,
+                      data: {
+                        ...prev.data,
+                        note: e.target.value
+                      }
+                    }))
+                  }
+                  className="w-full p-4 border rounded-xl outline-none resize-none h-28 bg-slate-50 border-slate-200 focus:border-blue-500 text-slate-700 disabled:opacity-50"
+                ></textarea>
+              </div>
+
+              <div className="bg-slate-900 rounded-3xl p-6 text-white">
+                <div className="flex justify-between text-sm mb-3 text-slate-400">
+                  <span>Umumiy summa:</span>
+                  <span className="font-bold">
+                    {editModal.data.items
+                      .reduce(
+                        (sum, item) => sum + Number(item.unitPrice) * Number(item.quantity),
+                        0
+                      )
+                      .toLocaleString()} UZS
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-sm mb-3 text-amber-400">
+                  <span>Jami chegirma:</span>
+                  <span className="font-bold">
+                    {editModal.data.items
+                      .reduce((sum, item) => sum + Number(item.discountAmount || 0), 0)
+                      .toLocaleString()} UZS
+                  </span>
+                </div>
+
+                <div className="border-t border-slate-700 pt-4 mt-4">
+                  <div className="flex justify-between items-end">
+                    <span className="text-[11px] uppercase tracking-widest text-emerald-400">
+                      Yakuniy summa
+                    </span>
+                    <span className="text-3xl font-black text-emerald-400">
+                      {Math.max(
+                        0,
+                        editModal.data.items.reduce(
+                          (sum, item) =>
+                            sum +
+                            Number(item.unitPrice) * Number(item.quantity) -
+                            Number(item.discountAmount || 0),
+                          0
+                        )
+                      ).toLocaleString()}{' '}
+                      <span className="text-sm font-normal">UZS</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              disabled={isActionLoading}
+              onClick={saveEdit}
+              className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex justify-center items-center gap-2 uppercase tracking-widest disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isActionLoading ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <>
+                  <Edit2 size={20} /> O'zgarishlarni saqlash
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {deleteModal.isOpen && deleteModal.sale && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">

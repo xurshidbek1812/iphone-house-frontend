@@ -390,7 +390,7 @@ const Sklad = () => {
       return;
     }
 
-    const qrValue = `ID:${printProduct.customId}|BATCH:${selectedBatch.id}|NAME:${printProduct.name}`;
+    const qrValue = `ID:${printProduct.customId}|BATCH:${selectedBatch.id}`;
     const qrCodeSvg = ReactDOMServer.renderToString(
       <QRCode value={qrValue} size={160} level="H" />
     );
@@ -400,12 +400,16 @@ const Sklad = () => {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
+    const safePrice = Number(
+      selectedBatch.salePrice || printProduct.salePrice || 0
+    ).toLocaleString('uz-UZ');
+
     const html = `
     <!DOCTYPE html>
     <html>
       <head>
         <meta charset="UTF-8" />
-        <title>QR Label</title>
+        <title>Universal Yorliq</title>
         <style>
           * {
             box-sizing: border-box;
@@ -434,93 +438,106 @@ const Sklad = () => {
           .page {
             width: 58mm;
             height: 40mm;
-            padding: 2mm;
+            padding: 0;
+            margin: 0;
           }
 
-          .card {
-            width: 100%;
-            height: 100%;
-            border: 0.35mm solid #bdbdbd;
-            border-radius: 3.5mm;
-            background: #fff;
+          .label-card {
+            width: 58mm;
+            height: 40mm;
             padding: 2.2mm 2.4mm;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
+            border: 0.2mm solid #d1d5db;
+            background: #fff;
+          }
+
+          .header-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 2mm;
+            min-height: 8.5mm;
+          }
+
+          .product-name {
+            flex: 1;
+            min-width: 0;
+            font-size: 3.1mm;
+            line-height: 1.15;
+            font-weight: 900;
+            color: #111827;
+            text-transform: uppercase;
+            word-break: break-word;
+            max-height: 8mm;
             overflow: hidden;
           }
 
-          .name {
-            width: 100%;
-            text-align: center;
-            font-size: 3.15mm;
-            line-height: 1.15;
-            font-weight: 500;
+          .product-id {
+            flex-shrink: 0;
+            font-size: 2.2mm;
+            line-height: 1;
+            font-weight: 800;
             color: #4b5563;
-            min-height: 8.5mm;
-            max-height: 8.5mm;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            word-break: break-word;
+            white-space: nowrap;
+            margin-top: 0.4mm;
           }
 
           .divider {
             width: 100%;
             height: 0.35mm;
-            background: #9f9f9f;
-            margin-top: 0.8mm;
-            margin-bottom: 1.8mm;
-            flex-shrink: 0;
+            background: #d1d5db;
+            margin: 1.6mm 0 1.8mm 0;
           }
 
-          .bottom {
+          .bottom-row {
             flex: 1;
             display: flex;
-            align-items: flex-start;
+            align-items: stretch;
             justify-content: space-between;
             gap: 2mm;
-            overflow: hidden;
+            min-height: 0;
           }
 
-          .left {
+          .price-box {
             flex: 1;
             min-width: 0;
             display: flex;
             flex-direction: column;
-            justify-content: flex-start;
-            padding-top: 1.2mm;
+            justify-content: center;
           }
 
-          .product-id {
-            font-size: 4.6mm;
+          .price-label {
+            font-size: 2.2mm;
             line-height: 1;
-            font-weight: 800;
-            color: #000;
-            letter-spacing: 0.02mm;
-            margin-bottom: 0.9mm;
-            white-space: nowrap;
-          }
-
-          .batch {
-            font-size: 2.25mm;
-            line-height: 1;
-            font-weight: 600;
+            font-weight: 700;
             color: #6b7280;
-            white-space: nowrap;
+            text-transform: uppercase;
+            margin-bottom: 1.2mm;
           }
 
-          .qr {
-            width: 18mm;
-            height: 18mm;
-            flex-shrink: 0;
+          .price-value {
+            font-size: 5.4mm;
+            line-height: 1.05;
+            font-weight: 900;
+            color: #111827;
+            word-break: break-word;
+          }
+
+          .qr-box {
+            width: 16.5mm;
+            min-width: 16.5mm;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-top: 0.2mm;
+            border: 0.25mm solid #d1d5db;
+            border-radius: 1.2mm;
+            padding: 0.8mm;
+            background: #fff;
           }
 
-          .qr svg {
+          .qr-box svg {
             width: 100%;
             height: 100%;
             display: block;
@@ -531,6 +548,17 @@ const Sklad = () => {
           }
 
           @media screen {
+            body {
+              background: #f3f4f6;
+              min-height: 100vh;
+              padding: 10mm;
+              width: auto;
+            }
+
+            .label-card {
+              box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            }
+
             .print-note {
               display: block;
               position: fixed;
@@ -548,18 +576,21 @@ const Sklad = () => {
       </head>
       <body>
         <div class="page">
-          <div class="card">
-            <div class="name">${safeName}</div>
+          <div class="label-card">
+            <div class="header-row">
+              <div class="product-name">${safeName}</div>
+              <div class="product-id">ID: ${printProduct.customId}</div>
+            </div>
 
             <div class="divider"></div>
 
-            <div class="bottom">
-              <div class="left">
-                <div class="product-id">${printProduct.customId}</div>
-                <div class="batch">Partiya #${selectedBatch.id}</div>
+            <div class="bottom-row">
+              <div class="price-box">
+                <div class="price-label">Narxi</div>
+                <div class="price-value">${safePrice} so'm</div>
               </div>
 
-              <div class="qr">
+              <div class="qr-box">
                 ${qrCodeSvg}
               </div>
             </div>
@@ -580,7 +611,7 @@ const Sklad = () => {
         </script>
       </body>
     </html>
-  `;
+    `;
 
     printWindow.document.open();
     printWindow.document.write(html);

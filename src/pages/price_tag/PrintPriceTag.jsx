@@ -9,12 +9,14 @@ import {
   Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import QRCode from 'qrcode';
 import { apiFetch } from '../../utils/api';
 
 const PrintPriceTag = () => {
   const [allProducts, setAllProducts] = useState([]);
   const [printList, setPrintList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [printing, setPrinting] = useState(false);
 
   const [searchId, setSearchId] = useState('');
   const [searchName, setSearchName] = useState('');
@@ -104,7 +106,8 @@ const PrintPriceTag = () => {
 
     const newItem = {
       ...product,
-      discountPrice: Number(product.salePrice) || 0,
+      customId: product.customId ?? '',
+      labelPrice: Number(product.salePrice) || 0,
       copies: 1,
       isChecked: true
     };
@@ -153,189 +156,245 @@ const PrintPriceTag = () => {
     setPrintList([]);
   };
 
-  const handlePrint = () => {
+  const buildQrValue = (item) => {
+    return `ID:${item.customId}`;
+  };
+
+  const escapeHtml = (value) => {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  };
+
+  const handlePrint = async () => {
     const itemsToPrint = printList.filter((i) => i.isChecked);
 
     if (itemsToPrint.length === 0) {
       return toast.error("Chop etish uchun tovar tanlanmagan!");
     }
 
-    const printWindow = window.open('', '_blank');
+    setPrinting(true);
 
-    if (!printWindow) {
-      return toast.error(
-        "Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!"
-      );
-    }
+    try {
+      const printWindow = window.open('', '_blank');
 
-    const content = itemsToPrint
-      .map((item) => {
-        let itemsHtml = '';
+      if (!printWindow) {
+        setPrinting(false);
+        return toast.error(
+          "Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!"
+        );
+      }
 
-        for (let i = 0; i < (Number(item.copies) || 1); i++) {
-          const safeName = String(item.name || '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
+      let content = '';
 
-          itemsHtml += `
+      for (const item of itemsToPrint) {
+        const copies = Math.max(1, Number(item.copies) || 1);
+        const qrValue = buildQrValue(item);
+        const qrDataUrl = await QRCode.toDataURL(qrValue, {
+          width: 220,
+          margin: 0
+        });
+
+        for (let i = 0; i < copies; i++) {
+          const safeName = escapeHtml(item.name || '');
+          const safeCustomId = escapeHtml(item.customId ?? '-');
+          const safePrice = Number(item.labelPrice || 0).toLocaleString('uz-UZ');
+
+          content += `
             <div class="label-card">
-              <div class="brand">IPHONE HOUSE</div>
-
-              <div class="product-name">
-                ${safeName}
+              <div class="header-row">
+                <div class="product-name">${safeName}</div>
+                <div class="product-id">ID: ${safeCustomId}</div>
               </div>
 
               <div class="divider"></div>
 
-              <div class="price-block">
-                <div class="price-label">Narxi:</div>
-                <div class="price-value">${Number(item.discountPrice || 0).toLocaleString('uz-UZ')} so'm</div>
+              <div class="bottom-row">
+                <div class="price-box">
+                  <div class="price-label">Narxi</div>
+                  <div class="price-value">${safePrice} so'm</div>
+                </div>
+
+                <div class="qr-box">
+                  <img src="${qrDataUrl}" alt="QR" />
+                </div>
               </div>
             </div>
           `;
         }
+      }
 
-        return itemsHtml;
-      })
-      .join('');
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Universal Yorliqlar</title>
+            <style>
+              * {
+                  box-sizing: border-box;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Narx Yorliqlari</title>
-          <style>
-            * {
-              box-sizing: border-box;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
+                html, body {
+                  margin: 0;
+                  padding: 0;
+                  background: #fff;
+                  font-family: Arial, Helvetica, sans-serif;
+                }
 
-            html, body {
-              margin: 0;
-              padding: 0;
-              background: #fff;
-              font-family: Arial, Helvetica, sans-serif;
-            }
+                @page {
+                  size: 58mm 40mm;
+                  margin: 0;
+                }
 
-            @page {
-              size: 58mm 40mm;
-              margin: 0;
-            }
+                body {
+                  width: 58mm;
+                  padding: 0;
+                  margin: 0;
+                  display: flex;
+                  flex-wrap: wrap;
+                  align-items: flex-start;
+                  justify-content: flex-start;
+                }
 
-            body {
-              width: 58mm;
-              min-height: 40mm;
-              padding: 2mm;
-              display: flex;
-              flex-wrap: wrap;
-              gap: 0;
-            }
+                .label-card {
+                  width: 58mm;
+                  height: 40mm;
+                  padding: 2.2mm 2.4mm;
+                  overflow: hidden;
+                  page-break-inside: avoid;
+                  break-inside: avoid;
+                  display: flex;
+                  flex-direction: column;
+                  border: 0.2mm solid #d1d5db;
+                  background: #fff;
+                }
 
-            .label-card {
-              width: 54mm;
-              height: 36mm;
-              border: 1px solid #cfcfcf;
-              border-radius: 3.2mm;
-              background: #fff;
-              padding: 2.4mm 2.8mm 2.4mm 2.8mm;
-              overflow: hidden;
-              page-break-inside: avoid;
-              display: flex;
-              flex-direction: column;
-              justify-content: flex-start;
-            }
+                .header-row {
+                  display: flex;
+                  align-items: flex-start;
+                  justify-content: space-between;
+                  gap: 2mm;
+                  min-height: 8.5mm;
+                }
 
-            .brand {
-              text-align: center;
-              font-size: 3.8mm;
-              line-height: 1;
-              font-weight: 900;
-              letter-spacing: 0.15mm;
-              color: #111827;
-              text-transform: uppercase;
-              margin-bottom: 1.5mm;
-            }
+                .product-name {
+                  flex: 1;
+                  min-width: 0;
+                  font-size: 3.1mm;
+                  line-height: 1.15;
+                  font-weight: 900;
+                  color: #111827;
+                  text-transform: uppercase;
+                  word-break: break-word;
+                  max-height: 8mm;
+                  overflow: hidden;
+                }
 
-            .product-name {
-              text-align: center;
-              font-size: 2.2mm;
-              line-height: 1.18;
-              font-weight: 700;
-              color: #374151;
-              min-height: 8.5mm;
-              max-height: 8.5mm;
-              overflow: hidden;
-              word-break: break-word;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              text-transform: uppercase;
-              padding: 0 1mm;
-            }
+                .product-id {
+                  flex-shrink: 0;
+                  font-size: 2.2mm;
+                  line-height: 1;
+                  font-weight: 800;
+                  color: #4b5563;
+                  white-space: nowrap;
+                  margin-top: 0.4mm;
+                }
 
-            .divider {
-              width: 100%;
-              height: 0;
-              border-top: 0.4mm solid #8f8f8f;
-              margin: 1.4mm 0 1.8mm 0;
-            }
+                .divider {
+                  width: 100%;
+                  height: 0.35mm;
+                  background: #d1d5db;
+                  margin: 1.6mm 0 1.8mm 0;
+                }
 
-            .price-block {
-              text-align: center;
-              margin-top: 0.3mm;
-              display: flex;
-              flex-direction: column;
-              justify-content: center;
-              flex: 1;
-            }
+                .bottom-row {
+                  flex: 1;
+                  display: flex;
+                  align-items: stretch;
+                  justify-content: space-between;
+                  gap: 2mm;
+                  min-height: 0;
+                }
 
-            .price-label {
-              font-size: 2.3mm;
-              line-height: 1;
-              font-weight: 700;
-              color: #6b7280;
-              margin-bottom: 1mm;
-            }
+                .price-box {
+                  flex: 1;
+                  min-width: 0;
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: center;
+                }
 
-            .price-value {
-              font-size: 3.9mm;
-              line-height: 1.08;
-              font-weight: 900;
-              color: #111827;
-              word-break: break-word;
-              padding: 0 1mm;
-            }
+                .price-label {
+                  font-size: 2.2mm;
+                  line-height: 1;
+                  font-weight: 700;
+                  color: #6b7280;
+                  text-transform: uppercase;
+                  margin-bottom: 1.2mm;
+                }
 
-            @media screen {
-              body {
-                background: #f3f4f6;
-                min-height: 100vh;
-                align-items: flex-start;
-                justify-content: flex-start;
-                padding: 10mm;
-                gap: 4mm;
+                .price-value {
+                  font-size: 5.4mm;
+                  line-height: 1.05;
+                  font-weight: 900;
+                  color: #111827;
+                  word-break: break-word;
+                }
+
+                .qr-box {
+                  width: 16.5mm;
+                  min-width: 16.5mm;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  border: 0.25mm solid #d1d5db;
+                  border-radius: 1.2mm;
+                  padding: 0.8mm;
+                  background: #fff;
+                }
+
+                .qr-box img {
+                  width: 100%;
+                  height: auto;
+                  display: block;
+                }
+
+                @media screen {
+                  body {
+                    background: #f3f4f6;
+                    min-height: 100vh;
+                    padding: 10mm;
+                    gap: 4mm;
+                    width: auto;
+                  }
+
+                  .label-card {
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+                  }
+                }
+            </style>
+          </head>
+          <body>
+            ${content}
+            <script>
+              window.onload = function() {
+                window.print();
+                window.close();
               }
+            </script>
+          </body>
+        </html>
+      `);
 
-              .label-card {
-                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-              }
-            }
-          </style>
-        </head>
-        <body>
-          ${content}
-          <script>
-            window.onload = function() {
-              window.print();
-              window.close();
-            }
-          </script>
-        </body>
-      </html>
-    `);
-
-    printWindow.document.close();
+      printWindow.document.close();
+    } catch (err) {
+      console.error(err);
+      toast.error("Chop etishda xatolik yuz berdi");
+    } finally {
+      setPrinting(false);
+    }
   };
 
   const checkedCount = printList.filter((i) => i.isChecked).length;
@@ -343,7 +402,7 @@ const PrintPriceTag = () => {
   return (
     <div className="p-6 h-[calc(100vh-80px)] flex flex-col relative animate-in fade-in duration-300">
       <h1 className="text-2xl font-black text-slate-800 mb-6 tracking-tight">
-        Narx yorlig'ini chop etish
+        Universal yorliq chop etish
       </h1>
 
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 search-container relative z-40">
@@ -448,7 +507,7 @@ const PrintPriceTag = () => {
                   className="p-4 w-12 text-center cursor-pointer hover:text-blue-500 transition-colors"
                   onClick={toggleAll}
                 >
-                  {printList.length > 0 && printList.every((i) => i.isChecked) ? (
+                  {printList.length > 0 && printList.every((item) => item.isChecked) ? (
                     <CheckSquare size={18} className="text-blue-600 mx-auto" />
                   ) : (
                     <Square size={18} className="mx-auto" />
@@ -497,7 +556,7 @@ const PrintPriceTag = () => {
                       )}
                     </td>
 
-                    <td className="p-4 text-center font-mono text-slate-400">
+                    <td className="p-4 text-center font-mono text-slate-500">
                       #{item.customId ?? '-'}
                     </td>
 
@@ -510,9 +569,9 @@ const PrintPriceTag = () => {
                         type="number"
                         min="0"
                         className="w-full p-2.5 border border-slate-200 rounded-lg text-right font-black outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
-                        value={item.discountPrice}
+                        value={item.labelPrice}
                         onChange={(e) =>
-                          updateItem(item.id, 'discountPrice', Number(e.target.value))
+                          updateItem(item.id, 'labelPrice', Number(e.target.value))
                         }
                       />
                     </td>
@@ -566,19 +625,22 @@ const PrintPriceTag = () => {
             </button>
           </div>
 
-          <div className="flex gap-4 items-center">
-            <button
-              onClick={handlePrint}
-              disabled={checkedCount === 0}
-              className={`px-8 py-3 rounded-xl font-black flex items-center gap-2 shadow-lg transition-all ${
-                checkedCount > 0
-                  ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 active:scale-95'
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-              }`}
-            >
-              <Printer size={20} strokeWidth={2.5} /> Chop etish ({checkedCount})
-            </button>
-          </div>
+          <button
+            onClick={handlePrint}
+            disabled={checkedCount === 0 || printing}
+            className={`px-8 py-3 rounded-xl font-black flex items-center gap-2 shadow-lg transition-all ${
+              checkedCount > 0 && !printing
+                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 active:scale-95'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+            }`}
+          >
+            {printing ? (
+              <Loader2 size={20} className="animate-spin" />
+            ) : (
+              <Printer size={20} strokeWidth={2.5} />
+            )}
+            Chop etish ({checkedCount})
+          </button>
         </div>
       </div>
     </div>

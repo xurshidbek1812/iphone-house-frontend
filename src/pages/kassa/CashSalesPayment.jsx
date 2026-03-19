@@ -9,7 +9,8 @@ import {
   User,
   Receipt,
   X,
-  Loader2
+  Loader2,
+  BadgePercent
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../../utils/api';
@@ -333,11 +334,9 @@ const CashSalesPayment = () => {
     ? `${selectedSale.customer.lastName || ''} ${selectedSale.customer.firstName || ''}`
     : selectedSale.otherName || "Noma'lum";
 
-  const phone =
-    selectedSale.customer?.phones?.[0]?.phone ||
-    selectedSale.otherPhone ||
-    selectedSale.customer?.phone ||
-    'Kiritilmagan';
+  const subtotalAmount = Number(selectedSale.subtotal || 0);
+  const discountAmount = Number(selectedSale.discountAmount || 0);
+  const totalAmount = Number(selectedSale.totalAmount || 0);
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 animate-in fade-in slide-in-from-right-8 duration-300">
@@ -368,7 +367,7 @@ const CashSalesPayment = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 mt-8 space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
             <div className="flex items-center gap-2 text-blue-500 mb-4">
               <Calendar size={18} />
@@ -394,36 +393,14 @@ const CashSalesPayment = () => {
           </div>
 
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-            <div className="flex items-center gap-2 text-emerald-500 mb-4">
-              <DollarSign size={18} />
-              <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                Summasi
-              </span>
-            </div>
-            <div className="text-xl font-black text-emerald-600 mb-1">
-              {Number(selectedSale.totalAmount).toLocaleString()}{' '}
-              <span className="text-sm text-slate-400">UZS</span>
-            </div>
-            <div className="text-xs font-bold text-slate-400">
-              Tovarlar:{' '}
-              <span className="text-slate-700">
-                {(selectedSale.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0)} dona
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
             <div className="flex items-center gap-2 text-purple-500 mb-4">
               <User size={18} />
               <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
                 Mijoz
               </span>
             </div>
-            <div className="text-sm font-black text-slate-800 mb-1 uppercase truncate" title={customerName}>
+            <div className="text-sm font-black text-slate-800 uppercase truncate" title={customerName}>
               {customerName}
-            </div>
-            <div className="text-[11px] font-bold text-slate-400">
-              Telefon: <span className="text-slate-600 font-mono">{phone}</span>
             </div>
           </div>
         </div>
@@ -500,9 +477,23 @@ const CashSalesPayment = () => {
         </div>
 
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+          <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
             <h2 className="text-lg font-black text-slate-800">Savdo tovarlari</h2>
+            <div className="flex items-center gap-6 text-sm font-bold">
+              <span className="text-slate-500">
+                Umumiy summa:{' '}
+                <span className="text-slate-800">{subtotalAmount.toLocaleString()} UZS</span>
+              </span>
+              <span className="text-amber-600 flex items-center gap-1">
+                <BadgePercent size={14} />
+                Chegirma: {discountAmount.toLocaleString()} UZS
+              </span>
+              <span className="text-emerald-600">
+                Yakuniy: {totalAmount.toLocaleString()} UZS
+              </span>
+            </div>
           </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left whitespace-nowrap">
               <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
@@ -511,7 +502,8 @@ const CashSalesPayment = () => {
                   <th className="p-4">Nomi</th>
                   <th className="p-4 text-center">Miqdori</th>
                   <th className="p-4 text-right">Narxi</th>
-                  <th className="p-4 text-right pr-6">Summasi</th>
+                  <th className="p-4 text-right">Chegirma</th>
+                  <th className="p-4 text-right pr-6">Yakuniy summa</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-sm font-bold text-slate-700">
@@ -526,6 +518,9 @@ const CashSalesPayment = () => {
                     </td>
                     <td className="p-4 text-right">
                       {Number(item.unitPrice || 0).toLocaleString()} UZS
+                    </td>
+                    <td className="p-4 text-right text-amber-600">
+                      {Number(item.discountAmount || 0).toLocaleString()} UZS
                     </td>
                     <td className="p-4 text-right pr-6 text-slate-800">
                       {Number(item.totalAmount || 0).toLocaleString()} UZS

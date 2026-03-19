@@ -136,6 +136,7 @@ const Expenses = lazy(() => import('./pages/Expenses'));
 const StaffList = lazy(() => import('./pages/settings/StaffList'));
 const ProfileSettings = lazy(() => import('./pages/settings/ProfileSettings'));
 const CategorySettings = lazy(() => import('./pages/settings/CategorySettings'));
+const ExpenseCategorySettings = lazy(() => import('./pages/settings/ExpenseCategorySettings'));
 
 const ComingSoon = lazy(() => import('./pages/System/ComingSoon'));
 
@@ -363,6 +364,14 @@ function App() {
                   element={
                     <PermissionRoute permission={PERMISSIONS.CATEGORY_MANAGE}>
                       <CategorySettings />
+                    </PermissionRoute>
+                  }
+                />
+                <Route
+                  path="/sozlamalar/xarajat-moddalari"
+                  element={
+                    <PermissionRoute permission={PERMISSIONS.EXPENSE_CATEGORY_MANAGE}>
+                      <ExpenseCategorySettings />
                     </PermissionRoute>
                   }
                 />

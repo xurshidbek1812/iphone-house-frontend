@@ -11,12 +11,13 @@ import {
   Printer,
   Loader2,
   Send,
-  Lock
+  Lock,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import ReactDOMServer from 'react-dom/server';
-import QRCode from 'react-qr-code';
+import QRCode from 'qrcode';
 import { hasPermission, PERMISSIONS } from '../../utils/permissions';
 import { apiFetch } from '../../utils/api';
 
@@ -29,6 +30,7 @@ const SupplierIncomeList = () => {
   const [viewInvoice, setViewInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const userRole = (sessionStorage.getItem('userRole') || '').toLowerCase() || 'admin';
   const isDirector = userRole === 'director';
@@ -49,6 +51,7 @@ const SupplierIncomeList = () => {
 
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [invoiceToPrint, setInvoiceToPrint] = useState(null);
+  const [printItems, setPrintItems] = useState([]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -197,60 +200,286 @@ const SupplierIncomeList = () => {
     }
   };
 
-  const executePrintQR = (item, invoice) => {
-    const printWindow = window.open('', '_blank');
+  const buildQrValue = (item, invoiceId) => {
+    return `ID:${item.customId ?? '-'}|INV:${invoiceId}`;
+  };
 
-    if (!printWindow) {
-      return toast.error(
-        "Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!"
-      );
-    }
-
-    const qrValue = `ID:${item.customId}|INV:${invoice.id}|NAME:${item.name}`;
-    const qrCodeSvg = ReactDOMServer.renderToString(
-      <QRCode value={qrValue} size={80} level="H" />
-    );
-    const bgUrl = `data:image/svg+xml;base64,${btoa(qrCodeSvg)}`;
-
-    const safeName = String(item.name || '')
+  const escapeHtml = (value) => {
+    return String(value || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
+  };
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>QR Kod</title>
-          <style>
-            @page { size: auto; margin: 0mm; }
-            body { margin: 10mm; font-family: Arial, sans-serif; display: flex; justify-content: center; }
-            .label-card { width: 320px; border: 2px solid #000; padding: 20px; border-radius: 12px; background: white; }
-            .header { font-size: 16px; font-weight: 800; margin-bottom: 8px; text-transform: uppercase; }
-            .divider { border-bottom: 2px solid #000; margin-bottom: 12px; }
-            .content { display: flex; justify-content: space-between; align-items: flex-end; }
-            .product-id { font-size: 34px; font-weight: 900; }
-            .batch-tag { font-size: 11px; background: #000; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-top: 5px; display: inline-block; }
-            .qr-code-bg { width: 85px; height: 85px; background-image: url('${bgUrl}'); background-size: contain; background-repeat: no-repeat; }
-          </style>
-        </head>
-        <body>
-          <div class="label-card">
-            <div class="header">${safeName}</div>
-            <div class="divider"></div>
-            <div class="content">
-              <div>
-                <div class="product-id">${item.customId ?? '-'}</div>
-                <div class="batch-tag">KIRIM: #${invoice.invoiceNumber}</div>
+  const openPrintModal = (invoice) => {
+    const items = Array.isArray(invoice?.items) ? invoice.items : [];
+
+    setInvoiceToPrint(invoice);
+    setPrintItems(
+      items.map((item, index) => ({
+        rowId: `${invoice.id}-${item.customId ?? item.id ?? index}`,
+        id: item.id ?? index,
+        customId: item.customId ?? '',
+        name: item.name || "Noma'lum tovar",
+        labelPrice: Number(item.salePrice || 0),
+        copies: 1,
+        isChecked: true
+      }))
+    );
+    setPrintModalOpen(true);
+  };
+
+  const updatePrintItem = (rowId, field, value) => {
+    setPrintItems((prev) =>
+      prev.map((item) => (item.rowId === rowId ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const togglePrintItem = (rowId) => {
+    setPrintItems((prev) =>
+      prev.map((item) =>
+        item.rowId === rowId ? { ...item, isChecked: !item.isChecked } : item
+      )
+    );
+  };
+
+  const toggleAllPrintItems = () => {
+    const allChecked =
+      printItems.length > 0 && printItems.every((item) => item.isChecked);
+
+    setPrintItems((prev) =>
+      prev.map((item) => ({ ...item, isChecked: !allChecked }))
+    );
+  };
+
+  const handlePrintAllLabels = async () => {
+    const itemsToPrint = printItems.filter((item) => item.isChecked);
+
+    if (itemsToPrint.length === 0) {
+      return toast.error("Chop etish uchun mahsulot tanlanmagan!");
+    }
+
+    setIsPrinting(true);
+
+    try {
+      const printWindow = window.open('', '_blank');
+
+      if (!printWindow) {
+        setIsPrinting(false);
+        return toast.error(
+          "Brauzer yangi oyna ochishga ruxsat bermadi. Iltimos, popup'larni yoqing!"
+        );
+      }
+
+      let content = '';
+
+      for (const item of itemsToPrint) {
+        const copies = Math.max(1, Number(item.copies) || 1);
+        const qrValue = buildQrValue(item, invoiceToPrint.id);
+        const qrDataUrl = await QRCode.toDataURL(qrValue, {
+          width: 220,
+          margin: 0
+        });
+
+        for (let i = 0; i < copies; i++) {
+          const safeName = escapeHtml(item.name || '');
+          const safeCustomId = escapeHtml(item.customId ?? '-');
+          const safePrice = Number(item.labelPrice || 0).toLocaleString('uz-UZ');
+
+          content += `
+            <div class="label-card">
+              <div class="header-row">
+                <div class="product-name">${safeName}</div>
+                <div class="product-id">ID: ${safeCustomId}</div>
               </div>
-              <div class="qr-code-bg"></div>
-            </div>
-          </div>
-          <script>window.onload = function() { window.print(); window.close(); }</script>
-        </body>
-      </html>
-    `);
 
-    printWindow.document.close();
+              <div class="divider"></div>
+
+              <div class="bottom-row">
+                <div class="price-box">
+                  <div class="price-label">Narxi</div>
+                  <div class="price-value">${safePrice} so'm</div>
+                </div>
+
+                <div class="qr-box">
+                  <img src="${qrDataUrl}" alt="QR" />
+                </div>
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Universal Yorliqlar</title>
+            <style>
+              * {
+                box-sizing: border-box;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+
+              html, body {
+                margin: 0;
+                padding: 0;
+                background: #fff;
+                font-family: Arial, Helvetica, sans-serif;
+              }
+
+              @page {
+                size: 58mm 40mm;
+                margin: 0;
+              }
+
+              body {
+                width: 58mm;
+                padding: 0;
+                margin: 0;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: flex-start;
+                justify-content: flex-start;
+              }
+
+              .label-card {
+                width: 58mm;
+                height: 40mm;
+                padding: 2.2mm 2.4mm;
+                overflow: hidden;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                display: flex;
+                flex-direction: column;
+                border: 0.2mm solid #d1d5db;
+                background: #fff;
+              }
+
+              .header-row {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 2mm;
+                min-height: 8.5mm;
+              }
+
+              .product-name {
+                flex: 1;
+                min-width: 0;
+                font-size: 3.1mm;
+                line-height: 1.15;
+                font-weight: 900;
+                color: #111827;
+                text-transform: uppercase;
+                word-break: break-word;
+                max-height: 8mm;
+                overflow: hidden;
+              }
+
+              .product-id {
+                flex-shrink: 0;
+                font-size: 2.2mm;
+                line-height: 1;
+                font-weight: 800;
+                color: #4b5563;
+                white-space: nowrap;
+                margin-top: 0.4mm;
+              }
+
+              .divider {
+                width: 100%;
+                height: 0.35mm;
+                background: #d1d5db;
+                margin: 1.6mm 0 1.8mm 0;
+              }
+
+              .bottom-row {
+                flex: 1;
+                display: flex;
+                align-items: stretch;
+                justify-content: space-between;
+                gap: 2mm;
+                min-height: 0;
+              }
+
+              .price-box {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+              }
+
+              .price-label {
+                font-size: 2.2mm;
+                line-height: 1;
+                font-weight: 700;
+                color: #6b7280;
+                text-transform: uppercase;
+                margin-bottom: 1.2mm;
+              }
+
+              .price-value {
+                font-size: 5.4mm;
+                line-height: 1.05;
+                font-weight: 900;
+                color: #111827;
+                word-break: break-word;
+              }
+
+              .qr-box {
+                width: 16.5mm;
+                min-width: 16.5mm;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border: 0.25mm solid #d1d5db;
+                border-radius: 1.2mm;
+                padding: 0.8mm;
+                background: #fff;
+              }
+
+              .qr-box img {
+                width: 100%;
+                height: auto;
+                display: block;
+              }
+
+              @media screen {
+                body {
+                  background: #f3f4f6;
+                  min-height: 100vh;
+                  padding: 10mm;
+                  gap: 4mm;
+                  width: auto;
+                }
+
+                .label-card {
+                  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+                }
+              }
+            </style>
+          </head>
+          <body>
+            ${content}
+            <script>
+              window.onload = function() {
+                window.print();
+                window.close();
+              }
+            </script>
+          </body>
+        </html>
+      `);
+
+      printWindow.document.close();
+    } catch (err) {
+      console.error(err);
+      toast.error("Chop etishda xatolik yuz berdi");
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const handleAction = (action, id) => {
@@ -262,8 +491,8 @@ const SupplierIncomeList = () => {
     }
 
     if (action === 'print') {
-      setInvoiceToPrint(invoices.find((i) => i.id === id) || null);
-      setPrintModalOpen(true);
+      const invoice = invoices.find((i) => i.id === id) || null;
+      if (invoice) openPrintModal(invoice);
       return;
     }
 
@@ -297,6 +526,8 @@ const SupplierIncomeList = () => {
       return supplierMatch || invoiceNumMatch;
     });
   }, [invoices, searchTerm]);
+
+  const checkedPrintCount = printItems.filter((item) => item.isChecked).length;
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen animate-in fade-in duration-300">
@@ -469,11 +700,11 @@ const SupplierIncomeList = () => {
 
       {printModalOpen && invoiceToPrint && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-2xl rounded-[24px] shadow-2xl p-6 animate-in zoom-in-95">
+          <div className="bg-white w-full max-w-4xl rounded-[24px] shadow-2xl p-6 animate-in zoom-in-95">
             <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 mb-1">
-                  <Printer className="text-blue-600" /> QR Kod chiqarish
+                  <Printer className="text-blue-600" /> Yorliq chop etish
                 </h2>
                 <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
                   Faktura: #{invoiceToPrint.invoiceNumber} | Holat: {invoiceToPrint.status}
@@ -481,39 +712,88 @@ const SupplierIncomeList = () => {
               </div>
 
               <button
-                onClick={() => setPrintModalOpen(false)}
+                onClick={() => {
+                  setPrintModalOpen(false);
+                  setInvoiceToPrint(null);
+                  setPrintItems([]);
+                }}
                 className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
               >
                 <X size={24} />
               </button>
             </div>
 
-            <div className="max-h-[50vh] overflow-y-auto mb-6 custom-scrollbar border border-slate-100 rounded-xl">
+            <div className="max-h-[55vh] overflow-y-auto mb-6 custom-scrollbar border border-slate-100 rounded-xl">
               <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 sticky top-0 text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100">
                   <tr>
+                    <th
+                      className="p-4 w-12 text-center cursor-pointer hover:text-blue-500 transition-colors"
+                      onClick={toggleAllPrintItems}
+                    >
+                      {printItems.length > 0 && printItems.every((item) => item.isChecked) ? (
+                        <CheckSquare size={18} className="text-blue-600 mx-auto" />
+                      ) : (
+                        <Square size={18} className="mx-auto" />
+                      )}
+                    </th>
                     <th className="p-4">Kod</th>
                     <th className="p-4">Nomi</th>
-                    <th className="p-4 text-center">Soni</th>
-                    <th className="p-4 text-center">Amal</th>
+                    <th className="p-4 text-right">Narxi</th>
+                    <th className="p-4 text-center">Nusxa</th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-50 font-bold text-slate-700">
-                  {(Array.isArray(invoiceToPrint.items) ? invoiceToPrint.items : []).map((item, i) => (
-                    <tr key={i} className="hover:bg-slate-50 transition-colors">
+                  {printItems.map((item) => (
+                    <tr
+                      key={item.rowId}
+                      className={item.isChecked ? 'bg-blue-50/30' : 'hover:bg-slate-50'}
+                    >
+                      <td
+                        className="p-4 text-center cursor-pointer"
+                        onClick={() => togglePrintItem(item.rowId)}
+                      >
+                        {item.isChecked ? (
+                          <CheckSquare size={18} className="text-blue-600 mx-auto" />
+                        ) : (
+                          <Square size={18} className="text-slate-300 mx-auto" />
+                        )}
+                      </td>
+
                       <td className="p-4 font-mono text-blue-600">#{item.customId ?? '-'}</td>
                       <td className="p-4">{item.name}</td>
-                      <td className="p-4 text-center text-slate-500">
-                        {Number(item.count || 0)}
+
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.labelPrice}
+                          onChange={(e) =>
+                            updatePrintItem(
+                              item.rowId,
+                              'labelPrice',
+                              Number(e.target.value || 0)
+                            )
+                          }
+                          className="w-full p-2.5 border border-slate-200 rounded-lg text-right font-black outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+                        />
                       </td>
-                      <td className="p-4 text-center">
-                        <button
-                          onClick={() => executePrintQR(item, invoiceToPrint)}
-                          className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                        >
-                          QR Chiqarish
-                        </button>
+
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.copies}
+                          onChange={(e) =>
+                            updatePrintItem(
+                              item.rowId,
+                              'copies',
+                              Math.max(1, Number(e.target.value || 1))
+                            )
+                          }
+                          className="w-full p-2.5 border border-slate-200 rounded-lg text-center font-black outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+                        />
                       </td>
                     </tr>
                   ))}
@@ -521,13 +801,40 @@ const SupplierIncomeList = () => {
               </table>
             </div>
 
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={() => setPrintModalOpen(false)}
-                className="px-8 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors"
-              >
-                Yopish
-              </button>
+            <div className="flex justify-between items-center gap-4 pt-2">
+              <div className="text-sm font-bold text-slate-500">
+                Tanlangan: <span className="text-slate-800">{checkedPrintCount} ta</span>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setPrintModalOpen(false);
+                    setInvoiceToPrint(null);
+                    setPrintItems([]);
+                  }}
+                  className="px-8 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Yopish
+                </button>
+
+                <button
+                  onClick={handlePrintAllLabels}
+                  disabled={checkedPrintCount === 0 || isPrinting}
+                  className={`px-8 py-3 rounded-xl font-black flex items-center gap-2 shadow-lg transition-all ${
+                    checkedPrintCount > 0 && !isPrinting
+                      ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                  }`}
+                >
+                  {isPrinting ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <Printer size={18} />
+                  )}
+                  Chop etish ({checkedPrintCount})
+                </button>
+              </div>
             </div>
           </div>
         </div>
