@@ -126,7 +126,7 @@ const CashSales = () => {
         if (!signal?.aborted) setIsLoading(false);
       }
     },
-    [token, getAuthHeaders, page, appliedSearch, filterStatus, limit]
+    [token, getAuthHeaders, appliedSearch, filterStatus, limit]
   );
 
   useEffect(() => {

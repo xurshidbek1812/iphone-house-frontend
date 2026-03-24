@@ -120,7 +120,7 @@ const SupplierIncomeList = () => {
         setLoading(false);
       }
     },
-    [page, appliedSearch, statusFilter, limit]
+    [appliedSearch, statusFilter, limit]
   );
 
   useEffect(() => {
