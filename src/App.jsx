@@ -317,7 +317,7 @@ function App() {
                 {/* SHARTNOMA */}
                 <Route path="/shartnoma" element={<ContractList />} />
                 <Route path="/shartnoma/buyurtmalar" element={<ComingSoon />} />
-                <Route path="/shartnoma/chegirmalar" element={<ComingSoon />} />
+                <Route path="/shartnoma/chegirmalar" element={<Discounts />} />
                 <Route path="/shartnoma/qaytarish" element={<ComingSoon />} />
                 <Route path="/shartnoma/yopilgan" element={<ComingSoon />} />
                 <Route path="/shartnoma/qoshish" element={<AddContract />} />

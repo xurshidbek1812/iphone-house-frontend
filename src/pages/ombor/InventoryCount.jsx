@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { QrCode, RotateCcw, CheckCircle, AlertTriangle, Search, Play, StopCircle, CheckSquare, Square, Layers, Plus, Minus, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { apiFetch } from '../../utils/api'; 
+import { apiFetch } from '../../utils/api';
+import { parseQrCode } from '../../utils/qrParser'; 
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
 
@@ -162,21 +163,16 @@ const InventoryCount = () => {
   const processCode = useCallback((code) => {
     if (!code) return;
 
-    let searchKey = code.trim();
-    let batchKey = '';
-    let invoiceKey = '';
+    const parsed = parseQrCode(code);
 
-    if (code.includes('|')) {
-        const parts = code.split('|');
+    const searchKey = parsed.id;
+    let batchKey = parsed.batchId;
+    const invoiceKey = parsed.invoiceId;
 
-        searchKey =
-        parts.find((p) => p.startsWith('ID:'))?.replace('ID:', '').trim() || searchKey;
-
-        batchKey =
-        parts.find((p) => p.startsWith('BATCH:'))?.replace('BATCH:', '').trim() || '';
-
-        invoiceKey =
-        parts.find((p) => p.startsWith('INV:'))?.replace('INV:', '').trim() || '';
+    if (!parsed.isValid || !searchKey) {
+        toast.error("QR kod noto'g'ri yoki o'qilmadi!");
+        playBeep('error');
+        return;
     }
 
     // 1) Tasdiqlangan batch QR bo'lsa
@@ -307,13 +303,19 @@ const InventoryCount = () => {
   const handleScan = (e) => {
     if (e.key === 'Enter') {
         e.preventDefault();
+
         if (!isCounting) {
-            toast.error("Avval sanoqni boshlang!");
-            setScanInput('');
-            return;
+        toast.error("Avval sanoqni boshlang!");
+        setScanInput('');
+        return;
         }
+
         processCode(scanInput);
-        setScanInput(''); 
+        setScanInput('');
+
+        setTimeout(() => {
+        inputRef.current?.focus();
+        }, 0);
     }
   };
 

@@ -20,6 +20,7 @@ import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
 import { hasPermission, PERMISSIONS } from '../../utils/permissions';
 import { apiFetch } from '../../utils/api';
+import { buildInvoiceQr } from '../../utils/qrBuilder';
 
 const SupplierIncomeList = () => {
   const navigate = useNavigate();
@@ -201,7 +202,7 @@ const SupplierIncomeList = () => {
   };
 
   const buildQrValue = (item, invoiceId) => {
-    return `ID:${item.customId ?? '-'}|INV:${invoiceId}`;
+    return buildInvoiceQr(item.customId ?? '-', invoiceId);
   };
 
   const escapeHtml = (value) => {

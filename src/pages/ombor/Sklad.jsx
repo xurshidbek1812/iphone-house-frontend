@@ -24,6 +24,7 @@ import toast from 'react-hot-toast';
 import usePermission from '../../hooks/usePermission';
 import { PERMISSIONS } from '../../utils/permissions';
 import { apiFetch } from '../../utils/api';
+import { buildBatchQr } from '../../utils/qrBuilder';
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('uz-UZ');
 
@@ -390,7 +391,7 @@ const Sklad = () => {
       return;
     }
 
-    const qrValue = `ID:${printProduct.customId}|BATCH:${selectedBatch.id}`;
+    const qrValue = buildBatchQr(printProduct.customId, selectedBatch.id);
     const qrCodeSvg = ReactDOMServer.renderToString(
       <QRCode value={qrValue} size={160} level="H" />
     );

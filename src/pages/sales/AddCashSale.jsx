@@ -15,11 +15,10 @@ import {
   Clock,
   MessageSquare,
   Loader2,
-  Layers,
-  BadgePercent
+  Layers
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { apiFetch } from '../../utils/api';
+import { parseQrCode } from '../../utils/qrParser';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -374,29 +373,70 @@ const AddCashSale = () => {
     return () => controller.abort();
   }, [fetchData]);
 
+  const addBatchToCart = (batch) => {
+    if (Number(batch.quantity) <= 0) {
+      return toast.error("Ushbu partiyada qoldiq yo'q!");
+    }
+
+    const existingItem = saleData.items.find((i) => i.batchId === batch.batchId);
+
+    if (existingItem) {
+      if (Number(existingItem.qty || 0) + 1 > Number(batch.quantity)) {
+        return toast.error(`Ushbu partiyada faqat ${batch.quantity} ta qolgan!`);
+      }
+
+      setSaleData((prev) => ({
+        ...prev,
+        items: prev.items.map((item) =>
+          item.batchId === batch.batchId
+            ? { ...item, qty: Number(item.qty || 0) + 1 }
+            : item
+        )
+      }));
+
+      toast.success('Soni oshirildi');
+    } else {
+      setSaleData((prev) => ({
+        ...prev,
+        items: [
+          ...prev.items,
+          {
+            ...batch,
+            qty: 1,
+            discount: 0,
+            scanType: 'BATCH'
+          }
+        ]
+      }));
+
+      toast.success("Savatga qo'shildi");
+    }
+
+    setTimeout(() => {
+      barcodeInputRef.current?.focus();
+    }, 0);
+  };
+
   const handleBarcodeScan = (e) => {
     if (e.key === 'Enter' && e.target.value.trim() !== '') {
       const code = e.target.value.trim();
+      const parsed = parseQrCode(code);
 
-      let searchKey = code;
-      let batchKey = '';
-      let invoiceKey = '';
+      const searchKey = parsed.id;
+      const batchKey = parsed.batchId;
+      const invoiceKey = parsed.invoiceId;
 
-      if (code.includes('|')) {
-        const parts = code.split('|');
-
-        searchKey =
-          parts.find((p) => p.startsWith('ID:'))?.replace('ID:', '').trim() || searchKey;
-
-        batchKey =
-          parts.find((p) => p.startsWith('BATCH:'))?.replace('BATCH:', '').trim() || '';
-
-        invoiceKey =
-          parts.find((p) => p.startsWith('INV:'))?.replace('INV:', '').trim() || '';
+      if (!parsed.isValid || !searchKey) {
+        toast.error("QR kod noto'g'ri yoki o'qilmadi!");
+        e.target.value = '';
+        barcodeInputRef.current?.focus();
+        return;
       }
 
       if (invoiceKey) {
-        toast.error("Bu QR kod hali tasdiqlanmagan kirimga tegishli. U faqat sanoq bo'limida ishlatiladi.");
+        toast.error(
+          "Bu QR kod hali tasdiqlanmagan kirimga tegishli. U faqat sanoq bo'limida ishlatiladi."
+        );
         e.target.value = '';
         barcodeInputRef.current?.focus();
         return;
@@ -404,7 +444,9 @@ const AddCashSale = () => {
 
       if (batchKey) {
         const foundBatch = allBatches.find(
-          (b) => String(b.batchId) === batchKey && String(b.customId) === searchKey
+          (b) =>
+            String(b.batchId) === String(batchKey) &&
+            String(b.customId) === String(searchKey)
         );
 
         if (foundBatch) {
@@ -432,36 +474,6 @@ const AddCashSale = () => {
   const finalAmount = useMemo(() => {
     return saleData.items.reduce((sum, item) => sum + getItemTotal(item), 0);
   }, [saleData.items, getItemTotal]);
-
-  const addBatchToCart = (batch) => {
-    if (Number(batch.quantity) <= 0) {
-      return toast.error("Ushbu partiyada qoldiq yo'q!");
-    }
-
-    const existingItem = saleData.items.find((i) => i.batchId === batch.batchId);
-
-    if (existingItem) {
-      if (Number(existingItem.qty || 0) + 1 > Number(batch.quantity)) {
-        return toast.error(`Ushbu partiyada faqat ${batch.quantity} ta qolgan!`);
-      }
-
-      setSaleData((prev) => ({
-        ...prev,
-        items: prev.items.map((item) =>
-          item.batchId === batch.batchId ? { ...item, qty: Number(item.qty || 0) + 1 } : item
-        )
-      }));
-
-      toast.success('Soni oshirildi');
-    } else {
-      setSaleData((prev) => ({
-        ...prev,
-        items: [...prev.items, { ...batch, qty: 1, discount: 0 }]
-      }));
-
-      toast.success("Savatga qo'shildi");
-    }
-  };
 
   const removeItem = (batchId) => {
     setSaleData((prev) => ({
@@ -519,6 +531,16 @@ const AddCashSale = () => {
       );
     }
 
+    const invalidBatchItem = saleData.items.find(
+      (item) => !item.batchId || String(item.batchId).startsWith('old-')
+    );
+
+    if (invalidBatchItem) {
+      return toast.error(
+        `${invalidBatchItem.name} savdoda faqat tasdiqlangan partiya bilan ishlatilishi kerak!`
+      );
+    }
+
     setIsLoading(true);
 
     try {
@@ -531,7 +553,12 @@ const AddCashSale = () => {
           productId: item.id,
           quantity: Number(item.qty),
           unitPrice: Number(item.salePrice),
-          discountAmount: Number(item.discount || 0)
+          discountAmount: Number(item.discount || 0),
+          batchId:
+            String(item.batchId || '').startsWith('old-')
+              ? null
+              : Number(item.batchId),
+          scanType: item.scanType || 'BATCH'
         }))
       };
 
@@ -780,9 +807,12 @@ const AddCashSale = () => {
                   <p className="text-gray-400 text-[10px] font-black uppercase mb-1 tracking-widest">
                     Yakuniy summa
                   </p>
-                  <p className="text-3xl font-black text-emerald-400 tracking-tight">
+                  <p
+                    className="text-3xl lg:text-5xl font-black text-emerald-400 tracking-tighter truncate"
+                    title={`${finalAmount.toLocaleString()} UZS`}
+                  >
                     {finalAmount.toLocaleString()}{' '}
-                    <span className="text-sm font-bold text-emerald-600/50">UZS</span>
+                    <span className="text-lg font-bold text-emerald-600">UZS</span>
                   </p>
                 </div>
               </div>
