@@ -1,75 +1,35 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ShoppingCart,
-  Receipt,
-  CreditCard,
+  Loader2,
+  TrendingUp,
   Package,
-  Loader2
-} from 'lucide-react';
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip
-} from 'recharts';
-import { apiFetch } from '../../utils/api';
+  BarChart3,
+  ChevronRight,
+  Receipt,
+  Banknote
+} from "lucide-react";
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
+const API_URL = import.meta.env.VITE_API_URL;
 
-const formatMoney = (value) => Number(value || 0).toLocaleString('uz-UZ');
-
-const formatLargeNumber = (num) => {
-  const value = Number(num || 0);
-  if (value >= 1000000000) return `${(value / 1000000000).toFixed(2)} mlrd`;
-  if (value >= 1000000) return `${(value / 1000000).toFixed(2)} mln`;
-  return value.toLocaleString('uz-UZ');
-};
-
-const SalesStatCard = ({ title, value, unit = 'UZS', icon, color = 'blue' }) => {
-  const colorMap = {
-    blue: 'bg-blue-50 text-blue-600 border-blue-100',
-    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-    violet: 'bg-violet-50 text-violet-600 border-violet-100',
-    amber: 'bg-amber-50 text-amber-600 border-amber-100'
-  };
-
-  return (
-    <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
-      <div className="flex items-center justify-between mb-6">
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${colorMap[color]}`}>
-          {icon}
-        </div>
-        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg border ${colorMap[color]}`}>
-          {unit}
-        </span>
-      </div>
-
-      <div>
-        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">
-          {title}
-        </p>
-        <h3 className="text-2xl font-black text-slate-800">
-          {typeof value === 'number' ? formatLargeNumber(value) : value}
-        </h3>
-      </div>
-    </div>
-  );
-};
+const formatMoney = (value) => Number(value || 0).toLocaleString("uz-UZ");
 
 const SalesTab = () => {
-  const token = sessionStorage.getItem('token');
+  const token = sessionStorage.getItem("token");
 
   const [loading, setLoading] = useState(true);
-  const [dashboard, setDashboard] = useState(null);
+  const [today, setToday] = useState({
+    salesAmount: 0,
+    contractsAmount: 0,
+    paymentsAmount: 0,
+    contractsCount: 0
+  });
+  const [chart, setChart] = useState([]);
+  const [topProducts, setTopProducts] = useState([]);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const load = async () => {
       try {
-        setLoading(true);
-
         const res = await fetch(`${API_URL}/api/dashboard`, {
           headers: {
             Authorization: `Bearer ${token}`
@@ -78,164 +38,374 @@ const SalesTab = () => {
 
         const data = await res.json();
 
-        if (!res.ok) {
-          throw new Error(data?.error || 'Dashboard yuklanmadi');
-        }
-
-        setDashboard(data);
-      } catch (error) {
-        console.error('SalesTab xatosi:', error);
+        setToday(data?.today || {});
+        setChart(Array.isArray(data?.chart) ? data.chart : []);
+        setTopProducts(Array.isArray(data?.topProducts) ? data.topProducts : []);
+      } catch (err) {
+        console.error(err);
       } finally {
         setLoading(false);
       }
     };
 
-    if (token) {
-      fetchData();
-    }
+    load();
   }, [token]);
 
-  const chartData = useMemo(() => {
-    if (!dashboard?.chart) return [];
-    return dashboard.chart.map((item) => ({
-      name: item.name,
-      savdo: Number(item.sales || 0),
-      shartnoma: Number(item.contracts || 0),
-      tolov: Number(item.payments || 0)
-    }));
-  }, [dashboard]);
+  const analytics = useMemo(() => {
+    const totalWeeklySales = chart.reduce(
+      (sum, item) => sum + Number(item.sales || 0),
+      0
+    );
 
-  const topProducts = useMemo(() => {
-    return dashboard?.topProducts || [];
-  }, [dashboard]);
+    const totalWeeklyContracts = chart.reduce(
+      (sum, item) => sum + Number(item.contracts || 0),
+      0
+    );
+
+    const totalWeeklyPayments = chart.reduce(
+      (sum, item) => sum + Number(item.payments || 0),
+      0
+    );
+
+    const maxChartValue = Math.max(
+      ...chart.map((item) =>
+        Math.max(
+          Number(item.sales || 0),
+          Number(item.contracts || 0),
+          Number(item.payments || 0)
+        )
+      ),
+      0
+    );
+
+    const topProductsTotal = topProducts.reduce(
+      (sum, item) => sum + Number(item.quantity || 0),
+      0
+    );
+
+    const topProductMax = Math.max(
+      ...topProducts.map((item) => Number(item.quantity || 0)),
+      0
+    );
+
+    return {
+      totalWeeklySales,
+      totalWeeklyContracts,
+      totalWeeklyPayments,
+      maxChartValue,
+      topProductsTotal,
+      topProductMax
+    };
+  }, [chart, topProducts]);
 
   if (loading) {
     return (
-      <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm h-[420px] flex items-center justify-center">
-        <Loader2 className="animate-spin text-blue-600" size={38} />
+      <div className="flex justify-center py-24">
+        <Loader2 className="animate-spin text-blue-500" size={40} />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <SalesStatCard
-          title="Bugungi savdo"
-          value={Number(dashboard?.today?.salesAmount || 0)}
-          icon={<ShoppingCart size={22} strokeWidth={2.5} />}
-          color="blue"
-        />
-        <SalesStatCard
-          title="Bugungi shartnomalar"
-          value={Number(dashboard?.today?.contractsAmount || 0)}
-          icon={<Receipt size={22} strokeWidth={2.5} />}
-          color="violet"
-        />
-        <SalesStatCard
-          title="Bugungi to'lovlar"
-          value={Number(dashboard?.today?.paymentsAmount || 0)}
-          icon={<CreditCard size={22} strokeWidth={2.5} />}
-          color="emerald"
-        />
-        <SalesStatCard
-          title="Mahsulot turi"
-          value={Number(dashboard?.stats?.productCount || 0)}
-          unit="ta"
-          icon={<Package size={22} strokeWidth={2.5} />}
-          color="amber"
-        />
-      </div>
+      <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm p-7 overflow-hidden relative">
+        <div className="absolute -right-8 -top-8 w-36 h-36 rounded-full bg-blue-50 blur-2xl opacity-80" />
+        <div className="absolute -left-8 -bottom-8 w-32 h-32 rounded-full bg-cyan-50 blur-2xl opacity-70" />
 
-      <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm p-7">
-        <div className="mb-6">
-          <h2 className="text-xl font-black text-slate-800">Savdo tahlili</h2>
-          <p className="text-slate-400 font-medium mt-1">So‘nggi 7 kunlik savdo, shartnoma va to‘lovlar</p>
-        </div>
+        <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center shadow-sm">
+                <ShoppingCart size={24} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-800">Savdo</h2>
+                <p className="text-sm text-slate-400 font-medium">
+                  Savdo, to‘lov va faol mahsulotlar statistikasi
+                </p>
+              </div>
+            </div>
 
-        <div className="h-[360px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="salesBlue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.22} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="salesViolet" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="salesGreen" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-
-              <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#E2E8F0" />
-              <XAxis
-                dataKey="name"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: '#64748B', fontSize: 12, fontWeight: 700 }}
-                dy={10}
-              />
-              <YAxis
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: '#94A3B8', fontSize: 11 }}
-                tickFormatter={(value) => `${Math.round(value / 1000)}k`}
-              />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: '16px',
-                  border: '1px solid #E2E8F0',
-                  boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
-                  padding: '12px'
-                }}
-              />
-
-              <Area type="monotone" dataKey="savdo" stroke="#3b82f6" strokeWidth={3} fill="url(#salesBlue)" />
-              <Area type="monotone" dataKey="shartnoma" stroke="#8b5cf6" strokeWidth={3} fill="url(#salesViolet)" />
-              <Area type="monotone" dataKey="tolov" stroke="#10b981" strokeWidth={3} fill="url(#salesGreen)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm p-7">
-        <div className="mb-6">
-          <h2 className="text-xl font-black text-slate-800">Top mahsulotlar</h2>
-          <p className="text-slate-400 font-medium mt-1">Eng ko‘p sotilgan mahsulotlar</p>
-        </div>
-
-        {topProducts.length === 0 ? (
-          <div className="text-slate-400 font-bold text-sm">Hozircha ma’lumot yo‘q</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50 text-[11px] uppercase text-slate-400">
-                <tr>
-                  <th className="p-4 font-black">Kod</th>
-                  <th className="p-4 font-black">Nomi</th>
-                  <th className="p-4 font-black text-center">Soni</th>
-                  <th className="p-4 font-black text-right">Summasi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
-                {topProducts.map((item, index) => (
-                  <tr key={index} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4 text-slate-500">{item.customId || '-'}</td>
-                    <td className="p-4">{item.name}</td>
-                    <td className="p-4 text-center text-blue-600">{item.quantity}</td>
-                    <td className="p-4 text-right text-emerald-600">
-                      {formatMoney(item.totalAmount)} UZS
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="text-sm text-slate-500 font-medium">
+              Bugungi to‘lovlar:{" "}
+              <span className="font-black text-slate-800">
+                {formatMoney(today.paymentsAmount)} UZS
+              </span>
+            </div>
           </div>
-        )}
+
+          <div className="px-5 py-3 rounded-2xl bg-slate-900 text-white shadow-lg">
+            <div className="text-[11px] uppercase tracking-widest text-slate-400 font-black mb-1">
+              Bugungi savdo
+            </div>
+            <div className="text-2xl font-black tracking-tight text-blue-400">
+              {formatMoney(today.salesAmount)}{" "}
+              <span className="text-sm text-slate-400">UZS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center">
+              <TrendingUp size={22} />
+            </div>
+            <span className="text-[10px] uppercase tracking-widest font-black text-slate-400">
+              Bugun
+            </span>
+          </div>
+          <div className="text-2xl font-black text-slate-800 tracking-tight">
+            {formatMoney(today.salesAmount)}
+          </div>
+          <div className="text-sm text-slate-400 font-medium mt-1">
+            Bugungi yakunlangan savdolar summasi
+          </div>
+        </div>
+
+        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-500 flex items-center justify-center">
+              <Banknote size={22} />
+            </div>
+            <span className="text-[10px] uppercase tracking-widest font-black text-slate-400">
+              To‘lov
+            </span>
+          </div>
+          <div className="text-2xl font-black text-slate-800 tracking-tight">
+            {formatMoney(today.paymentsAmount)}
+          </div>
+          <div className="text-sm text-slate-400 font-medium mt-1">
+            Bugun tushgan real to‘lovlar
+          </div>
+        </div>
+
+        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center">
+              <Receipt size={22} />
+            </div>
+            <span className="text-[10px] uppercase tracking-widest font-black text-slate-400">
+              Nasiya
+            </span>
+          </div>
+          <div className="text-2xl font-black text-slate-800 tracking-tight">
+            {formatMoney(today.contractsAmount)}
+          </div>
+          <div className="text-sm text-slate-400 font-medium mt-1">
+            Bugungi nasiya shartnomalari summasi
+          </div>
+        </div>
+
+        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center">
+              <Package size={22} />
+            </div>
+            <span className="text-[10px] uppercase tracking-widest font-black text-slate-400">
+              Shartnomalar
+            </span>
+          </div>
+          <div className="text-2xl font-black text-slate-800 tracking-tight">
+            {today.contractsCount || 0}
+          </div>
+          <div className="text-sm text-slate-400 font-medium mt-1">
+            Bugun ochilgan shartnomalar soni
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+        <div className="xl:col-span-3 bg-white rounded-[28px] border border-slate-200 shadow-sm p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <BarChart3 className="text-blue-500" size={22} />
+            <h3 className="text-lg font-black text-slate-800">So‘nggi 7 kunlik harakat</h3>
+          </div>
+
+          {chart.length === 0 ? (
+            <div className="text-slate-400 text-sm">Grafik uchun ma’lumot topilmadi</div>
+          ) : (
+            <div className="space-y-5">
+              {chart.map((item) => {
+                const sales = Number(item.sales || 0);
+                const contracts = Number(item.contracts || 0);
+                const payments = Number(item.payments || 0);
+
+                const salesPercent = analytics.maxChartValue
+                  ? Math.max(6, (sales / analytics.maxChartValue) * 100)
+                  : 0;
+
+                const contractsPercent = analytics.maxChartValue
+                  ? Math.max(6, (contracts / analytics.maxChartValue) * 100)
+                  : 0;
+
+                const paymentsPercent = analytics.maxChartValue
+                  ? Math.max(6, (payments / analytics.maxChartValue) * 100)
+                  : 0;
+
+                return (
+                  <div key={item.name} className="space-y-2">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="w-16 shrink-0 text-sm font-black text-slate-700">
+                        {item.name}
+                      </div>
+
+                      <div className="flex-1 space-y-2">
+                        <div>
+                          <div className="flex justify-between text-[11px] font-bold text-slate-400 mb-1">
+                            <span>Savdo</span>
+                            <span>{formatMoney(sales)}</span>
+                          </div>
+                          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-blue-400 to-cyan-500"
+                              style={{ width: `${salesPercent}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between text-[11px] font-bold text-slate-400 mb-1">
+                            <span>Nasiya</span>
+                            <span>{formatMoney(contracts)}</span>
+                          </div>
+                          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-violet-500"
+                              style={{ width: `${contractsPercent}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between text-[11px] font-bold text-slate-400 mb-1">
+                            <span>To‘lov</span>
+                            <span>{formatMoney(payments)}</span>
+                          </div>
+                          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-green-500"
+                              style={{ width: `${paymentsPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="xl:col-span-2 bg-white rounded-[28px] border border-slate-200 shadow-sm p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Package className="text-amber-500" size={22} />
+            <h3 className="text-lg font-black text-slate-800">Top mahsulotlar</h3>
+          </div>
+
+          {topProducts.length === 0 ? (
+            <div className="text-slate-400 text-sm">Sotuv bo‘yicha mahsulot topilmadi</div>
+          ) : (
+            <div className="space-y-4">
+              {topProducts.slice(0, 6).map((item, index) => {
+                const qty = Number(item.quantity || 0);
+                const percent = analytics.topProductMax
+                  ? Math.max(8, (qty / analytics.topProductMax) * 100)
+                  : 0;
+
+                return (
+                  <div key={`${item.productId}-${index}`} className="space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 text-[11px] font-black flex items-center justify-center">
+                            {index + 1}
+                          </span>
+                          <p className="font-bold text-slate-700 leading-snug break-words">
+                            {item.name}
+                          </p>
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-bold mt-1 ml-8">
+                          ID: #{item.customId ?? "-"}
+                        </p>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <p className="font-black text-slate-800">{qty} ta</p>
+                        <p className="text-[11px] text-slate-400 font-bold">
+                          {formatMoney(item.totalAmount)} UZS
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500"
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-black text-slate-800">Haftalik ko‘rsatkichlar</h3>
+            <p className="text-sm text-slate-400 font-medium">
+              Oxirgi 7 kun bo‘yicha umumiy natijalar
+            </p>
+          </div>
+
+          <div className="text-sm font-bold text-slate-400 flex items-center gap-1">
+            Ko‘proq
+            <ChevronRight size={16} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-0">
+          <div className="p-6 border-b md:border-b-0 md:border-r border-slate-100">
+            <div className="text-[11px] uppercase tracking-widest text-slate-400 font-black mb-2">
+              Haftalik savdo
+            </div>
+            <div className="text-3xl font-black text-blue-600 tracking-tight">
+              {formatMoney(analytics.totalWeeklySales)}
+            </div>
+            <div className="text-sm text-slate-400 font-medium mt-1">
+              Yakunlangan savdolar bo‘yicha umumiy summa
+            </div>
+          </div>
+
+          <div className="p-6 border-b md:border-b-0 md:border-r border-slate-100">
+            <div className="text-[11px] uppercase tracking-widest text-slate-400 font-black mb-2">
+              Haftalik nasiya
+            </div>
+            <div className="text-3xl font-black text-indigo-600 tracking-tight">
+              {formatMoney(analytics.totalWeeklyContracts)}
+            </div>
+            <div className="text-sm text-slate-400 font-medium mt-1">
+              Ochilgan shartnomalar bo‘yicha umumiy summa
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="text-[11px] uppercase tracking-widest text-slate-400 font-black mb-2">
+              Haftalik to‘lov
+            </div>
+            <div className="text-3xl font-black text-emerald-600 tracking-tight">
+              {formatMoney(analytics.totalWeeklyPayments)}
+            </div>
+            <div className="text-sm text-slate-400 font-medium mt-1">
+              Tushgan to‘lovlar bo‘yicha umumiy summa
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

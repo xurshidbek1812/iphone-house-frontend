@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Search,
   Plus,
@@ -13,7 +13,9 @@ import {
   Send,
   Lock,
   CheckSquare,
-  Square
+  Square,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -28,10 +30,17 @@ const SupplierIncomeList = () => {
   const [activeMenu, setActiveMenu] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [viewInvoice, setViewInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const userRole = (sessionStorage.getItem('userRole') || '').toLowerCase() || 'admin';
   const isDirector = userRole === 'director';
@@ -85,23 +94,38 @@ const SupplierIncomeList = () => {
     };
   }, [printModalOpen, viewInvoice, confirmModal.isOpen]);
 
-  const fetchInvoices = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await apiFetch('/api/invoices');
-      setInvoices(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Invoices fetch error:', error);
-      toast.error(error.message || "Fakturalarni yuklab bo'lmadi");
-      setInvoices([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchInvoices = useCallback(
+    async (targetPage = page, targetSearch = appliedSearch, targetStatus = statusFilter) => {
+      try {
+        setLoading(true);
+
+        const query = new URLSearchParams({
+          page: String(targetPage),
+          limit: String(limit),
+          search: targetSearch,
+          status: targetStatus
+        });
+
+        const data = await apiFetch(`/api/invoices?${query.toString()}`);
+
+        setInvoices(Array.isArray(data?.items) ? data.items : []);
+        setPage(Number(data?.page || 1));
+        setTotalPages(Number(data?.totalPages || 1));
+        setTotal(Number(data?.total || 0));
+      } catch (error) {
+        console.error('Invoices fetch error:', error);
+        toast.error(error.message || "Fakturalarni yuklab bo'lmadi");
+        setInvoices([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [page, appliedSearch, statusFilter, limit]
+  );
 
   useEffect(() => {
-    fetchInvoices();
-  }, [fetchInvoices]);
+    fetchInvoices(1, appliedSearch, statusFilter);
+  }, [fetchInvoices, appliedSearch, statusFilter]);
 
   const toggleMenu = (e, id) => {
     e.stopPropagation();
@@ -111,6 +135,16 @@ const SupplierIncomeList = () => {
   const formatDate = (d) => {
     if (!d) return '';
     return new Date(d).toLocaleDateString('uz-UZ');
+  };
+
+  const handleSearchSubmit = () => {
+    setAppliedSearch(searchTerm.trim());
+  };
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSearchSubmit();
+    }
   };
 
   const executeApprove = async (id) => {
@@ -127,7 +161,7 @@ const SupplierIncomeList = () => {
       });
 
       toast.success("Muvaffaqiyatli tasdiqlandi va omborga tushdi!");
-      await fetchInvoices();
+      await fetchInvoices(page, appliedSearch, statusFilter);
 
       if (viewInvoice) setViewInvoice(null);
     } catch (err) {
@@ -167,7 +201,10 @@ const SupplierIncomeList = () => {
       });
 
       toast.success(data?.message || "Faktura o'chirildi!");
-      await fetchInvoices();
+
+      const nextPage = invoices.length === 1 && page > 1 ? page - 1 : page;
+      await fetchInvoices(nextPage, appliedSearch, statusFilter);
+
       if (viewInvoice) setViewInvoice(null);
     } catch (e) {
       console.error(e);
@@ -192,7 +229,7 @@ const SupplierIncomeList = () => {
       });
 
       toast.success('Faktura yuborildi!');
-      await fetchInvoices();
+      await fetchInvoices(page, appliedSearch, statusFilter);
     } catch (e) {
       console.error(e);
       toast.error(e.message || "Fakturani yuborib bo'lmadi!");
@@ -512,22 +549,6 @@ const SupplierIncomeList = () => {
     }
   };
 
-  const filteredInvoices = useMemo(() => {
-    if (!searchTerm) return invoices;
-
-    const search = searchTerm.trim().toLowerCase();
-
-    return invoices.filter((inv) => {
-      const supplierText = inv.supplierName || inv.supplier || '';
-      const supplierMatch = supplierText.toLowerCase().includes(search);
-      const invoiceNumMatch = String(inv.invoiceNumber || '')
-        .toLowerCase()
-        .includes(search);
-
-      return supplierMatch || invoiceNumMatch;
-    });
-  }, [invoices, searchTerm]);
-
   const checkedPrintCount = printItems.filter((item) => item.isChecked).length;
 
   return (
@@ -548,8 +569,8 @@ const SupplierIncomeList = () => {
         </div>
       )}
 
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex gap-4 items-center mb-6">
-        <div className="relative flex-1">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex gap-4 items-center mb-6 flex-col lg:flex-row">
+        <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
           <input
             type="text"
@@ -557,146 +578,202 @@ const SupplierIncomeList = () => {
             className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
           />
         </div>
 
-        {canManageInvoiceDraft && (
-          <button
-            onClick={() => navigate('/ombor/taminotchi-kirim/qoshish')}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95"
+        <div className="flex gap-3 w-full lg:w-auto">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-slate-700"
           >
-            <Plus size={18} /> Yangi Kirim (Faktura)
+            <option value="ALL">Barchasi</option>
+            <option value="Jarayonda">Jarayonda</option>
+            <option value="Yuborildi">Yuborildi</option>
+            <option value="Tasdiqlandi">Tasdiqlandi</option>
+            <option value="Bekor qilindi">Bekor qilindi</option>
+          </select>
+
+          <button
+            onClick={handleSearchSubmit}
+            className="px-5 py-3 rounded-xl bg-blue-600 text-white font-black hover:bg-blue-700 transition-colors"
+          >
+            Qidirish
           </button>
-        )}
+
+          {canManageInvoiceDraft && (
+            <button
+              onClick={() => navigate('/ombor/taminotchi-kirim/qoshish')}
+              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95 whitespace-nowrap"
+            >
+              <Plus size={18} /> Yangi Kirim
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[400px] overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 text-slate-500 text-[11px] font-black uppercase tracking-widest border-b border-slate-200">
-            <tr>
-              <th className="p-5">Sana</th>
-              <th className="p-5">Faktura №</th>
-              <th className="p-5">Ta'minotchi</th>
-              {canSeeAmount && <th className="p-5 text-right">Summa (Kirim)</th>}
-              <th className="p-5 text-center">Holat</th>
-              <th className="p-5 text-center">Amal</th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
-            {loading ? (
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[650px] overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 text-slate-500 text-[11px] font-black uppercase tracking-widest border-b border-slate-200">
               <tr>
-                <td colSpan={canSeeAmount ? 6 : 5} className="p-10 text-center text-slate-400">
-                  <Loader2 className="animate-spin mx-auto" size={24} />
-                </td>
+                <th className="p-5">Sana</th>
+                <th className="p-5">Faktura №</th>
+                <th className="p-5">Ta'minotchi</th>
+                {canSeeAmount && <th className="p-5 text-right">Summa (Kirim)</th>}
+                <th className="p-5 text-center">Holat</th>
+                <th className="p-5 text-center">Amal</th>
               </tr>
-            ) : filteredInvoices.length === 0 ? (
-              <tr>
-                <td colSpan={canSeeAmount ? 6 : 5} className="p-10 text-center text-slate-400">
-                  Hech qanday faktura topilmadi
-                </td>
-              </tr>
-            ) : (
-              filteredInvoices.map((inv) => {
-                const canDeleteThisInvoice =
-                  (inv.status === 'Jarayonda' && canManageInvoiceDraft) ||
-                  (inv.status === 'Yuborildi' && canManageSentInvoices) ||
-                  (inv.status === 'Tasdiqlandi' && canManageSentInvoices);
+            </thead>
 
-                const canSendThisInvoice =
-                  canManageInvoiceDraft && inv.status === 'Jarayonda';
+            <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
+              {loading ? (
+                <tr>
+                  <td colSpan={canSeeAmount ? 6 : 5} className="p-10 text-center text-slate-400">
+                    <Loader2 className="animate-spin mx-auto" size={24} />
+                  </td>
+                </tr>
+              ) : invoices.length === 0 ? (
+                <tr>
+                  <td colSpan={canSeeAmount ? 6 : 5} className="p-10 text-center text-slate-400">
+                    Hech qanday faktura topilmadi
+                  </td>
+                </tr>
+              ) : (
+                invoices.map((inv) => {
+                  const canDeleteThisInvoice =
+                    (inv.status === 'Jarayonda' && canManageInvoiceDraft) ||
+                    (inv.status === 'Yuborildi' && canManageSentInvoices) ||
+                    (inv.status === 'Tasdiqlandi' && canManageSentInvoices);
 
-                const canApproveThisInvoice =
-                  canApproveInvoice && inv.status !== 'Tasdiqlandi';
+                  const canSendThisInvoice =
+                    canManageInvoiceDraft && inv.status === 'Jarayonda';
 
-                return (
-                  <tr key={inv.id} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="p-5 text-slate-500 font-medium">
-                      {formatDate(inv.date || inv.createdAt)}
-                    </td>
-                    <td className="p-5 font-mono text-blue-600">#{inv.invoiceNumber}</td>
-                    <td className="p-5">{inv.supplierName || inv.supplier || "Noma'lum"}</td>
+                  const canApproveThisInvoice =
+                    canApproveInvoice && inv.status !== 'Tasdiqlandi';
 
-                    {canSeeAmount && (
-                      <td className="p-5 text-right text-emerald-600">
-                        {Number(inv.totalSum || 0).toLocaleString('uz-UZ')}{' '}
-                        <span className="text-[10px] text-slate-400">UZS</span>
+                  return (
+                    <tr key={inv.id} className="hover:bg-blue-50/30 transition-colors">
+                      <td className="p-5 text-slate-500 font-medium">
+                        {formatDate(inv.date || inv.createdAt)}
                       </td>
-                    )}
+                      <td className="p-5 font-mono text-blue-600">#{inv.invoiceNumber}</td>
+                      <td className="p-5">{inv.supplierName || inv.supplier || "Noma'lum"}</td>
 
-                    <td className="p-5 text-center">
-                      <span
-                        className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider ${
-                          inv.status === 'Tasdiqlandi'
-                            ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                            : inv.status === 'Yuborildi'
-                            ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                            : 'bg-amber-50 text-amber-600 border border-amber-100'
-                        }`}
-                      >
-                        {inv.status}
-                      </span>
-                    </td>
-
-                    <td className="p-5 text-center relative menu-container">
-                      <button
-                        onClick={(e) => toggleMenu(e, inv.id)}
-                        className="p-2 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-xl transition-colors"
-                      >
-                        <MoreVertical size={18} />
-                      </button>
-
-                      {activeMenu === inv.id && (
-                        <div className="absolute right-12 top-8 w-52 bg-white shadow-xl border border-slate-100 rounded-xl z-50 overflow-hidden font-bold text-sm animate-in zoom-in-95">
-                          <button
-                            onClick={() => handleAction('view', inv.id)}
-                            className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"
-                          >
-                            <Eye size={16} /> Ko'rish
-                          </button>
-
-                          <button
-                            onClick={() => handleAction('print', inv.id)}
-                            className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"
-                          >
-                            <Printer size={16} /> QR Chop etish
-                          </button>
-
-                          {canDeleteThisInvoice && (
-                            <button
-                              onClick={() => handleAction('delete', inv.id)}
-                              className="w-full text-left px-4 py-3 hover:bg-rose-50 text-rose-600 flex items-center gap-2 transition-colors"
-                            >
-                              <Trash2 size={16} /> O'chirish
-                            </button>
-                          )}
-
-                          {canApproveThisInvoice && (
-                            <button
-                              onClick={() => handleAction('approve', inv.id)}
-                              className="w-full text-left px-4 py-3 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 flex items-center gap-2 transition-all"
-                            >
-                              <CheckCircle size={16} /> Tasdiqlash
-                            </button>
-                          )}
-
-                          {canSendThisInvoice && (
-                            <button
-                              onClick={() => handleAction('send', inv.id)}
-                              className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 flex items-center gap-2 transition-all"
-                            >
-                              <Send size={16} /> Yuborish
-                            </button>
-                          )}
-                        </div>
+                      {canSeeAmount && (
+                        <td className="p-5 text-right text-emerald-600">
+                          {Number(inv.totalSum || 0).toLocaleString('uz-UZ')}{' '}
+                          <span className="text-[10px] text-slate-400">UZS</span>
+                        </td>
                       )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+
+                      <td className="p-5 text-center">
+                        <span
+                          className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider ${
+                            inv.status === 'Tasdiqlandi'
+                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                              : inv.status === 'Yuborildi'
+                              ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                              : inv.status === 'Bekor qilindi'
+                              ? 'bg-rose-50 text-rose-600 border border-rose-100'
+                              : 'bg-amber-50 text-amber-600 border border-amber-100'
+                          }`}
+                        >
+                          {inv.status}
+                        </span>
+                      </td>
+
+                      <td className="p-5 text-center relative menu-container">
+                        <button
+                          onClick={(e) => toggleMenu(e, inv.id)}
+                          className="p-2 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-xl transition-colors"
+                        >
+                          <MoreVertical size={18} />
+                        </button>
+
+                        {activeMenu === inv.id && (
+                          <div className="absolute right-12 top-8 w-52 bg-white shadow-xl border border-slate-100 rounded-xl z-50 overflow-hidden font-bold text-sm animate-in zoom-in-95">
+                            <button
+                              onClick={() => handleAction('view', inv.id)}
+                              className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"
+                            >
+                              <Eye size={16} /> Ko'rish
+                            </button>
+
+                            <button
+                              onClick={() => handleAction('print', inv.id)}
+                              className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"
+                            >
+                              <Printer size={16} /> QR Chop etish
+                            </button>
+
+                            {canDeleteThisInvoice && (
+                              <button
+                                onClick={() => handleAction('delete', inv.id)}
+                                className="w-full text-left px-4 py-3 hover:bg-rose-50 text-rose-600 flex items-center gap-2 transition-colors"
+                              >
+                                <Trash2 size={16} /> O'chirish
+                              </button>
+                            )}
+
+                            {canApproveThisInvoice && (
+                              <button
+                                onClick={() => handleAction('approve', inv.id)}
+                                className="w-full text-left px-4 py-3 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 flex items-center gap-2 transition-all"
+                              >
+                                <CheckCircle size={16} /> Tasdiqlash
+                              </button>
+                            )}
+
+                            {canSendThisInvoice && (
+                              <button
+                                onClick={() => handleAction('send', inv.id)}
+                                className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 flex items-center gap-2 transition-all"
+                              >
+                                <Send size={16} /> Yuborish
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
+          <div className="text-sm font-bold text-slate-500">
+            Jami: <span className="text-slate-800">{total} ta</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fetchInvoices(page - 1, appliedSearch, statusFilter)}
+              disabled={page <= 1 || loading}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+            >
+              <ChevronLeft size={16} />
+              Oldingi
+            </button>
+
+            <div className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-black text-sm min-w-[90px] text-center">
+              {Math.max(page, 1)} / {Math.max(totalPages, 1)}
+            </div>
+
+            <button
+              onClick={() => fetchInvoices(page + 1, appliedSearch, statusFilter)}
+              disabled={page >= totalPages || loading || totalPages === 0}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+            >
+              Keyingi
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
       </div>
 
       {printModalOpen && invoiceToPrint && (
@@ -864,7 +941,7 @@ const SupplierIncomeList = () => {
                   <span className="flex items-center gap-1">
                     Kiritdi:
                     <span className="text-slate-800">
-                      {viewInvoice.userName || "Noma'lum"}
+                      {viewInvoice.userName || "Noma’lum"}
                     </span>
                   </span>
                 </div>

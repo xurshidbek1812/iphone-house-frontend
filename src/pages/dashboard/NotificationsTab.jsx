@@ -1,398 +1,429 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Bell,
-  CheckCheck,
-  Check,
-  TriangleAlert,
-  ShoppingCart,
-  Receipt,
-  Package,
   Loader2,
-  UserCircle,
-  ShieldAlert
-} from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { apiFetch } from '../../utils/api';
+  Receipt,
+  FileWarning,
+  HandCoins,
+  ShieldAlert,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  MailOpen,
+  CircleAlert,
+  CheckCheck
+} from "lucide-react";
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
-
-const formatMoney = (value) => Number(value || 0).toLocaleString('uz-UZ');
+const API_URL = import.meta.env.VITE_API_URL;
 
 const getTypeIcon = (type) => {
-  const safeType = String(type || '').toLowerCase();
+  const normalized = String(type || "").toLowerCase();
 
-  if (safeType.includes('kirim')) return <Package size={18} className="text-blue-600" />;
-  if (safeType.includes('savdo')) return <ShoppingCart size={18} className="text-emerald-600" />;
-  if (safeType.includes('shartnoma')) return <Receipt size={18} className="text-violet-600" />;
-  if (safeType.includes("qora ro'yxat")) return <ShieldAlert size={18} className="text-rose-600" />;
+  if (normalized.includes("kirim")) return Receipt;
+  if (normalized.includes("shartnoma")) return HandCoins;
+  if (normalized.includes("savdo")) return FileWarning;
+  if (normalized.includes("qora")) return ShieldAlert;
 
-  return <Bell size={18} className="text-slate-600" />;
+  return Bell;
 };
 
-const getTypeBadgeClass = (type) => {
-  const safeType = String(type || '').toLowerCase();
+const getTypeStyles = (type) => {
+  const normalized = String(type || "").toLowerCase();
 
-  if (safeType.includes('kirim')) return 'bg-blue-50 text-blue-600 border-blue-100';
-  if (safeType.includes('savdo')) return 'bg-emerald-50 text-emerald-600 border-emerald-100';
-  if (safeType.includes('shartnoma')) return 'bg-violet-50 text-violet-600 border-violet-100';
-  if (safeType.includes("qora ro'yxat")) return 'bg-rose-50 text-rose-600 border-rose-100';
-
-  return 'bg-slate-50 text-slate-600 border-slate-200';
-};
-
-const getStatusBadgeClass = (note) => {
-  const status = String(note.status || '').toLowerCase();
-  const requestStatus = String(note.requestStatus || '').toLowerCase();
-
-  if (String(note.type || '').toLowerCase().includes("qora ro'yxat")) {
-    if (requestStatus.includes('yuborildi')) {
-      return 'bg-amber-50 text-amber-600 border-amber-100';
-    }
-    if (requestStatus.includes('jarayonda')) {
-      return 'bg-blue-50 text-blue-600 border-blue-100';
-    }
-    if (requestStatus.includes('tasdiqlandi')) {
-      return 'bg-emerald-50 text-emerald-600 border-emerald-100';
-    }
-    if (requestStatus.includes('bekor')) {
-      return 'bg-rose-50 text-rose-600 border-rose-100';
-    }
+  if (normalized.includes("kirim")) {
+    return {
+      box: "bg-blue-50 text-blue-600",
+      badge: "bg-blue-50 text-blue-600"
+    };
   }
 
-  if (status.includes("to'lov")) return 'bg-violet-50 text-violet-600 border-violet-100';
-  if (status.includes('jarayonda')) return 'bg-blue-50 text-blue-600 border-blue-100';
-  if (status.includes('tasdiq')) return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+  if (normalized.includes("shartnoma")) {
+    return {
+      box: "bg-emerald-50 text-emerald-600",
+      badge: "bg-emerald-50 text-emerald-600"
+    };
+  }
 
-  return 'bg-slate-50 text-slate-500 border-slate-200';
+  if (normalized.includes("savdo")) {
+    return {
+      box: "bg-amber-50 text-amber-600",
+      badge: "bg-amber-50 text-amber-600"
+    };
+  }
+
+  if (normalized.includes("qora")) {
+    return {
+      box: "bg-rose-50 text-rose-600",
+      badge: "bg-rose-50 text-rose-600"
+    };
+  }
+
+  return {
+    box: "bg-slate-100 text-slate-600",
+    badge: "bg-slate-100 text-slate-600"
+  };
+};
+
+const formatDateTime = (value) => {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("uz-UZ");
 };
 
 const NotificationsTab = () => {
-  const token = sessionStorage.getItem('token');
-  const navigate = useNavigate();
-
+  const token = sessionStorage.getItem("token");
 
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+
   const [notifications, setNotifications] = useState([]);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+
+  const loadNotifications = async (targetPage = page) => {
+    try {
+      setLoading(true);
+
+      const res = await fetch(
+        `${API_URL}/api/notifications?page=${targetPage}&limit=${limit}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      const data = await res.json();
+
+      setNotifications(Array.isArray(data?.items) ? data.items : []);
+      setPage(Number(data?.page || 1));
+      setTotalPages(Number(data?.totalPages || 1));
+      setTotal(Number(data?.total || 0));
+    } catch (err) {
+      console.error(err);
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
+    loadNotifications(1);
+  }, []);
 
-        const res = await fetch(`${API_URL}/api/notifications`, {
-            headers: {
-                Authorization: `Bearer ${token}`
-            }
-            });
+  const handleReadOne = async (id) => {
+    try {
+      setActionLoading(true);
 
-            const data = await res.json();
-
-            if (!res.ok) {
-            throw new Error(data?.error || 'Notificationlar yuklanmadi');
-            }
-
-            const mapped = Array.isArray(data)
-            ? data.map((item) => ({
-                id: item.id,
-                type:
-                    item.type === 'BLACKLIST'
-                    ? "Qora ro'yxat"
-                    : item.type === 'INVOICE'
-                    ? 'Kirim'
-                    : item.type === 'CONTRACT'
-                    ? 'Shartnoma'
-                    : item.type === 'ORDER'
-                    ? 'Savdo'
-                    : item.type,
-                supplier: item.title,
-                sender: 'Tizim',
-                totalSum: Number(item.amount || 0),
-                date: new Date(item.createdAt).toLocaleString('uz-UZ'),
-                isRead: item.isRead,
-                status: item.status,
-                reason: item.message,
-                requestStatus: item.status,
-                entityType: item.entityType,
-                entityId: item.entityId
-                }))
-            : [];
-
-            setNotifications(mapped);
-
-
-      } catch (error) {
-        console.error('NotificationsTab xatosi:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (token) fetchData();
-  }, [token]);
-
-  const unreadCount = useMemo(() => {
-    return notifications.filter((item) => !item.isRead).length;
-  }, [notifications]);
-
-  const pendingCount = useMemo(() => {
-    return notifications.filter((item) => {
-      const status = String(item.status || '').toLowerCase();
-      const requestStatus = String(item.requestStatus || '').toLowerCase();
-
-      return (
-        status.includes("to'lov") ||
-        requestStatus.includes('yuborildi')
-      );
-    }).length;
-  }, [notifications]);
-
-const markAsRead = async (id) => {
-  try {
-    await fetch(`${API_URL}/api/notifications/${id}/read`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-
-    setNotifications((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, isRead: true } : item))
-    );
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-const markAllAsRead = async () => {
-  try {
-    await fetch(`${API_URL}/api/notifications/read-all/all`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-
-    setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })));
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-const handleNotificationClick = async (note) => {
-  try {
-    if (!note?.isRead) {
-      await fetch(`${API_URL}/api/notifications/${note.id}/read`, {
-        method: 'PATCH',
+      const res = await fetch(`${API_URL}/api/notifications/${id}/read`, {
+        method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
 
-      setNotifications((prev) =>
-        prev.map((item) =>
-          item.id === note.id ? { ...item, isRead: true } : item
-        )
-      );
+      if (res.ok) {
+        await loadNotifications(page);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(false);
     }
-  } catch (error) {
-    console.error('Notificationni o‘qilgan qilishda xatolik:', error);
-  }
+  };
 
-  const entityType = String(note.entityType || '').toUpperCase();
-  const type = String(note.type || '').toUpperCase();
+  const handleReadAll = async () => {
+    try {
+      setActionLoading(true);
 
-  if (entityType === 'BLACKLIST_REQUEST' || type === 'BLACKLIST') {
-    navigate('/mijozlar/qora-buyurtma');
-    return;
-  }
+      const res = await fetch(`${API_URL}/api/notifications/read-all/all`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
 
-  if (entityType === 'SUPPLIER_INVOICE' || type === 'INVOICE') {
-    navigate('/ombor/taminotchi-kirim');
-    return;
-  }
+      if (res.ok) {
+        await loadNotifications(page);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
-  navigate('/dashboard');
-};
+  const analytics = useMemo(() => {
+    const todayStr = new Date().toDateString();
 
+    const unreadCount = notifications.filter((n) => !n.isRead).length;
+    const todayCount = notifications.filter((n) => {
+      if (!n.createdAt) return false;
+      return new Date(n.createdAt).toDateString() === todayStr;
+    }).length;
+
+    const byType = notifications.reduce((acc, item) => {
+      const key = item.type || "Boshqa";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const typeCards = Object.entries(byType)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 4);
+
+    return {
+      unreadCount,
+      todayCount,
+      totalCount: total,
+      typeCards
+    };
+  }, [notifications, total]);
 
   if (loading) {
     return (
-      <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm h-[420px] flex items-center justify-center">
-        <Loader2 className="animate-spin text-blue-600" size={38} />
+      <div className="flex justify-center py-24">
+        <Loader2 className="animate-spin text-blue-500" size={40} />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-6">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center border bg-blue-50 text-blue-600 border-blue-100">
-              <Bell size={22} strokeWidth={2.5} />
+      <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm p-7 overflow-hidden relative">
+        <div className="absolute -right-8 -top-8 w-36 h-36 rounded-full bg-blue-50 blur-2xl opacity-80" />
+        <div className="absolute -left-8 -bottom-8 w-32 h-32 rounded-full bg-indigo-50 blur-2xl opacity-70" />
+
+        <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center shadow-sm">
+                <Bell size={24} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-800">Xabarlar</h2>
+                <p className="text-sm text-slate-400 font-medium">
+                  So‘nggi 2 kun ichidagi tizim xabarlari
+                </p>
+              </div>
             </div>
-            <span className="text-[10px] font-black uppercase px-2 py-1 rounded-lg border bg-blue-50 text-blue-600 border-blue-100">
-              ta
-            </span>
+
+            <div className="text-sm text-slate-500 font-medium">
+              Jami xabarlar:{" "}
+              <span className="font-black text-slate-800">
+                {analytics.totalCount} ta
+              </span>
+            </div>
           </div>
 
-          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">
-            Jami xabarlar
-          </p>
-          <h3 className="text-2xl font-black text-slate-800">
-            {notifications.length}
-          </h3>
-        </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleReadAll}
+              disabled={actionLoading || notifications.length === 0}
+              className="px-4 py-3 rounded-2xl bg-slate-900 text-white font-black text-sm hover:bg-black transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {actionLoading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <CheckCheck size={16} />
+              )}
+              Hammasini o‘qilgan qilish
+            </button>
 
-        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-6">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center border bg-amber-50 text-amber-600 border-amber-100">
-              <TriangleAlert size={22} strokeWidth={2.5} />
+            <div className="px-5 py-3 rounded-2xl bg-slate-900 text-white shadow-lg">
+              <div className="text-[11px] uppercase tracking-widest text-slate-400 font-black mb-1">
+                O‘qilmagan
+              </div>
+              <div className="text-2xl font-black tracking-tight text-blue-400">
+                {analytics.unreadCount} ta
+              </div>
             </div>
-            <span className="text-[10px] font-black uppercase px-2 py-1 rounded-lg border bg-amber-50 text-amber-600 border-amber-100">
-              ta
-            </span>
           </div>
-
-          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">
-            O‘qilmagan xabarlar
-          </p>
-          <h3 className="text-2xl font-black text-slate-800">
-            {unreadCount}
-          </h3>
-        </div>
-
-        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-6">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center border bg-violet-50 text-violet-600 border-violet-100">
-              <Receipt size={22} strokeWidth={2.5} />
-            </div>
-            <span className="text-[10px] font-black uppercase px-2 py-1 rounded-lg border bg-violet-50 text-violet-600 border-violet-100">
-              ta
-            </span>
-          </div>
-
-          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">
-            Kutilayotganlar
-          </p>
-          <h3 className="text-2xl font-black text-slate-800">
-            {pendingCount}
-          </h3>
         </div>
       </div>
 
-      <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm p-7">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center">
+              <Bell size={22} />
+            </div>
+            <span className="text-[10px] uppercase tracking-widest font-black text-slate-400">
+              Jami
+            </span>
+          </div>
+          <div className="text-2xl font-black text-slate-800 tracking-tight">
+            {analytics.totalCount}
+          </div>
+          <div className="text-sm text-slate-400 font-medium mt-1">
+            Hamma notificationlar soni
+          </div>
+        </div>
+
+        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center">
+              <MailOpen size={22} />
+            </div>
+            <span className="text-[10px] uppercase tracking-widest font-black text-slate-400">
+              O‘qilmagan
+            </span>
+          </div>
+          <div className="text-2xl font-black text-slate-800 tracking-tight">
+            {analytics.unreadCount}
+          </div>
+          <div className="text-sm text-slate-400 font-medium mt-1">
+            Hozircha ko‘rilmagan xabarlar
+          </div>
+        </div>
+
+        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-500 flex items-center justify-center">
+              <CalendarDays size={22} />
+            </div>
+            <span className="text-[10px] uppercase tracking-widest font-black text-slate-400">
+              Bugun
+            </span>
+          </div>
+          <div className="text-2xl font-black text-slate-800 tracking-tight">
+            {analytics.todayCount}
+          </div>
+          <div className="text-sm text-slate-400 font-medium mt-1">
+            Bugungi yangi xabarlar
+          </div>
+        </div>
+
+        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center">
+              <CircleAlert size={22} />
+            </div>
+            <span className="text-[10px] uppercase tracking-widest font-black text-slate-400">
+              Sahifa
+            </span>
+          </div>
+          <div className="text-2xl font-black text-slate-800 tracking-tight">
+            {page} / {Math.max(totalPages, 1)}
+          </div>
+          <div className="text-sm text-slate-400 font-medium mt-1">
+            Pagination holati
+          </div>
+        </div>
+      </div>
+
+      {analytics.typeCards.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {analytics.typeCards.map((item) => {
+            const Icon = getTypeIcon(item.name);
+            const styles = getTypeStyles(item.name);
+
+            return (
+              <div
+                key={item.name}
+                className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div
+                    className={`w-11 h-11 rounded-2xl flex items-center justify-center ${styles.box}`}
+                  >
+                    <Icon size={22} />
+                  </div>
+                  <span
+                    className={`px-2.5 py-1 rounded-lg text-[10px] uppercase tracking-wider font-black ${styles.badge}`}
+                  >
+                    {item.count} ta
+                  </span>
+                </div>
+
+                <div className="font-black text-slate-800 break-words">
+                  {item.name}
+                </div>
+                <div className="text-sm text-slate-400 font-medium mt-1">
+                  Ushbu sahifadagi xabarlar soni
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-black text-slate-800">Xabarlar markazi</h2>
-            <p className="text-slate-400 font-medium mt-1">
-              Savdo, shartnoma, kirim va qora ro‘yxat bo‘yicha ogohlantirishlar
+            <h3 className="text-lg font-black text-slate-800">Xabarlar ro‘yxati</h3>
+            <p className="text-sm text-slate-400 font-medium">
+              Sahifalarga bo‘lingan notificationlar
             </p>
           </div>
-
-          {unreadCount > 0 && (
-            <button
-              onClick={markAllAsRead}
-              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-blue-600 text-white font-black text-sm shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all"
-            >
-              <CheckCheck size={16} />
-              Hammasini o‘qish
-            </button>
-          )}
         </div>
 
         {notifications.length === 0 ? (
-          <div className="text-slate-400 font-bold text-sm">Hozircha xabarlar yo‘q</div>
+          <div className="p-10 text-slate-400">Xabarlar topilmadi</div>
         ) : (
-          <div className="space-y-4">
-            {notifications.map((note) => {
-              const isUnread = !note.isRead;
-              const isBlacklist = String(note.type || '').toLowerCase().includes("qora ro'yxat");
+          <div className="p-4 space-y-3">
+            {notifications.map((item) => {
+              const Icon = getTypeIcon(item.type);
+              const styles = getTypeStyles(item.type);
 
               return (
                 <div
-                    key={note.id}
-                    onClick={() => handleNotificationClick(note)}
-                    className={`group relative rounded-[22px] border p-5 transition-all cursor-pointer ${
-                        isUnread
-                        ? 'bg-white border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200'
-                        : 'bg-slate-50 border-slate-200 opacity-80 hover:opacity-100'
-                    }`}
+                  key={item.id}
+                  className="p-4 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-slate-50 transition-colors"
                 >
-
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                    <div className="flex items-start gap-4 min-w-0">
-                      <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
-                        {getTypeIcon(note.type)}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4 min-w-0 flex-1">
+                      <div
+                        className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${styles.box}`}
+                      >
+                        <Icon size={22} />
                       </div>
 
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-2">
-                          <span
-                            className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border ${getTypeBadgeClass(note.type)}`}
-                          >
-                            {note.type}
-                          </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <p className="font-black text-slate-800 break-words">
+                            {item.title || item.type || "Xabar"}
+                          </p>
 
                           <span
-                            className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border ${getStatusBadgeClass(note)}`}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] uppercase tracking-wider font-black ${styles.badge}`}
                           >
-                            {isBlacklist ? (note.requestStatus || note.status) : note.status}
+                            {item.type || "Xabar"}
                           </span>
 
-                          {isUnread && (
-                            <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                          {!item.isRead && (
+                            <span className="px-2.5 py-1 rounded-lg text-[10px] uppercase tracking-wider font-black bg-amber-50 text-amber-600">
+                              Yangi
+                            </span>
                           )}
                         </div>
 
-                        <h3 className="text-base font-black text-slate-800 truncate">
-                          {note.supplier}
-                        </h3>
-
-                        <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-slate-500 font-medium">
-                          <span className="flex items-center gap-1">
-                            <UserCircle size={15} />
-                            {note.sender}
-                          </span>
-                          <span>{note.date}</span>
+                        <div className="text-sm text-slate-500 break-words">
+                          {item.message || "-"}
                         </div>
 
-                        {isBlacklist && note.reason && (
-                          <p className="mt-2 text-sm text-slate-600 font-medium line-clamp-2">
-                            Sabab: {note.reason}
-                          </p>
-                        )}
+                        <div className="flex items-center gap-2 text-xs text-slate-400 font-bold flex-wrap mt-2">
+                          <span>{formatDateTime(item.createdAt)}</span>
+                          {item.status ? (
+                            <>
+                              <span>•</span>
+                              <span>{item.status}</span>
+                            </>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 lg:justify-end">
-                      <div className="text-left lg:text-right">
-                        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                          {isBlacklist ? 'So‘rov' : 'Summa'}
-                        </p>
-
-                        {isBlacklist ? (
-                          <p className="text-sm font-black text-rose-600">
-                            {note.status}
-                          </p>
-                        ) : (
-                          <p className="text-lg font-black text-emerald-600">
-                            {formatMoney(note.totalSum)} UZS
-                          </p>
-                        )}
-                      </div>
-
-                      {isUnread && (
+                    <div className="shrink-0">
+                      {!item.isRead && (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            markAsRead(note.id);
-                        }}
-
-                          className="shrink-0 w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"
-                          title="O‘qilgan qilish"
+                          onClick={() => handleReadOne(item.id)}
+                          disabled={actionLoading}
+                          className="px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-black hover:bg-blue-700 transition-colors disabled:opacity-50"
                         >
-                          <Check size={18} strokeWidth={3} />
+                          O‘qildi
                         </button>
                       )}
                     </div>
@@ -402,6 +433,37 @@ const handleNotificationClick = async (note) => {
             })}
           </div>
         )}
+
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
+          <div className="text-sm font-bold text-slate-500">
+            Jami:{" "}
+            <span className="text-slate-800">{total} ta</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => loadNotifications(page - 1)}
+              disabled={page <= 1 || loading}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+            >
+              <ChevronLeft size={16} />
+              Oldingi
+            </button>
+
+            <div className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-black text-sm">
+              {page} / {Math.max(totalPages, 1)}
+            </div>
+
+            <button
+              onClick={() => loadNotifications(page + 1)}
+              disabled={page >= totalPages || loading}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+            >
+              Keyingi
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
