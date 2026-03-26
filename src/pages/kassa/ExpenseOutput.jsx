@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Search,
   Plus,
@@ -9,17 +9,30 @@ import {
   AlertTriangle,
   Eye,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Receipt,
+  Wallet,
+  CalendarDays,
+  User2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../../utils/api';
 import { hasPermission, PERMISSIONS } from '../../utils/permissions';
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('uz-UZ');
-
 const formatDateTime = (value) => {
   if (!value) return '-';
   return new Date(value).toLocaleString('uz-UZ');
+};
+
+const getStatusClasses = (status) => {
+  const s = String(status || '').toLowerCase();
+
+  if (s === 'tasdiqlandi') {
+    return 'bg-emerald-50 text-emerald-700 border border-emerald-100';
+  }
+
+  return 'bg-blue-50 text-blue-700 border border-blue-100';
 };
 
 const ExpenseOutput = () => {
@@ -83,7 +96,7 @@ const ExpenseOutput = () => {
     };
   }, [isModalOpen, confirmModal.isOpen, detailModal.isOpen]);
 
-  const fetchData = async (targetPage = page, targetSearch = appliedSearch) => {
+  const fetchData = useCallback(async (targetPage = page, targetSearch = appliedSearch) => {
     try {
       setLoading(true);
 
@@ -115,11 +128,11 @@ const ExpenseOutput = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, appliedSearch, limit]);
 
   useEffect(() => {
     fetchData(1, appliedSearch);
-  }, [appliedSearch]);
+  }, [appliedSearch, fetchData]);
 
   const resetForm = () => {
     setFormData({
@@ -228,34 +241,34 @@ const ExpenseOutput = () => {
   };
 
   return (
-    <div className="space-y-6 p-6 bg-slate-50 min-h-screen">
-      <div className="flex items-start justify-between gap-4">
+    <div className="h-full min-h-0 flex flex-col bg-slate-50">
+      <div className="mb-3 flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-black text-slate-800">
+          <h1 className="text-xl font-semibold text-slate-900">
             Xarajatga pul chiqim
           </h1>
-          <p className="text-sm text-slate-400 font-medium mt-1">
-            Barcha xarajatlar ro'yxati, yaratish va tasdiqlash jarayoni
+          <p className="text-sm text-slate-500 mt-0.5">
+            Xarajatlar ro'yxati, yaratish va tasdiqlash jarayoni
           </p>
         </div>
 
         {canCreateExpense && (
           <button
             onClick={openCreateModal}
-            className="shrink-0 px-6 py-3 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center gap-2"
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition shadow-sm"
           >
-            <Plus size={20} />
+            <Plus size={16} />
             Qo'shish
           </button>
         )}
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-        <div className="flex gap-3">
+      <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex gap-3 flex-col lg:flex-row">
           <div className="relative flex-1">
             <Search
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-              size={20}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+              size={17}
             />
             <input
               type="text"
@@ -263,44 +276,44 @@ const ExpenseOutput = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleSearchKeyDown}
-              className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700"
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all text-sm font-medium text-slate-700"
             />
           </div>
 
           <button
             onClick={handleSearchSubmit}
-            className="px-5 py-3 rounded-xl bg-blue-600 text-white font-black hover:bg-blue-700 transition-colors"
+            className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
           >
             Qidirish
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[650px] overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-x-auto">
+      <div className="flex-1 min-h-0 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+        <div className="flex-1 min-h-0 overflow-auto">
           <table className="w-full text-left">
-            <thead className="bg-slate-50 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+            <thead className="sticky top-0 z-10 bg-slate-50/95 text-[10px] font-black text-slate-500 uppercase tracking-[0.12em] border-b border-slate-200">
               <tr>
-                <th className="p-4">Sana</th>
-                <th className="p-4">Kassa nomi</th>
-                <th className="p-4 text-right">Summasi</th>
-                <th className="p-4">Xarajat moddasi</th>
-                <th className="p-4">Holati</th>
-                <th className="p-4">Yaratgan</th>
-                <th className="p-4 text-center">Amallar</th>
+                <th className="px-4 py-3">Sana</th>
+                <th className="px-4 py-3">Kassa nomi</th>
+                <th className="px-4 py-3 text-right">Summasi</th>
+                <th className="px-4 py-3">Xarajat moddasi</th>
+                <th className="px-4 py-3">Holati</th>
+                <th className="px-4 py-3">Yaratgan</th>
+                <th className="px-4 py-3 text-center">Amallar</th>
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-50 text-sm font-bold text-slate-700">
+            <tbody className="text-sm text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="p-16 text-center text-slate-400">
-                    <Loader2 className="animate-spin mx-auto" size={32} />
+                  <td colSpan="7" className="px-4 py-14 text-center">
+                    <Loader2 className="animate-spin mx-auto text-slate-400" size={24} />
                   </td>
                 </tr>
               ) : expenses.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-16 text-center text-slate-400">
+                  <td colSpan="7" className="px-4 py-14 text-center text-slate-400 text-sm">
                     Xarajatlar topilmadi
                   </td>
                 </tr>
@@ -312,45 +325,48 @@ const ExpenseOutput = () => {
                     String(item.status || '').toLowerCase() === 'jarayonda';
 
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-4 text-slate-500 whitespace-nowrap">
+                    <tr
+                      key={item.id}
+                      className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors"
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap text-[13px] font-medium text-slate-500">
                         {formatDateTime(item.createdAt)}
                       </td>
 
-                      <td className="p-4 text-slate-700 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap text-[14px] font-medium text-slate-700">
                         {item.cashbox?.name || '-'}
                       </td>
 
-                      <td className="p-4 text-right font-black text-rose-600 whitespace-nowrap">
-                        {formatMoney(item.amount)}{' '}
-                        <span className="text-[10px] text-slate-400">
-                          {item.cashbox?.currency || 'UZS'}
-                        </span>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <div className="text-[14px] font-semibold text-rose-600">
+                          {formatMoney(item.amount)}
+                          <span className="ml-1 text-[10px] text-slate-400 font-medium">
+                            {item.cashbox?.currency || 'UZS'}
+                          </span>
+                        </div>
                       </td>
 
-                      <td className="p-4 text-slate-700 max-w-[280px] whitespace-normal break-words">
+                      <td className="px-4 py-3 max-w-[260px] text-[14px] font-medium text-slate-700 whitespace-normal break-words">
                         {item.expenseCategory?.group?.name
                           ? `${item.expenseCategory.group.name} / ${item.expenseCategory.name}`
                           : item.expenseCategory?.name || '-'}
                       </td>
 
-                      <td className="p-4">
+                      <td className="px-4 py-3">
                         <span
-                          className={`px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider ${
-                            isApproved
-                              ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
-                              : 'bg-blue-50 text-blue-600 border-blue-200'
-                          }`}
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${getStatusClasses(
+                            item.status
+                          )}`}
                         >
                           {item.status || 'Jarayonda'}
                         </span>
                       </td>
 
-                      <td className="p-4 text-slate-600 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap text-[13px] font-medium text-slate-600">
                         {item.createdByName || '-'}
                       </td>
 
-                      <td className="p-4 text-center">
+                      <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() =>
@@ -359,10 +375,10 @@ const ExpenseOutput = () => {
                                 expense: item
                               })
                             }
-                            className="p-2 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-200 transition-all"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition"
                             title="Ko'rish"
                           >
-                            <Eye size={18} />
+                            <Eye size={15} />
                           </button>
 
                           {canApproveExpense && isPending && (
@@ -374,10 +390,10 @@ const ExpenseOutput = () => {
                                   expenseId: item.id
                                 })
                               }
-                              className="p-2 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
                               title="Tasdiqlash"
                             >
-                              <CheckCircle size={18} />
+                              <CheckCircle size={15} />
                             </button>
                           )}
 
@@ -390,10 +406,10 @@ const ExpenseOutput = () => {
                                   expenseId: item.id
                                 })
                               }
-                              className="p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition"
                               title="O'chirish"
                             >
-                              <Trash2 size={18} />
+                              <Trash2 size={15} />
                             </button>
                           )}
                         </div>
@@ -406,32 +422,32 @@ const ExpenseOutput = () => {
           </table>
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
-          <div className="text-sm font-bold text-slate-500">
-            Jami: <span className="text-slate-800">{total} ta</span>
+        <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+          <div className="text-sm text-slate-500">
+            Jami: <span className="font-semibold text-slate-800">{total} ta</span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => fetchData(page - 1, appliedSearch)}
               disabled={page <= 1 || loading}
-              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={15} />
               Oldingi
             </button>
 
-            <div className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-black text-sm min-w-[90px] text-center">
+            <div className="min-w-[84px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700">
               {Math.max(page, 1)} / {Math.max(totalPages, 1)}
             </div>
 
             <button
               onClick={() => fetchData(page + 1, appliedSearch)}
               disabled={page >= totalPages || loading || totalPages === 0}
-              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               Keyingi
-              <ChevronRight size={16} />
+              <ChevronRight size={15} />
             </button>
           </div>
         </div>
@@ -446,24 +462,25 @@ const ExpenseOutput = () => {
             }
           }}
         >
-          <div className="bg-white w-full max-w-xl rounded-[32px] shadow-2xl p-8 animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black text-slate-800">
-                Yangi xarajat
-              </h2>
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="flex justify-between items-center px-5 py-4 border-b border-slate-200 bg-slate-50/70">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-800">Yangi xarajat</h2>
+                <p className="text-sm text-slate-500 mt-0.5">Xarajat ma'lumotlarini kiriting</p>
+              </div>
 
               <button
                 disabled={saving}
                 onClick={() => setIsModalOpen(false)}
-                className="p-2 hover:bg-slate-100 rounded-full text-slate-500 disabled:opacity-50"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 disabled:opacity-50"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-5">
+            <div className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
                   Kassa <span className="text-red-500">*</span>
                 </label>
                 <select
@@ -472,7 +489,7 @@ const ExpenseOutput = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, cashboxId: e.target.value })
                   }
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Kassani tanlang</option>
                   {cashboxes
@@ -486,7 +503,7 @@ const ExpenseOutput = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
                   Summasi <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -497,13 +514,13 @@ const ExpenseOutput = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, amount: e.target.value })
                   }
-                  className="w-full p-4 bg-white border-2 border-rose-200 rounded-xl outline-none focus:border-rose-500 font-black text-rose-600 text-xl"
+                  className="w-full rounded-xl border-2 border-rose-200 bg-white px-3 py-3 text-lg font-semibold text-rose-600 outline-none focus:border-rose-500"
                   placeholder="0"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
                   Xarajat moddasi <span className="text-red-500">*</span>
                 </label>
 
@@ -513,7 +530,7 @@ const ExpenseOutput = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, expenseCategoryId: e.target.value })
                   }
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Xarajat moddasini tanlang</option>
 
@@ -530,27 +547,27 @@ const ExpenseOutput = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
                   Izoh <span className="text-red-500">*</span>
                 </label>
                 <textarea
-                  rows="5"
+                  rows="4"
                   disabled={saving}
                   value={formData.note}
                   onChange={(e) =>
                     setFormData({ ...formData, note: e.target.value })
                   }
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700 resize-none"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   placeholder="Xarajat sababi yoki izoh yozing..."
                 />
               </div>
             </div>
 
-            <div className="flex gap-3 mt-8">
+            <div className="flex gap-3 px-5 py-4 border-t border-slate-200 bg-white">
               <button
                 disabled={saving}
                 onClick={() => setIsModalOpen(false)}
-                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all disabled:opacity-50"
+                className="flex-1 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200 disabled:opacity-50"
               >
                 Bekor qilish
               </button>
@@ -558,9 +575,9 @@ const ExpenseOutput = () => {
               <button
                 disabled={saving}
                 onClick={handleSaveExpense}
-                className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex justify-center items-center gap-2 disabled:opacity-70"
+                className="flex-1 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-70 inline-flex items-center justify-center gap-2"
               >
-                {saving ? <Loader2 size={18} className="animate-spin" /> : null}
+                {saving ? <Loader2 size={16} className="animate-spin" /> : null}
                 Saqlash
               </button>
             </div>
@@ -570,61 +587,104 @@ const ExpenseOutput = () => {
 
       {detailModal.isOpen && detailModal.expense && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[1100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-xl rounded-[32px] shadow-2xl p-8">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-black text-slate-800">
-                Xarajat tafsiloti
-              </h3>
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="flex justify-between items-center px-5 py-4 border-b border-slate-200 bg-slate-50/70">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800">Xarajat tafsiloti</h3>
+                <p className="text-sm text-slate-500 mt-0.5">Batafsil ma'lumot</p>
+              </div>
               <button
                 onClick={() => setDetailModal({ isOpen: false, expense: null })}
-                className="p-2 hover:bg-slate-100 rounded-full text-slate-500"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-4 text-sm font-bold text-slate-700">
-              <div>
-                <div className="text-slate-400 text-xs uppercase mb-1">Kassa</div>
-                <div>{detailModal.expense.cashbox?.name || '-'}</div>
-              </div>
+            <div className="p-5 space-y-4 max-h-[80vh] overflow-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
+                    <Wallet size={14} />
+                    Kassa
+                  </div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    {detailModal.expense.cashbox?.name || '-'}
+                  </div>
+                </div>
 
-              <div>
-                <div className="text-slate-400 text-xs uppercase mb-1">Xarajat moddasi</div>
-                <div>
-                  {detailModal.expense.expenseCategory?.group?.name
-                    ? `${detailModal.expense.expenseCategory.group.name} / ${detailModal.expense.expenseCategory.name}`
-                    : detailModal.expense.expenseCategory?.name || '-'}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
+                    <Receipt size={14} />
+                    Xarajat moddasi
+                  </div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    {detailModal.expense.expenseCategory?.group?.name
+                      ? `${detailModal.expense.expenseCategory.group.name} / ${detailModal.expense.expenseCategory.name}`
+                      : detailModal.expense.expenseCategory?.name || '-'}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                  <div className="text-[10px] uppercase tracking-widest text-rose-500 font-black mb-2">
+                    Summa
+                  </div>
+                  <div className="text-xl font-semibold text-rose-600">
+                    {formatMoney(detailModal.expense.amount)} UZS
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-2">
+                    Holati
+                  </div>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${getStatusClasses(
+                      detailModal.expense.status
+                    )}`}
+                  >
+                    {detailModal.expense.status || 'Jarayonda'}
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
+                    <User2 size={14} />
+                    Yaratgan
+                  </div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    {detailModal.expense.createdByName || '-'}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
+                    <CheckCircle size={14} />
+                    Tasdiqlagan
+                  </div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    {detailModal.expense.approvedByName || '-'}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:col-span-2">
+                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
+                    <CalendarDays size={14} />
+                    Sana
+                  </div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    {formatDateTime(detailModal.expense.createdAt)}
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <div className="text-slate-400 text-xs uppercase mb-1">Summa</div>
-                <div className="text-rose-600">
-                  {formatMoney(detailModal.expense.amount)} UZS
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-2">
+                  Izoh
                 </div>
-              </div>
-
-              <div>
-                <div className="text-slate-400 text-xs uppercase mb-1">Izoh</div>
-                <div className="whitespace-pre-wrap break-words">
+                <div className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-6">
                   {detailModal.expense.note || '-'}
                 </div>
-              </div>
-
-              <div>
-                <div className="text-slate-400 text-xs uppercase mb-1">Yaratgan</div>
-                <div>{detailModal.expense.createdByName || '-'}</div>
-              </div>
-
-              <div>
-                <div className="text-slate-400 text-xs uppercase mb-1">Tasdiqlagan</div>
-                <div>{detailModal.expense.approvedByName || '-'}</div>
-              </div>
-
-              <div>
-                <div className="text-slate-400 text-xs uppercase mb-1">Sana</div>
-                <div>{formatDateTime(detailModal.expense.createdAt)}</div>
               </div>
             </div>
           </div>
@@ -633,28 +693,28 @@ const ExpenseOutput = () => {
 
       {confirmModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[1100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-8 text-center animate-in zoom-in-95">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl border border-slate-200 p-6 text-center">
             <div
-              className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg rotate-3 ${
+              className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5 ${
                 confirmModal.type === 'approve'
-                  ? 'bg-emerald-50 text-emerald-500 shadow-emerald-100'
-                  : 'bg-rose-50 text-rose-500 shadow-rose-100'
+                  ? 'bg-emerald-50 text-emerald-600'
+                  : 'bg-rose-50 text-rose-600'
               }`}
             >
               {confirmModal.type === 'approve' ? (
-                <CheckCircle size={40} strokeWidth={2.5} />
+                <CheckCircle size={30} />
               ) : (
-                <AlertTriangle size={40} strokeWidth={2.5} />
+                <AlertTriangle size={30} />
               )}
             </div>
 
-            <h3 className="text-2xl font-black text-slate-800 mb-2">
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">
               {confirmModal.type === 'approve'
                 ? 'Xarajat tasdiqlansinmi?'
                 : "Xarajat o'chirilsinmi?"}
             </h3>
 
-            <p className="text-slate-500 font-medium text-sm mb-8 leading-relaxed">
+            <p className="text-sm text-slate-500 mb-6 leading-6">
               {confirmModal.type === 'approve'
                 ? "Tasdiqlangandan keyin bu xarajat kassadan ayiriladi."
                 : "Bu xarajat butunlay o'chiriladi."}
@@ -666,7 +726,7 @@ const ExpenseOutput = () => {
                 onClick={() =>
                   setConfirmModal({ isOpen: false, type: null, expenseId: null })
                 }
-                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all disabled:opacity-50"
+                className="flex-1 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200 disabled:opacity-50"
               >
                 Bekor qilish
               </button>
@@ -678,10 +738,10 @@ const ExpenseOutput = () => {
                     ? executeApprove(confirmModal.expenseId)
                     : executeDelete(confirmModal.expenseId)
                 }
-                className={`flex-1 py-4 text-white rounded-2xl font-black shadow-xl transition-all flex justify-center items-center gap-2 disabled:opacity-70 ${
+                className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white inline-flex items-center justify-center gap-2 disabled:opacity-70 ${
                   confirmModal.type === 'approve'
-                    ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
-                    : 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-rose-600 hover:bg-rose-700'
                 }`}
               >
                 {saving ? <Loader2 size={16} className="animate-spin" /> : null}

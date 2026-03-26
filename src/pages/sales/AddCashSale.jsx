@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
-  Check,
   ChevronRight,
   Search,
   User,
@@ -12,15 +11,16 @@ import {
   ScanLine,
   Trash2,
   Plus,
-  Clock,
-  MessageSquare,
   Loader2,
-  Layers
+  Package,
+  ChevronLeft,
+  Minus
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { parseQrCode } from '../../utils/qrParser';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const PRODUCTS_PER_PAGE = 8;
 
 const parseJsonSafe = async (response) => {
   try {
@@ -36,35 +36,40 @@ const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
   const wrapperRef = useRef(null);
 
   useEffect(() => {
-    function handleClickOutside(event) {
+    const handleClickOutside = (event) => {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
         setIsOpen(false);
       }
-    }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const filteredCustomers = useMemo(() => {
-    if (!search) return customers;
-    const lowerSearch = search.toLowerCase();
+    if (!search.trim()) return customers.slice(0, 30);
+    const lower = search.toLowerCase();
+
     return customers.filter((c) => {
       const text =
-        `${c.firstName} ${c.lastName} ${c.pinfl} ${c.document?.number || ''}`.toLowerCase();
-      return text.includes(lowerSearch);
+        `${c.firstName || ''} ${c.lastName || ''} ${c.middleName || ''} ${c.pinfl || ''} ${
+          c.document?.number || ''
+        } ${c.phone || ''} ${c.phones?.[0]?.phone || ''}`.toLowerCase();
+
+      return text.includes(lower);
     });
   }, [customers, search]);
 
   return (
     <div className="relative" ref={wrapperRef}>
       <div
-        className="flex items-center border border-gray-200 rounded-xl px-4 py-3 bg-white hover:bg-gray-50 cursor-text focus-within:ring-2 focus-within:ring-blue-500 transition-all"
+        className="flex items-center border border-slate-200 rounded-xl px-3.5 py-2.5 bg-white cursor-text focus-within:ring-2 focus-within:ring-blue-500 transition-all"
         onClick={() => setIsOpen(true)}
       >
-        <Search className="text-gray-400 mr-2" size={20} />
+        <Search className="text-slate-400 mr-2" size={15} />
         <input
           type="text"
-          className="w-full outline-none bg-transparent text-gray-700 font-medium placeholder-gray-400"
+          className="w-full outline-none bg-transparent text-slate-700 text-sm font-medium placeholder-slate-400"
           placeholder={placeholder}
           value={search}
           onChange={(e) => {
@@ -76,29 +81,30 @@ const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-64 overflow-y-auto custom-scrollbar">
+        <div className="absolute z-50 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-72 overflow-y-auto">
           {filteredCustomers.length > 0 ? (
             filteredCustomers.map((customer) => (
-              <div
+              <button
                 key={customer.id}
+                type="button"
                 onClick={() => {
                   onSelect(customer);
                   setIsOpen(false);
                   setSearch('');
                 }}
-                className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors"
+                className="w-full text-left p-3 hover:bg-blue-50 border-b border-slate-100 last:border-0 transition-colors"
               >
-                <div className="font-bold text-gray-800 uppercase text-sm">
+                <div className="font-semibold text-slate-800 text-sm">
                   {customer.lastName} {customer.firstName} {customer.middleName || ''}
                 </div>
-                <div className="text-[11px] font-mono text-gray-500 flex gap-3 mt-1">
+                <div className="text-[11px] text-slate-500 flex gap-3 mt-1">
                   <span>JSHSHIR: {customer.pinfl ?? '-'}</span>
                   <span>Tel: {customer.phones?.[0]?.phone || customer.phone || '-'}</span>
                 </div>
-              </div>
+              </button>
             ))
           ) : (
-            <div className="p-4 text-center text-gray-400 text-sm font-medium">Mijoz topilmadi</div>
+            <div className="p-4 text-center text-slate-400 text-sm font-medium">Mijoz topilmadi</div>
           )}
         </div>
       )}
@@ -108,6 +114,9 @@ const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
 
 const AddCashSale = () => {
   const navigate = useNavigate();
+  const token = sessionStorage.getItem('token');
+  const barcodeInputRef = useRef(null);
+
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
@@ -115,11 +124,7 @@ const AddCashSale = () => {
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   const [allBatches, setAllBatches] = useState([]);
-
   const [selectedProductForBatches, setSelectedProductForBatches] = useState(null);
-
-  const token = sessionStorage.getItem('token');
-  const barcodeInputRef = useRef(null);
 
   const [saleData, setSaleData] = useState({
     isAnonymous: false,
@@ -132,6 +137,7 @@ const AddCashSale = () => {
 
   const [productTab, setProductTab] = useState('catalog');
   const [productSearch, setProductSearch] = useState('');
+  const [catalogPage, setCatalogPage] = useState(1);
 
   const getAuthHeaders = useCallback(
     () => ({
@@ -148,6 +154,18 @@ const AddCashSale = () => {
     [getAuthHeaders]
   );
 
+  const getCustomerPhone = (customer) => {
+    if (!customer) return 'Tel kiritilmagan';
+    if (Array.isArray(customer.phones) && customer.phones.length > 0) {
+      return customer.phones[0].phone;
+    }
+    if (typeof customer.phones === 'string' && customer.phones.trim() !== '') {
+      return customer.phones;
+    }
+    if (customer.phone) return customer.phone;
+    return 'Tel kiritilmagan';
+  };
+
   const getItemSubtotal = useCallback((item) => {
     return Number(item.salePrice || 0) * Number(item.qty || 0);
   }, []);
@@ -157,17 +175,189 @@ const AddCashSale = () => {
   }, []);
 
   const getItemTotal = useCallback(
-    (item) => {
-      return Math.max(0, getItemSubtotal(item) - getItemDiscount(item));
-    },
-    [getItemSubtotal, getItemDiscount]
+    (item) => Number(item.salePrice || 0) * Number(item.qty || 0) - Number(item.discount || 0),
+    []
   );
 
   const getPerUnitDiscount = useCallback((item) => {
     const qty = Number(item.qty || 0);
     if (!qty) return 0;
-    return Math.floor(Number(item.discount || 0) / qty);
+    return Number(item.discount || 0) / qty;
   }, []);
+
+  const fetchData = useCallback(
+    async (signal = undefined) => {
+      if (!token) return;
+
+      try {
+        setDataLoading(true);
+
+        const [custRes, prodRes] = await Promise.allSettled([
+          fetch(`${API_URL}/api/customers`, { headers: getAuthHeaders(), signal }),
+          fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal })
+        ]);
+
+        if (custRes.status === 'fulfilled' && custRes.value.ok) {
+          const cData = await parseJsonSafe(custRes.value);
+          if (Array.isArray(cData)) setCustomers(cData);
+        }
+
+        if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
+          const pData = await parseJsonSafe(prodRes.value);
+
+          if (Array.isArray(pData)) {
+            const catalogProducts = [];
+            const extractedBatches = [];
+
+            pData.forEach((prod) => {
+              const productSalePrice = Number(prod.salePrice || 0);
+
+              if (Number(prod.quantity || 0) > 0) {
+                catalogProducts.push({
+                  id: prod.id,
+                  customId: prod.customId,
+                  name: prod.name,
+                  quantity: Number(prod.quantity || 0),
+                  salePrice: productSalePrice,
+                  unit: prod.unit || 'Dona'
+                });
+              }
+
+              if (Array.isArray(prod.batches) && prod.batches.length > 0) {
+                prod.batches.forEach((batch) => {
+                  if (Number(batch.quantity || 0) > 0 && !batch.isArchived) {
+                    extractedBatches.push({
+                      id: prod.id,
+                      batchId: batch.id,
+                      customId: prod.customId,
+                      name: prod.name,
+                      quantity: Number(batch.quantity || 0),
+                      buyPrice: Number(batch.buyPrice || 0),
+                      salePrice: productSalePrice,
+                      buyCurrency: batch.buyCurrency,
+                      unit: prod.unit || 'Dona',
+                      scanType: 'BATCH'
+                    });
+                  }
+                });
+              }
+            });
+
+            setProducts(catalogProducts);
+            setAllBatches(extractedBatches);
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          toast.error("Ma'lumotlarni yuklashda xatolik yuz berdi");
+        }
+      } finally {
+        if (!signal?.aborted) setDataLoading(false);
+      }
+    },
+    [token, getAuthHeaders]
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
+  }, [fetchData]);
+
+  const filteredProducts = useMemo(() => {
+    if (!productSearch.trim()) return products;
+    const search = productSearch.trim().toLowerCase();
+
+    return products.filter(
+      (p) =>
+        (p.name || '').toLowerCase().includes(search) ||
+        (p.customId != null && String(p.customId).includes(search))
+    );
+  }, [products, productSearch]);
+
+  useEffect(() => {
+    setCatalogPage(1);
+  }, [productSearch]);
+
+  const totalCatalogPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
+
+  const paginatedProducts = useMemo(() => {
+    const start = (catalogPage - 1) * PRODUCTS_PER_PAGE;
+    return filteredProducts.slice(start, start + PRODUCTS_PER_PAGE);
+  }, [filteredProducts, catalogPage]);
+
+  const grossTotal = useMemo(() => {
+    return saleData.items.reduce((sum, item) => sum + getItemSubtotal(item), 0);
+  }, [saleData.items, getItemSubtotal]);
+
+  const totalDiscount = useMemo(() => {
+    return saleData.items.reduce((sum, item) => sum + getItemDiscount(item), 0);
+  }, [saleData.items, getItemDiscount]);
+
+  const finalAmount = useMemo(() => {
+    return saleData.items.reduce((sum, item) => sum + getItemTotal(item), 0);
+  }, [saleData.items, getItemTotal]);
+
+  const addBatchToCart = (batch) => {
+    if (Number(batch.quantity || 0) <= 0) {
+      return toast.error("Ushbu partiyada qoldiq yo'q!");
+    }
+
+    const existingItem = saleData.items.find((i) => i.batchId === batch.batchId);
+
+    if (existingItem) {
+      if (Number(existingItem.qty || 0) + 1 > Number(batch.quantity || 0)) {
+        return toast.error(`Ushbu partiyada faqat ${batch.quantity} ta qolgan!`);
+      }
+
+      setSaleData((prev) => ({
+        ...prev,
+        items: prev.items.map((item) =>
+          item.batchId === batch.batchId ? { ...item, qty: Number(item.qty || 0) + 1 } : item
+        )
+      }));
+
+      toast.success('Soni oshirildi');
+    } else {
+      setSaleData((prev) => ({
+        ...prev,
+        items: [
+          ...prev.items,
+          {
+            ...batch,
+            qty: 1,
+            discount: 0,
+            scanType: 'BATCH'
+          }
+        ]
+      }));
+
+      toast.success("Savatga qo'shildi");
+    }
+  };
+
+  const removeItem = (batchId) => {
+    setSaleData((prev) => ({
+      ...prev,
+      items: prev.items.filter((i) => i.batchId !== batchId)
+    }));
+  };
+
+  const handleProductClick = (product) => {
+    const productBatches = allBatches.filter((b) => b.id === product.id);
+
+    if (productBatches.length === 1) {
+      addBatchToCart(productBatches[0]);
+      return;
+    }
+
+    if (productBatches.length > 1) {
+      setSelectedProductForBatches(product);
+      return;
+    }
+
+    toast.error("Ushbu tovar uchun faol partiya topilmadi");
+  };
 
   const updateCartItemQty = (batchId, value) => {
     const numericValue = Number(value);
@@ -231,7 +421,7 @@ const AddCashSale = () => {
     }
 
     const numericValue = Number(value);
-    if (isNaN(numericValue) || numericValue < 0) return;
+    if (isNaN(numericValue)) return;
 
     const targetItem = saleData.items.find((item) => item.batchId === batchId);
     if (!targetItem) return;
@@ -263,16 +453,16 @@ const AddCashSale = () => {
     }
 
     const numericValue = Number(value);
-    if (isNaN(numericValue) || numericValue < 0) return;
+    if (isNaN(numericValue)) return;
 
     const targetItem = saleData.items.find((item) => item.batchId === batchId);
     if (!targetItem) return;
 
     const qty = Number(targetItem.qty || 0);
-    const totalDiscount = numericValue * qty;
+    const totalDiscountValue = numericValue * qty;
     const maxDiscount = Number(targetItem.salePrice || 0) * qty;
 
-    if (totalDiscount > maxDiscount) {
+    if (totalDiscountValue > maxDiscount) {
       toast.error("Chegirma tovar summasidan katta bo'lishi mumkin emas!");
       return;
     }
@@ -280,229 +470,86 @@ const AddCashSale = () => {
     setSaleData((prev) => ({
       ...prev,
       items: prev.items.map((item) =>
-        item.batchId === batchId ? { ...item, discount: totalDiscount } : item
+        item.batchId === batchId ? { ...item, discount: totalDiscountValue } : item
       )
     }));
   };
 
-  const fetchData = useCallback(
-    async (signal = undefined) => {
-      if (!token) return;
-
-      try {
-        setDataLoading(true);
-
-        const [custRes, prodRes] = await Promise.allSettled([
-          fetch(`${API_URL}/api/customers`, { headers: getAuthHeaders(), signal }),
-          fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal })
-        ]);
-
-        if (custRes.status === 'fulfilled' && custRes.value.ok) {
-          const data = await parseJsonSafe(custRes.value);
-          if (Array.isArray(data)) setCustomers(data);
-        }
-
-        if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
-          const data = await parseJsonSafe(prodRes.value);
-
-          if (Array.isArray(data)) {
-            const extractedBatches = [];
-            const catalogProducts = [];
-
-            data.forEach((prod) => {
-              if (Number(prod.quantity) > 0) {
-                catalogProducts.push({
-                  id: prod.id,
-                  customId: prod.customId,
-                  name: prod.name,
-                  quantity: prod.quantity,
-                  salePrice: prod.salePrice,
-                  unit: prod.unit
-                });
-              }
-
-              if (prod.batches && prod.batches.length > 0) {
-                prod.batches.forEach((batch) => {
-                  if (Number(batch.quantity) > 0 && !batch.isArchived) {
-                    extractedBatches.push({
-                      id: prod.id,
-                      batchId: batch.id,
-                      customId: prod.customId,
-                      name: prod.name,
-                      quantity: batch.quantity,
-                      buyPrice: batch.buyPrice,
-                      salePrice: batch.salePrice || prod.salePrice,
-                      buyCurrency: batch.buyCurrency,
-                      unit: prod.unit
-                    });
-                  }
-                });
-              } else if (Number(prod.quantity) > 0) {
-                extractedBatches.push({
-                  id: prod.id,
-                  batchId: `old-${prod.id}`,
-                  customId: prod.customId,
-                  name: prod.name,
-                  quantity: prod.quantity,
-                  buyPrice: prod.buyPrice,
-                  salePrice: prod.salePrice,
-                  buyCurrency: prod.buyCurrency || 'USD',
-                  unit: prod.unit
-                });
-              }
-            });
-
-            setProducts(catalogProducts);
-            setAllBatches(extractedBatches);
-          }
-        }
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          toast.error("Ma'lumotlarni yuklashda xatolik yuz berdi");
-        }
-      } finally {
-        if (!signal?.aborted) setDataLoading(false);
-      }
-    },
-    [token, getAuthHeaders]
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchData(controller.signal);
-    return () => controller.abort();
-  }, [fetchData]);
-
-  const addBatchToCart = (batch) => {
-    if (Number(batch.quantity) <= 0) {
-      return toast.error("Ushbu partiyada qoldiq yo'q!");
-    }
-
-    const existingItem = saleData.items.find((i) => i.batchId === batch.batchId);
-
-    if (existingItem) {
-      if (Number(existingItem.qty || 0) + 1 > Number(batch.quantity)) {
-        return toast.error(`Ushbu partiyada faqat ${batch.quantity} ta qolgan!`);
-      }
-
-      setSaleData((prev) => ({
-        ...prev,
-        items: prev.items.map((item) =>
-          item.batchId === batch.batchId
-            ? { ...item, qty: Number(item.qty || 0) + 1 }
-            : item
-        )
-      }));
-
-      toast.success('Soni oshirildi');
-    } else {
-      setSaleData((prev) => ({
-        ...prev,
-        items: [
-          ...prev.items,
-          {
-            ...batch,
-            qty: 1,
-            discount: 0,
-            scanType: 'BATCH'
-          }
-        ]
-      }));
-
-      toast.success("Savatga qo'shildi");
-    }
-
-    setTimeout(() => {
-      barcodeInputRef.current?.focus();
-    }, 0);
-  };
-
   const handleBarcodeScan = (e) => {
-    if (e.key === 'Enter' && e.target.value.trim() !== '') {
-      const code = e.target.value.trim();
-      const parsed = parseQrCode(code);
+    if (e.key !== 'Enter' || !e.target.value.trim()) return;
 
-      const searchKey = parsed.id;
-      const batchKey = parsed.batchId;
-      const invoiceKey = parsed.invoiceId;
+    const code = e.target.value.trim();
+    const parsed = parseQrCode(code);
 
-      if (!parsed.isValid || !searchKey) {
-        toast.error("QR kod noto'g'ri yoki o'qilmadi!");
-        e.target.value = '';
-        barcodeInputRef.current?.focus();
-        return;
-      }
+    const searchKey = parsed.id;
+    const batchKey = parsed.batchId;
+    const invoiceKey = parsed.invoiceId;
 
-      if (invoiceKey) {
-        toast.error(
-          "Bu QR kod hali tasdiqlanmagan kirimga tegishli. U faqat sanoq bo'limida ishlatiladi."
-        );
-        e.target.value = '';
-        barcodeInputRef.current?.focus();
-        return;
-      }
-
-      if (batchKey) {
-        const foundBatch = allBatches.find(
-          (b) =>
-            String(b.batchId) === String(batchKey) &&
-            String(b.customId) === String(searchKey)
-        );
-
-        if (foundBatch) {
-          addBatchToCart(foundBatch);
-        } else {
-          toast.error("QR kod bo'yicha tasdiqlangan partiya topilmadi!");
-        }
-      } else {
-        toast.error("Savdoda faqat tasdiqlangan partiya QR kodi ishlaydi!");
-      }
-
+    if (!parsed.isValid || !searchKey) {
+      toast.error("QR kod noto'g'ri yoki o'qilmadi");
       e.target.value = '';
       barcodeInputRef.current?.focus();
+      return;
     }
-  };
 
-  const grossTotal = useMemo(() => {
-    return saleData.items.reduce((sum, item) => sum + getItemSubtotal(item), 0);
-  }, [saleData.items, getItemSubtotal]);
+    if (invoiceKey) {
+      toast.error(
+        "Bu QR kod hali tasdiqlanmagan kirimga tegishli. U faqat sanoq bo'limida ishlatiladi."
+      );
+      e.target.value = '';
+      barcodeInputRef.current?.focus();
+      return;
+    }
 
-  const totalDiscount = useMemo(() => {
-    return saleData.items.reduce((sum, item) => sum + getItemDiscount(item), 0);
-  }, [saleData.items, getItemDiscount]);
+    if (!batchKey) {
+      toast.error("Savdoda faqat tasdiqlangan partiya QR kodi ishlaydi");
+      e.target.value = '';
+      barcodeInputRef.current?.focus();
+      return;
+    }
 
-  const finalAmount = useMemo(() => {
-    return saleData.items.reduce((sum, item) => sum + getItemTotal(item), 0);
-  }, [saleData.items, getItemTotal]);
+    const foundBatch = allBatches.find(
+      (b) =>
+        String(b.batchId) === String(batchKey) &&
+        String(b.customId) === String(searchKey)
+    );
 
-  const removeItem = (batchId) => {
-    setSaleData((prev) => ({
-      ...prev,
-      items: prev.items.filter((i) => i.batchId !== batchId)
-    }));
+    if (foundBatch) {
+      addBatchToCart(foundBatch);
+      setProductTab('cart');
+    } else {
+      toast.error("QR kod bo'yicha tasdiqlangan partiya topilmadi");
+    }
+
+    e.target.value = '';
+    barcodeInputRef.current?.focus();
   };
 
   const handleNext = () => {
     if (step === 1 && !saleData.isAnonymous && !saleData.mainCustomer) {
-      return toast.error("Mijozni tanlang yoki 'Boshqa shaxs' ni tanlang!");
+      return toast.error("Mijozni tanlang yoki 'Boshqa shaxs' ni tanlang");
     }
 
     if (step === 1 && saleData.isAnonymous && !saleData.otherName.trim()) {
-      return toast.error('Xaridor ismini yozing!');
+      return toast.error('Xaridor ismini yozing');
     }
 
     if (step === 2 && saleData.items.length === 0) {
-      return toast.error("Savat bo'sh! Tovar qo'shing.");
+      setProductTab('catalog');
+      return toast.error("Savat bo'sh, avval tovar qo'shing");
     }
 
     if (step < 3) {
-      setStep(step + 1);
-      if (step === 1) {
+      const nextStep = step + 1;
+      setStep(nextStep);
+
+      if (nextStep === 2) {
         setTimeout(() => barcodeInputRef.current?.focus(), 100);
       }
-    } else {
-      submitSale();
+      return;
     }
+
+    submitSale();
   };
 
   const submitSale = async () => {
@@ -515,19 +562,19 @@ const AddCashSale = () => {
 
     if (invalidQtyItem) {
       return toast.error(
-        `${invalidQtyItem.name} uchun ombordagi qoldiqdan ko'p mahsulot soni kiritildi!`
+        `${invalidQtyItem.name} uchun ombordagi qoldiqdan ko'p mahsulot soni kiritildi`
       );
     }
 
     const invalidDiscountItem = saleData.items.find((item) => {
       const subtotal = Number(item.salePrice || 0) * Number(item.qty || 0);
       const discount = Number(item.discount || 0);
-      return discount < 0 || discount > subtotal;
+      return discount > subtotal;
     });
 
     if (invalidDiscountItem) {
       return toast.error(
-        `${invalidDiscountItem.name} uchun chegirma tovar summasidan katta bo'lishi mumkin emas!`
+        `${invalidDiscountItem.name} uchun chegirma tovar summasidan katta bo'lishi mumkin emas`
       );
     }
 
@@ -537,7 +584,7 @@ const AddCashSale = () => {
 
     if (invalidBatchItem) {
       return toast.error(
-        `${invalidBatchItem.name} savdoda faqat tasdiqlangan partiya bilan ishlatilishi kerak!`
+        `${invalidBatchItem.name} savdoda faqat tasdiqlangan partiya bilan ishlatilishi kerak`
       );
     }
 
@@ -554,10 +601,7 @@ const AddCashSale = () => {
           quantity: Number(item.qty),
           unitPrice: Number(item.salePrice),
           discountAmount: Number(item.discount || 0),
-          batchId:
-            String(item.batchId || '').startsWith('old-')
-              ? null
-              : Number(item.batchId),
+          batchId: Number(item.batchId),
           scanType: item.scanType || 'BATCH'
         }))
       };
@@ -571,308 +615,185 @@ const AddCashSale = () => {
       const data = await parseJsonSafe(res);
 
       if (res.ok) {
-        toast.success("Savdo jarayonda holatida saqlandi!");
+        toast.success("Savdo jarayonda holatida saqlandi");
         navigate('/savdo');
       } else {
         toast.error(data?.error || `Saqlashda xatolik (${res.status})`);
       }
     } catch (err) {
       console.error('Create draft sale error:', err);
-      toast.error("Server bilan aloqa yo'q!");
+      toast.error("Server bilan aloqa yo'q");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const filteredProducts = useMemo(() => {
-    if (!productSearch) return products;
-    const search = productSearch.trim().toLowerCase();
-
-    return products.filter(
-      (p) =>
-        (p.name || '').toLowerCase().includes(search) ||
-        (p.customId != null && String(p.customId).includes(search))
-    );
-  }, [products, productSearch]);
-
-  const getCustomerPhone = (customer) => {
-    if (!customer) return 'Tel kiritilmagan';
-    if (Array.isArray(customer.phones) && customer.phones.length > 0) {
-      return customer.phones[0].phone;
-    }
-    if (typeof customer.phones === 'string' && customer.phones.trim() !== '') {
-      return customer.phones;
-    }
-    if (customer.phone) return customer.phone;
-    return 'Tel kiritilmagan';
-  };
+  const customerDisplayName = saleData.mainCustomer
+    ? `${saleData.mainCustomer.lastName || ''} ${saleData.mainCustomer.firstName || ''}`.trim()
+    : null;
 
   if (dataLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="animate-spin text-blue-500" size={48} />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-blue-600" size={40} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 animate-in fade-in duration-300 relative">
+    <div className="h-full min-h-0 flex flex-col bg-slate-50">
       {selectedProductForBatches && (
         <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-slate-950/45 backdrop-blur-[2px] z-[1000] flex items-center justify-center p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedProductForBatches(null);
           }}
         >
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50/80">
+          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[85vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div>
-                <h3 className="font-black text-gray-800 text-lg flex items-center gap-2">
-                  <Layers className="text-blue-500" size={24} /> Partiyani tanlang
-                </h3>
-                <p className="text-sm font-medium text-gray-500 mt-1">
+                <div className="text-xs font-black tracking-widest uppercase text-blue-600">
+                  Partiya tanlash
+                </div>
+                <div className="text-base font-black text-slate-800 mt-1">
                   {selectedProductForBatches.name}
-                </p>
+                </div>
               </div>
+
               <button
+                type="button"
                 onClick={() => setSelectedProductForBatches(null)}
-                className="p-3 bg-white hover:bg-gray-100 rounded-xl text-gray-500 border border-gray-200 transition-colors"
+                className="h-9 w-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-white"
               >
-                <X size={20} />
+                <X size={17} />
               </button>
             </div>
 
-            <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
-              <div className="space-y-4">
-                {allBatches
-                  .filter((b) => b.id === selectedProductForBatches.id)
-                  .map((batch) => {
-                    const qtyInCart =
-                      saleData.items.find((i) => i.batchId === batch.batchId)?.qty || 0;
-                    const isFullyAdded = qtyInCart >= batch.quantity;
+            <div className="p-4 overflow-y-auto flex-1 space-y-3">
+              {allBatches
+                .filter((b) => b.id === selectedProductForBatches.id)
+                .map((batch) => {
+                  const qtyInCart =
+                    saleData.items.find((i) => i.batchId === batch.batchId)?.qty || 0;
+                  const isFullyAdded = qtyInCart >= Number(batch.quantity || 0);
 
-                    return (
-                      <div
-                        key={batch.batchId}
-                        className={`flex justify-between items-center p-5 border-2 rounded-2xl transition-all ${
-                          isFullyAdded
-                            ? 'border-gray-100 bg-gray-50/50'
-                            : 'border-blue-100 hover:border-blue-300 hover:bg-blue-50/30'
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="text-[11px] font-black uppercase tracking-widest bg-indigo-100 text-indigo-700 px-3 py-1 rounded-lg">
-                              {!String(batch.batchId).startsWith('old-')
-                                ? `Partiya: P-${batch.batchId}`
-                                : 'Eski tovar'}
-                            </span>
-                          </div>
-                          <div className="text-sm font-bold text-gray-600 mt-2 flex items-center gap-4">
-                            <span>
-                              Qoldiq:{' '}
-                              <span className="text-blue-600 font-black">{batch.quantity} ta</span>
-                            </span>
-                            {qtyInCart > 0 && (
-                              <span className="text-rose-500 bg-rose-50 px-2 py-0.5 rounded-md">
-                                Savatda: {qtyInCart} ta
-                              </span>
-                            )}
-                          </div>
+                  return (
+                    <div
+                      key={batch.batchId}
+                      className="border border-slate-200 rounded-2xl p-4 flex items-center justify-between gap-4"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-[10px] inline-flex px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-black uppercase tracking-widest">
+                          Partiya P-{batch.batchId}
                         </div>
-
-                        <div className="flex items-center gap-6">
-                          <div className="text-right">
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                              Sotuv narxi
-                            </p>
-                            <p className="font-black text-emerald-600 text-lg">
-                              {Number(batch.salePrice).toLocaleString()}{' '}
-                              <span className="text-xs">UZS</span>
-                            </p>
-                          </div>
-
-                          <button
-                            disabled={isFullyAdded}
-                            onClick={() => addBatchToCart(batch)}
-                            className={`w-14 h-14 flex items-center justify-center rounded-2xl transition-all shadow-sm active:scale-95 ${
-                              qtyInCart > 0 && !isFullyAdded
-                                ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-blue-200'
-                                : 'bg-white border-2 border-gray-200 text-gray-500 hover:border-blue-500 hover:text-blue-500'
-                            } disabled:opacity-40 disabled:cursor-not-allowed`}
-                          >
-                            {isFullyAdded ? (
-                              <Check size={24} strokeWidth={3} />
-                            ) : (
-                              <Plus size={24} strokeWidth={2.5} />
-                            )}
-                          </button>
+                        <div className="mt-2 text-sm font-semibold text-slate-800">
+                          Sotuv narxi: {Number(batch.salePrice || 0).toLocaleString()} UZS
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          Qoldiq: {Number(batch.quantity || 0)} ta
+                          {qtyInCart > 0 ? ` · Savatda: ${qtyInCart} ta` : ''}
                         </div>
                       </div>
-                    );
-                  })}
-              </div>
+
+                      <button
+                        type="button"
+                        disabled={isFullyAdded}
+                        onClick={() => {
+                          addBatchToCart(batch);
+                          setSelectedProductForBatches(null);
+                          setProductTab('cart');
+                        }}
+                        className={`h-9 px-4 rounded-xl font-bold text-sm transition-all ${
+                          isFullyAdded
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        }`}
+                      >
+                        {isFullyAdded ? 'To‘ldi' : "Qo'shish"}
+                      </button>
+                    </div>
+                  );
+                })}
+
+              {allBatches.filter((b) => b.id === selectedProductForBatches.id).length === 0 && (
+                <div className="py-10 text-center text-slate-400 font-medium">
+                  Ushbu tovar uchun faol partiya topilmadi
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-4">
-          <button
-            disabled={isLoading}
-            onClick={() => navigate(-1)}
-            className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50 transition-colors"
-          >
-            <ArrowLeft size={20} className="text-gray-600" />
-          </button>
-          <h1 className="text-xl font-black text-gray-800 tracking-tight">Naqd savdo yaratish</h1>
-        </div>
+      <div className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="h-9 w-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-50"
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-base font-black text-slate-800 truncate">
+                Naqd savdo yaratish
+              </h1>
+              <p className="text-[11px] text-slate-500 font-medium">
+                Xaridor, mahsulot va yakuniy tasdiqlash
+              </p>
+            </div>
+          </div>
 
-        <button
-          disabled={isLoading}
-          onClick={() => navigate(-1)}
-          className="px-5 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
-        >
-          Bekor qilish
-        </button>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="hidden sm:inline-flex h-9 px-4 rounded-xl border border-slate-200 bg-white items-center text-sm font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            Bekor qilish
+          </button>
+        </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-24">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-blue-100/50 relative overflow-hidden">
-            <div className="absolute -right-4 -top-4 text-blue-50 opacity-50">
-              <User size={100} />
-            </div>
-
-            <div className="flex items-center gap-2 text-blue-600 font-bold text-[11px] uppercase tracking-widest mb-4 relative z-10">
-              <User size={14} /> Xaridor
-            </div>
-
-            {saleData.isAnonymous ? (
-              <div className="relative z-10">
-                <h3 className="font-black text-gray-800 text-xl tracking-tight mb-1">
-                  {saleData.otherName || 'Kiritilmagan'}
-                </h3>
-                <p className="text-sm font-bold text-gray-400">{saleData.otherPhone}</p>
-              </div>
-            ) : saleData.mainCustomer ? (
-              <div className="relative z-10">
-                <h3 className="font-black text-gray-800 text-xl tracking-tight leading-tight mb-2">
-                  {saleData.mainCustomer.lastName} <br />
-                  {saleData.mainCustomer.firstName}
-                </h3>
-                <p className="text-sm font-bold text-gray-400">
-                  {getCustomerPhone(saleData.mainCustomer)}
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400 font-medium italic relative z-10">
-                Mijoz tanlanmagan
-              </p>
-            )}
-          </div>
-
-          {saleData.items.length > 0 && (
-            <div className="bg-gray-900 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden">
-              <div className="absolute -right-4 -bottom-4 text-gray-800">
-                <ShoppingCart size={120} />
-              </div>
-
-              <div className="relative z-10">
-                <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <ShoppingCart size={14} /> Jami Savdo
-                </h3>
-
-                <div className="flex justify-between text-sm mb-3">
-                  <span className="text-gray-400 font-medium">Tovarlar soni:</span>
-                  <span className="font-black text-white">
-                    {saleData.items.reduce((s, i) => s + Number(i.qty || 0), 0)} ta
-                  </span>
-                </div>
-
-                <div className="flex justify-between text-sm mb-3">
-                  <span className="text-gray-400 font-medium">Umumiy summa:</span>
-                  <span className="font-black text-white">{grossTotal.toLocaleString()} UZS</span>
-                </div>
-
-                {totalDiscount > 0 && (
-                  <div className="flex justify-between text-sm mb-3 text-amber-400 border-t border-gray-700/50 pt-3">
-                    <span className="font-medium">Chegirma:</span>
-                    <span className="font-black">- {totalDiscount.toLocaleString()} UZS</span>
-                  </div>
-                )}
-
-                <div className="border-t border-gray-700/50 pt-4 mt-2">
-                  <p className="text-gray-400 text-[10px] font-black uppercase mb-1 tracking-widest">
-                    Yakuniy summa
-                  </p>
-                  <p
-                    className="text-3xl lg:text-5xl font-black text-emerald-400 tracking-tighter truncate"
-                    title={`${finalAmount.toLocaleString()} UZS`}
-                  >
-                    {finalAmount.toLocaleString()}{' '}
-                    <span className="text-lg font-bold text-emerald-600">UZS</span>
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="lg:col-span-8">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">
-            <div className="flex justify-center items-center relative max-w-sm mx-auto">
-              <div className="absolute top-1/2 left-4 right-4 h-1.5 bg-gray-100 rounded-full -z-10 -translate-y-1/2"></div>
-              <div
-                className="absolute top-1/2 left-4 h-1.5 rounded-full bg-blue-500 -z-10 -translate-y-1/2 transition-all duration-500"
-                style={{ width: `${((step - 1) / 2) * 100}%` }}
-              ></div>
-
-              {[1, 2, 3].map((s) => (
-                <div
-                  key={s}
-                  className={`w-10 h-10 flex items-center justify-center rounded-full text-sm font-black border-4 transition-all mx-auto bg-white ${
-                    step >= s
-                      ? 'border-blue-600 text-blue-600 shadow-md shadow-blue-100'
-                      : 'border-gray-200 text-gray-400'
-                  }`}
-                >
-                  {step > s ? <Check size={16} strokeWidth={3} /> : s}
-                </div>
-              ))}
-            </div>
-          </div>
-
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-3.5 flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0">
           {step === 1 && (
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8 duration-300">
-              <div className="flex gap-4 p-1.5 bg-gray-50 border border-gray-200/50 rounded-2xl mb-8 w-fit">
+            <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 h-full">
+              <div className="flex gap-3 p-1.5 bg-slate-50 border border-slate-200/70 rounded-2xl mb-5 w-fit">
                 <button
+                  type="button"
                   onClick={() => setSaleData((prev) => ({ ...prev, isAnonymous: false }))}
-                  className={`px-6 py-3 rounded-xl font-bold transition-all text-sm ${
+                  className={`px-4 py-2 rounded-xl font-bold transition-all text-sm ${
                     !saleData.isAnonymous
-                      ? 'bg-white text-blue-600 shadow-sm border border-gray-200/50'
-                      : 'text-gray-500 hover:text-gray-700'
+                      ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60'
+                      : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  Bazada bor Mijoz
+                  Bazada bor mijoz
                 </button>
 
                 <button
-                  onClick={() => setSaleData((prev) => ({ ...prev, isAnonymous: true }))}
-                  className={`px-6 py-3 rounded-xl font-bold transition-all text-sm ${
+                  type="button"
+                  onClick={() =>
+                    setSaleData((prev) => ({
+                      ...prev,
+                      isAnonymous: true,
+                      mainCustomer: null
+                    }))
+                  }
+                  className={`px-4 py-2 rounded-xl font-bold transition-all text-sm ${
                     saleData.isAnonymous
-                      ? 'bg-white text-blue-600 shadow-sm border border-gray-200/50'
-                      : 'text-gray-500 hover:text-gray-700'
+                      ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60'
+                      : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  Boshqa shaxs (Anonim)
+                  Boshqa shaxs
                 </button>
               </div>
 
               {!saleData.isAnonymous ? (
                 <div>
-                  <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-2">
+                  <label className="block text-[10px] font-black tracking-widest text-slate-400 uppercase mb-2">
                     Bazada bor mijozni qidiring
                   </label>
                   <SearchableSelect
@@ -882,10 +803,10 @@ const AddCashSale = () => {
                   />
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-2">
-                      Xaridor ism-familiyasi <span className="text-red-500">*</span>
+                    <label className="block text-[10px] font-black tracking-widest text-slate-400 uppercase mb-2">
+                      Xaridor ism-familiyasi <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -893,14 +814,14 @@ const AddCashSale = () => {
                       onChange={(e) =>
                         setSaleData((prev) => ({ ...prev, otherName: e.target.value }))
                       }
-                      className="w-full p-4 border border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 ring-blue-50 font-bold text-gray-700 transition-all"
+                      className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 ring-blue-50 font-medium text-slate-700 transition-all"
                       placeholder="Masalan: Alisher"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-black tracking-widest text-gray-400 uppercase mb-2">
-                      Telefon raqami (Ixtiyoriy)
+                    <label className="block text-[10px] font-black tracking-widest text-slate-400 uppercase mb-2">
+                      Telefon raqami
                     </label>
                     <input
                       type="text"
@@ -908,9 +829,27 @@ const AddCashSale = () => {
                       onChange={(e) =>
                         setSaleData((prev) => ({ ...prev, otherPhone: e.target.value }))
                       }
-                      className="w-full p-4 border border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 ring-blue-50 font-bold font-mono text-gray-700 transition-all"
+                      className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 ring-blue-50 font-medium font-mono text-slate-700 transition-all"
                       placeholder="+998"
                     />
+                  </div>
+                </div>
+              )}
+
+              {(saleData.mainCustomer || saleData.otherName) && (
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 max-w-xl">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                    Tanlangan xaridor
+                  </div>
+                  <div className="text-[14px] font-semibold text-slate-800">
+                    {saleData.isAnonymous
+                      ? saleData.otherName || 'Kiritilmagan'
+                      : customerDisplayName}
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">
+                    {saleData.isAnonymous
+                      ? saleData.otherPhone || '+998'
+                      : getCustomerPhone(saleData.mainCustomer)}
                   </div>
                 </div>
               )}
@@ -918,405 +857,614 @@ const AddCashSale = () => {
           )}
 
           {step === 2 && (
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[650px] animate-in slide-in-from-right-8 duration-300">
-              <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50/50 border-b border-gray-100">
-                <div className="relative max-w-xl mx-auto">
-                  <ScanLine
-                    className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-500"
-                    size={24}
-                  />
-                  <input
-                    ref={barcodeInputRef}
-                    type="text"
-                    placeholder="Shtrix kodni skanerlang yoki yozing..."
-                    onKeyDown={handleBarcodeScan}
-                    className="w-full pl-14 pr-6 py-4 bg-white border-2 border-blue-200 focus:border-blue-500 rounded-2xl outline-none shadow-sm font-mono font-bold text-xl text-gray-800 transition-colors placeholder:font-sans placeholder:text-base placeholder:font-medium"
-                  />
-                </div>
-              </div>
-
-              <div className="flex border-b border-gray-100 bg-slate-50/50">
-                <button
-                  onClick={() => setProductTab('catalog')}
-                  className={`flex-1 py-4 text-sm font-black transition-all ${
-                    productTab === 'catalog'
-                      ? 'text-blue-600 bg-white border-b-2 border-blue-600'
-                      : 'text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  Katalog (Qidiruv)
-                </button>
-
-                <button
-                  onClick={() => setProductTab('cart')}
-                  className={`flex-1 py-4 text-sm font-black transition-all relative ${
-                    productTab === 'cart'
-                      ? 'text-blue-600 bg-white border-b-2 border-blue-600'
-                      : 'text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  Tanlangan tovarlar
-                  {saleData.items.length > 0 && (
-                    <span className="absolute ml-2 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm">
-                      {saleData.items.length}
-                    </span>
-                  )}
-                </button>
-              </div>
-
-              {productTab === 'catalog' && (
-                <div className="p-6 flex flex-col flex-1 overflow-hidden bg-white">
-                  <div className="relative mb-6 shrink-0">
-                    <Search
-                      className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-                      size={20}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Nomi bo'yicha tezkor qidiruv..."
-                      value={productSearch}
-                      onChange={(e) => setProductSearch(e.target.value)}
-                      className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-700 transition-all"
-                    />
+            <div className="grid grid-cols-1 xl:grid-cols-[230px_1fr] gap-4 h-full min-h-0">
+              <div className="space-y-3">
+                <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200">
+                  <div className="flex items-center gap-2 text-blue-600 font-bold text-[10px] uppercase tracking-widest mb-2">
+                    <User size={12} /> Xaridor
                   </div>
 
-                  <div className="flex-1 overflow-y-auto custom-scrollbar border border-gray-100 rounded-2xl">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-gray-50 sticky top-0 text-[10px] text-gray-400 uppercase font-black tracking-widest z-10 shadow-sm border-b border-gray-100">
-                        <tr>
-                          <th className="p-4">Tovar Nomi</th>
-                          <th className="p-4 text-center">Umumiy Qoldiq</th>
-                          <th className="p-4 text-right">Sotuv Narxi</th>
-                          <th className="p-4 text-center">Tanlash</th>
-                        </tr>
-                      </thead>
-
-                      <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
-                        {filteredProducts.map((product) => {
-                          const qtyInCart = saleData.items
-                            .filter((i) => i.id === product.id)
-                            .reduce((s, i) => s + Number(i.qty || 0), 0);
-
-                          return (
-                            <tr
-                              key={product.id}
-                              className="hover:bg-blue-50/50 transition-colors group cursor-pointer"
-                              onClick={() => setSelectedProductForBatches(product)}
-                            >
-                              <td className="p-4">
-                                <div className="text-gray-800 group-hover:text-blue-700 transition-colors">
-                                  {product.name}
-                                </div>
-                                <div className="text-[10px] font-mono text-gray-400 uppercase tracking-widest mt-1">
-                                  ID: #{product.customId ?? '-'}
-                                </div>
-                              </td>
-
-                              <td className="p-4 text-center">
-                                <div className="flex flex-col items-center">
-                                  <span className="px-2.5 py-1 rounded-md text-xs bg-blue-50 text-blue-600">
-                                    {Number(product.quantity || 0)} ta
-                                  </span>
-                                  {qtyInCart > 0 && (
-                                    <span className="text-[9px] text-rose-500 mt-1">
-                                      Savatda: {qtyInCart} ta
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-
-                              <td className="p-4 text-right text-emerald-600">
-                                {Number(product.salePrice || 0).toLocaleString()}
-                              </td>
-
-                              <td className="p-4 text-center">
-                                <button
-                                  className="p-2 rounded-xl transition-all shadow-sm active:scale-95 bg-white border border-gray-200 text-blue-500 hover:border-blue-500 hover:bg-blue-50 group-hover:bg-blue-500 group-hover:text-white"
-                                  title="Partiyalarni ko'rish"
-                                >
-                                  <Layers size={18} strokeWidth={2.5} />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-
-                        {filteredProducts.length === 0 && (
-                          <tr>
-                            <td colSpan="4" className="p-16 text-center text-gray-400 font-medium">
-                              Hech narsa topilmadi
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {productTab === 'cart' && (
-                <div className="p-6 flex flex-col flex-1 overflow-hidden bg-slate-50/50">
-                  {saleData.items.length === 0 ? (
-                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-3xl bg-white">
-                      <ShoppingCart size={56} strokeWidth={1.5} className="mb-4 text-gray-300" />
-                      <p className="font-bold text-gray-500">Savat bo'sh</p>
-                      <p className="text-sm mt-1">Shtrix kod ishlating yoki katalogdan tanlang.</p>
-                    </div>
+                  {saleData.isAnonymous ? (
+                    <>
+                      <h3 className="font-semibold text-slate-800 text-base tracking-tight mb-1">
+                        {saleData.otherName || 'Kiritilmagan'}
+                      </h3>
+                      <p className="text-sm font-medium text-slate-500">{saleData.otherPhone}</p>
+                    </>
+                  ) : saleData.mainCustomer ? (
+                    <>
+                      <h3 className="font-semibold text-slate-800 text-base tracking-tight leading-tight mb-1">
+                        {customerDisplayName}
+                      </h3>
+                      <p className="text-sm font-medium text-slate-500">
+                        {getCustomerPhone(saleData.mainCustomer)}
+                      </p>
+                    </>
                   ) : (
-                    <div className="flex-1 overflow-y-auto custom-scrollbar border bg-white border-gray-100 rounded-3xl shadow-sm">
-                      <table className="w-full text-left text-sm">
-                        <thead className="bg-gray-50 sticky top-0 text-[10px] text-gray-400 uppercase font-black tracking-widest border-b border-gray-100 z-10">
-                          <tr>
-                            <th className="p-4 pl-6">Nomi va Partiyasi</th>
-                            <th className="p-4 w-28 text-center">Soni</th>
-                            <th className="p-4 text-right">Dona Narxi</th>
-                            <th className="p-4 text-right">Jami (UZS)</th>
-                            <th className="p-4 text-center w-16">X</th>
-                          </tr>
-                        </thead>
-
-                        <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
-                          {saleData.items.map((item) => (
-                            <tr key={item.batchId} className="hover:bg-rose-50/30 transition-colors">
-                              <td className="p-4 pl-6">
-                                <div className="text-gray-800">{item.name}</div>
-                                <div className="text-[10px] text-indigo-500 mt-1 uppercase font-black bg-indigo-50 w-fit px-2 py-0.5 rounded">
-                                  Partiya:{' '}
-                                  {!String(item.batchId).startsWith('old-')
-                                    ? `P-${item.batchId}`
-                                    : 'ESKI TOVAR'}
-                                </div>
-                              </td>
-
-                              <td className="p-3 text-center">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  max={item.quantity}
-                                  value={item.qty}
-                                  onChange={(e) => updateCartItemQty(item.batchId, e.target.value)}
-                                  onBlur={(e) => {
-                                    if (!e.target.value || Number(e.target.value) <= 0) {
-                                      updateCartItemQty(item.batchId, 1);
-                                    }
-                                  }}
-                                  className="w-24 p-2.5 border border-gray-200 rounded-xl text-center font-black text-blue-600 bg-blue-50 outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <div className="text-[10px] text-gray-400 mt-1">
-                                  Omborda: {item.quantity} ta
-                                </div>
-                              </td>
-
-                              <td className="p-4 text-right text-gray-500 font-medium">
-                                {Number(item.salePrice).toLocaleString()}
-                              </td>
-
-                              <td className="p-4 text-right font-black text-gray-800">
-                                {getItemSubtotal(item).toLocaleString()}
-                              </td>
-
-                              <td className="p-4 text-center">
-                                <button
-                                  onClick={() => removeItem(item.batchId)}
-                                  className="p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors"
-                                  title="O'chirish"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <p className="text-sm text-slate-400 font-medium italic">
+                      Mijoz tanlanmagan
+                    </p>
                   )}
                 </div>
-              )}
-            </div>
-          )}
 
-          {step === 3 && (
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 animate-in slide-in-from-right-8 duration-300">
-              <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-100">
-                <div className="flex items-center gap-5">
-                  <div className="w-16 h-16 bg-blue-50 border border-blue-100 text-blue-600 rounded-[20px] flex items-center justify-center shadow-inner">
-                    <Clock size={32} strokeWidth={2.5} />
-                  </div>
+                {saleData.items.length > 0 && (
+                  <div className="bg-slate-900 p-4 rounded-3xl shadow-xl text-white">
+                    <h3 className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <ShoppingCart size={12} /> Jami savdo
+                    </h3>
 
-                  <div>
-                    <h2 className="text-2xl font-black text-gray-800 mb-1 tracking-tight">
-                      Chegirma va Saqlash
-                    </h2>
-                    <p className="text-gray-400 text-sm font-medium">
-                      Har bir mahsulot uchun alohida chegirma kiriting va savdoni saqlang.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-6 mb-8">
-                <div className="overflow-x-auto border border-gray-100 rounded-3xl shadow-sm">
-                  <table className="w-full text-left text-sm bg-white">
-                    <thead className="bg-gray-50 text-[10px] text-gray-400 uppercase font-black tracking-widest border-b border-gray-100">
-                      <tr>
-                        <th className="p-4">Tovar</th>
-                        <th className="p-4 text-center">Soni</th>
-                        <th className="p-4 text-right">Dona narxi</th>
-                        <th className="p-4 text-center">1 dona chegirma</th>
-                        <th className="p-4 text-center">Jami chegirma</th>
-                        <th className="p-4 text-right">Jami</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
-                      {saleData.items.map((item) => (
-                        <tr key={item.batchId}>
-                          <td className="p-4 min-w-[260px]">
-                            <div className="font-bold text-gray-800">{item.name}</div>
-                            <div className="text-[10px] text-indigo-500 mt-1 uppercase font-black bg-indigo-50 w-fit px-2 py-0.5 rounded">
-                              Partiya:{' '}
-                              {!String(item.batchId).startsWith('old-')
-                                ? `P-${item.batchId}`
-                                : 'ESKI TOVAR'}
-                            </div>
-                          </td>
-
-                          <td className="p-4 text-center text-blue-600">
-                            {item.qty} ta
-                          </td>
-
-                          <td className="p-4 text-right">
-                            {Number(item.salePrice).toLocaleString()}
-                          </td>
-
-                          <td className="p-4 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              <input
-                                type="number"
-                                min="0"
-                                value={getPerUnitDiscount(item)}
-                                onChange={(e) =>
-                                  updateItemPerUnitDiscount(item.batchId, e.target.value)
-                                }
-                                className="w-28 p-3 border border-amber-200 rounded-2xl text-center font-black text-amber-600 bg-amber-50 outline-none focus:ring-2 focus:ring-amber-500"
-                              />
-                              <div className="text-[10px] text-gray-400">har dona</div>
-                            </div>
-                          </td>
-
-                          <td className="p-4 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              <input
-                                type="number"
-                                min="0"
-                                value={item.discount || ''}
-                                onChange={(e) =>
-                                  updateItemTotalDiscount(item.batchId, e.target.value)
-                                }
-                                className="w-28 p-3 border border-amber-200 rounded-2xl text-center font-black text-amber-600 bg-amber-50 outline-none focus:ring-2 focus:ring-amber-500"
-                              />
-                              <div className="text-[10px] text-gray-400">shu item uchun</div>
-                            </div>
-                          </td>
-
-                          <td className="p-4 text-right font-black text-gray-800">
-                            {getItemTotal(item).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                      <MessageSquare size={12} /> Savdo uchun izoh (ixtiyoriy)
-                    </label>
-                    <textarea
-                      disabled={isLoading}
-                      value={saleData.note}
-                      onChange={(e) => setSaleData({ ...saleData, note: e.target.value })}
-                      className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-blue-400 focus:ring-4 ring-blue-50 text-gray-700 font-medium resize-none h-32 transition-all disabled:opacity-50"
-                      placeholder="Eslatma qoldirishingiz mumkin..."
-                    ></textarea>
-                  </div>
-
-                  <div className="bg-gray-900 rounded-[32px] p-8 flex flex-col justify-center relative overflow-hidden shadow-2xl">
-                    <div className="absolute -right-8 -top-8 text-gray-800">
-                      <ShoppingCart size={180} />
-                    </div>
-
-                    <div className="relative z-10 space-y-6">
-                      <div className="flex justify-between items-center text-gray-400 text-sm">
-                        <span className="font-bold">
-                          Tovarlar ({saleData.items.reduce((s, i) => s + Number(i.qty || 0), 0)} ta):
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Tovarlar soni:</span>
+                        <span className="font-semibold text-white">
+                          {saleData.items.reduce((s, i) => s + Number(i.qty || 0), 0)} ta
                         </span>
-                        <span className="font-black text-white text-lg">
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Umumiy summa:</span>
+                        <span className="font-semibold text-white">
                           {grossTotal.toLocaleString()} UZS
                         </span>
                       </div>
 
                       {totalDiscount > 0 && (
-                        <div className="flex justify-between items-center text-amber-400 text-sm border-b border-gray-700/50 pb-5">
-                          <span className="font-bold">Chegirma:</span>
-                          <span className="font-black text-lg">
-                            - {totalDiscount.toLocaleString()} UZS
+                        <div className="flex justify-between text-amber-300 border-t border-slate-700/50 pt-2">
+                          <span>Chegirma:</span>
+                          <span className="font-semibold">- {totalDiscount.toLocaleString()} UZS</span>
+                        </div>
+                      )}
+
+                      {totalDiscount < 0 && (
+                        <div className="flex justify-between text-blue-300 border-t border-slate-700/50 pt-2">
+                          <span>Ustama:</span>
+                          <span className="font-semibold">
+                            + {Math.abs(totalDiscount).toLocaleString()} UZS
                           </span>
                         </div>
                       )}
 
-                      <div className="pt-2">
-                        <p className="text-gray-500 text-[10px] font-black uppercase mb-1 tracking-widest">
+                      <div className="border-t border-slate-700/50 pt-3">
+                        <p className="text-slate-400 text-[10px] font-black uppercase mb-1 tracking-widest">
                           Yakuniy summa
                         </p>
-                        <p
-                          className="text-4xl lg:text-5xl font-black text-emerald-400 tracking-tighter truncate"
-                          title={`${finalAmount.toLocaleString()} UZS`}
-                        >
-                          {finalAmount.toLocaleString()}{' '}
-                          <span className="text-lg font-bold text-emerald-600">UZS</span>
+                        <p className="text-2xl font-semibold text-emerald-400 tracking-tight">
+                          {finalAmount.toLocaleString()}
+                          <span className="text-sm font-medium text-emerald-500 ml-1">UZS</span>
                         </p>
                       </div>
                     </div>
                   </div>
+                )}
+
+                <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200">
+                  <label className="block text-[10px] font-black tracking-widest text-slate-400 uppercase mb-2">
+                    Izoh
+                  </label>
+                  <textarea
+                    rows="5"
+                    value={saleData.note}
+                    onChange={(e) =>
+                      setSaleData((prev) => ({ ...prev, note: e.target.value }))
+                    }
+                    className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 ring-blue-50 font-medium text-slate-700 transition-all resize-none"
+                    placeholder="Savdo haqida izoh..."
+                  />
                 </div>
+              </div>
+
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-0">
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50/50 border-b border-slate-100">
+                  <div className="relative max-w-xl mx-auto">
+                    <ScanLine
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500"
+                      size={17}
+                    />
+                    <input
+                      ref={barcodeInputRef}
+                      type="text"
+                      placeholder="Shtrix kodni skanerlang yoki yozing..."
+                      onKeyDown={handleBarcodeScan}
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-blue-200 focus:border-blue-500 rounded-2xl outline-none shadow-sm font-mono font-semibold text-sm text-slate-800 transition-colors placeholder:font-sans placeholder:text-sm placeholder:font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex border-b border-slate-100 bg-slate-50/50 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setProductTab('catalog')}
+                    className={`flex-1 py-2.5 text-sm font-bold transition-all ${
+                      productTab === 'catalog'
+                        ? 'text-blue-600 bg-white border-b-2 border-blue-600'
+                        : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    Katalog
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setProductTab('cart')}
+                    className={`flex-1 py-2.5 text-sm font-bold transition-all relative ${
+                      productTab === 'cart'
+                        ? 'text-blue-600 bg-white border-b-2 border-blue-600'
+                        : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    Tanlangan tovarlar
+                    {saleData.items.length > 0 && (
+                      <span className="absolute ml-2 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm">
+                        {saleData.items.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {productTab === 'catalog' && (
+                  <div className="p-4 flex-1 min-h-0 flex flex-col">
+                    <div className="relative mb-3 shrink-0">
+                      <Search
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                        size={14}
+                      />
+                      <input
+                        type="text"
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 text-sm font-medium text-slate-700"
+                        placeholder="Mahsulot nomi yoki ID bo‘yicha qidiring..."
+                      />
+                    </div>
+
+                    <div className="flex-1 min-h-0 overflow-auto">
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                        {paginatedProducts.map((product) => {
+                          const productBatches = allBatches.filter((b) => b.id === product.id);
+                          const totalQty = productBatches.reduce(
+                            (sum, b) => sum + Number(b.quantity || 0),
+                            0
+                          );
+                          const qtyInCart = saleData.items
+                            .filter((i) => i.id === product.id)
+                            .reduce((sum, i) => sum + Number(i.qty || 0), 0);
+
+                          return (
+                            <button
+                              key={product.id}
+                              type="button"
+                              onClick={() => handleProductClick(product)}
+                              className="text-left rounded-2xl border border-slate-200 p-4 hover:border-blue-300 hover:bg-blue-50/30 transition-all min-h-[124px]"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[14px] font-semibold text-slate-800 leading-5 break-words">
+                                    {product.name}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 mt-1.5">
+                                    ID: #{product.customId ?? '-'}
+                                  </div>
+                                </div>
+
+                                <div className="h-8 w-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                                  <Package size={15} />
+                                </div>
+                              </div>
+
+                              <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                                <div>
+                                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    Narxi
+                                  </div>
+                                  <div className="mt-1 font-bold text-emerald-600 leading-5">
+                                    {Number(product.salePrice || 0).toLocaleString()} UZS
+                                  </div>
+                                </div>
+
+                                <div className="text-center">
+                                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    Ombor
+                                  </div>
+                                  <div className="mt-1 font-bold text-blue-600">
+                                    {totalQty} ta
+                                  </div>
+                                </div>
+
+                                <div className="text-right">
+                                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    Savatda
+                                  </div>
+                                  <div className="mt-1 font-bold text-rose-500">
+                                    {qtyInCart} ta
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {paginatedProducts.length === 0 && (
+                        <div className="py-12 text-center text-slate-400 font-medium">
+                          Mahsulot topilmadi
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {productTab === 'cart' && (
+                  <div className="p-4 flex-1 min-h-0 overflow-auto">
+                    <div className="space-y-3">
+                      {saleData.items.length > 0 ? (
+                        saleData.items.map((item) => (
+                          <div
+                            key={item.batchId}
+                            className="rounded-2xl border border-slate-200 bg-white p-4"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-[14px] font-semibold text-slate-800">
+                                  {item.name}
+                                </div>
+                                <div className="text-[11px] text-slate-500 mt-1">
+                                  Partiya: #{item.batchId} • Qoldiq: {item.quantity} ta
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => removeItem(item.batchId)}
+                                className="h-8 w-8 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 flex items-center justify-center hover:bg-rose-100 shrink-0"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-4">
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                                  Soni
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateCartItemQty(
+                                        item.batchId,
+                                        Math.max(1, Number(item.qty || 1) - 1)
+                                      )
+                                    }
+                                    className="h-8 w-8 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center justify-center"
+                                  >
+                                    <Minus size={12} />
+                                  </button>
+
+                                  <input
+                                    value={item.qty}
+                                    onChange={(e) =>
+                                      updateCartItemQty(item.batchId, e.target.value)
+                                    }
+                                    className="flex-1 h-8 rounded-xl border border-slate-200 bg-white text-center text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100"
+                                  />
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateCartItemQty(
+                                        item.batchId,
+                                        Math.min(
+                                          Number(item.quantity || 0),
+                                          Number(item.qty || 0) + 1
+                                        )
+                                      )
+                                    }
+                                    className="h-8 w-8 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center justify-center"
+                                  >
+                                    <Plus size={12} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                                  Narxi
+                                </label>
+                                <div className="h-8 rounded-xl border border-slate-200 bg-slate-50 px-3 flex items-center text-sm font-semibold text-slate-700">
+                                  {Number(item.salePrice || 0).toLocaleString()} UZS
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                                  Chegirma / Ustama (jami)
+                                </label>
+                                <input
+                                  value={item.discount}
+                                  onChange={(e) =>
+                                    updateItemTotalDiscount(item.batchId, e.target.value)
+                                  }
+                                  className="w-full h-8 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-100"
+                                  placeholder="0"
+                                />
+                                <div className="mt-1 text-[10px] text-slate-400">
+                                  manfiy qiymat = ustama
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                                  1 dona uchun
+                                </label>
+                                <input
+                                  value={Number.isFinite(getPerUnitDiscount(item)) ? getPerUnitDiscount(item) : ''}
+                                  onChange={(e) =>
+                                    updateItemPerUnitDiscount(item.batchId, e.target.value)
+                                  }
+                                  className="w-full h-8 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-100"
+                                  placeholder="0"
+                                />
+                                <div className="mt-1 text-[10px] text-slate-400">
+                                  manfiy qiymat = ustama
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-3 mt-4">
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                  Jami
+                                </div>
+                                <div className="mt-1 text-sm font-semibold text-slate-700">
+                                  {getItemSubtotal(item).toLocaleString()} UZS
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                  O‘zgarish
+                                </div>
+                                <div className="mt-1 text-sm font-semibold text-slate-700">
+                                  {Number(item.discount || 0).toLocaleString()} UZS
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                  Yakuniy
+                                </div>
+                                <div className="mt-1 text-sm font-bold text-slate-900">
+                                  {getItemTotal(item).toLocaleString()} UZS
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="py-12 text-center text-slate-400 font-medium">
+                          Savat bo‘sh
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          <div className="mt-8 flex justify-end gap-4">
-            {step > 1 && (
-              <button
-                disabled={isLoading}
-                onClick={() => setStep(step - 1)}
-                className="px-8 py-4 bg-white border border-gray-200 text-gray-600 rounded-2xl font-black hover:bg-gray-50 transition-colors disabled:opacity-50"
-              >
-                ORQAGA
-              </button>
-            )}
+          {step === 3 && (
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_290px] gap-4 h-full">
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-4 py-3.5 border-b border-slate-100">
+                  <h2 className="text-sm font-black text-slate-800">Yakuniy tekshiruv</h2>
+                </div>
 
-            <button
-              onClick={handleNext}
-              disabled={isLoading}
-              className={`px-10 py-4 rounded-2xl font-black flex items-center justify-center min-w-[200px] gap-2 transition-all shadow-xl active:scale-95 uppercase tracking-widest ${
-                step === 3
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
-                  : 'bg-gray-800 hover:bg-black text-white shadow-gray-300'
-              } ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
-            >
-              {isLoading ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : step === 3 ? (
-                <>
-                  <Save size={20} strokeWidth={2.5} /> Saqlash
-                </>
-              ) : (
-                <>
-                  Davom etish <ChevronRight size={20} strokeWidth={3} />
-                </>
-              )}
-            </button>
-          </div>
+                <div className="p-4 overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="text-[10px] uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                      <tr>
+                        <th className="pb-3 font-black">Mahsulot</th>
+                        <th className="pb-3 font-black text-center">Soni</th>
+                        <th className="pb-3 font-black text-right">Narxi</th>
+                        <th className="pb-3 font-black text-right">Chegirma / Ustama</th>
+                        <th className="pb-3 font-black text-right">Yakuniy</th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
+                      {saleData.items.map((item) => (
+                        <tr key={item.batchId}>
+                          <td className="py-3.5 font-semibold text-slate-800">{item.name}</td>
+                          <td className="py-3.5 text-center">{item.qty}</td>
+                          <td className="py-3.5 text-right">
+                            {getItemSubtotal(item).toLocaleString()} UZS
+                          </td>
+                          <td className="py-3.5 text-right">
+                            {Number(item.discount || 0).toLocaleString()} UZS
+                          </td>
+                          <td className="py-3.5 text-right font-bold text-slate-900">
+                            {getItemTotal(item).toLocaleString()} UZS
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {saleData.note?.trim() && (
+                    <div className="mt-5 border-t border-slate-100 pt-4">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                        Izoh
+                      </div>
+                      <div className="text-sm text-slate-700 leading-6 whitespace-pre-wrap">
+                        {saleData.note}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-slate-900 p-4 rounded-3xl shadow-xl text-white">
+                <h3 className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <ShoppingCart size={13} /> Yakuniy hisob
+                </h3>
+
+                <div className="space-y-2.5 text-sm">
+                  <div className="flex justify-between items-center border-b border-slate-700/50 pb-2.5">
+                    <span className="text-slate-400">
+                      Tovarlar ({saleData.items.reduce((s, i) => s + Number(i.qty || 0), 0)} ta)
+                    </span>
+                    <span className="font-semibold text-white">{grossTotal.toLocaleString()} UZS</span>
+                  </div>
+
+                  {totalDiscount > 0 && (
+                    <div className="flex justify-between items-center text-amber-300 border-b border-slate-700/50 pb-2.5">
+                      <span>Chegirma:</span>
+                      <span className="font-semibold">- {totalDiscount.toLocaleString()} UZS</span>
+                    </div>
+                  )}
+
+                  {totalDiscount < 0 && (
+                    <div className="flex justify-between items-center text-blue-300 border-b border-slate-700/50 pb-2.5">
+                      <span>Ustama:</span>
+                      <span className="font-semibold">
+                        + {Math.abs(totalDiscount).toLocaleString()} UZS
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <p className="text-slate-400 text-[10px] font-black uppercase mb-1 tracking-widest">
+                      Yakuniy summa
+                    </p>
+                    <p className="text-2xl font-semibold text-emerald-400 tracking-tight">
+                      {finalAmount.toLocaleString()}
+                      <span className="text-sm font-medium text-emerald-500 ml-1">UZS</span>
+                    </p>
+                  </div>
+
+                  {saleData.note?.trim() && (
+                    <div className="pt-3 border-t border-slate-700/50">
+                      <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">
+                        Izoh
+                      </div>
+                      <div className="text-sm text-slate-200 leading-6 whitespace-pre-wrap">
+                        {saleData.note}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3 shrink-0">
+          {step === 2 ? (
+            <div className="grid grid-cols-1 xl:grid-cols-[230px_1fr] gap-4">
+              <div />
+
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-3 py-2 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  {productTab === 'catalog' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setCatalogPage((prev) => Math.max(1, prev - 1))}
+                        disabled={catalogPage <= 1}
+                        className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2"
+                      >
+                        <ChevronLeft size={14} />
+                        Oldingi
+                      </button>
+
+                      <div className="h-9 min-w-[84px] px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 flex items-center justify-center">
+                        {catalogPage} / {totalCatalogPages}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCatalogPage((prev) => Math.min(totalCatalogPages, prev + 1))
+                        }
+                        disabled={catalogPage >= totalCatalogPages}
+                        className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2"
+                      >
+                        Keyingi
+                        <ChevronRight size={14} />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setStep((prev) => Math.max(1, prev - 1))}
+                    disabled={isLoading}
+                    className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    <ArrowLeft size={14} />
+                    Orqaga
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    disabled={isLoading}
+                    className="h-9 px-5 rounded-xl text-sm font-semibold text-white inline-flex items-center gap-2 transition disabled:opacity-50 bg-slate-900 hover:bg-black"
+                  >
+                    {isLoading ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <>
+                        Davom etish
+                        <ChevronRight size={14} />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-3 py-2 flex items-center gap-2">
+                {step > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setStep((prev) => Math.max(1, prev - 1))}
+                    disabled={isLoading}
+                    className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    <ArrowLeft size={14} />
+                    Orqaga
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  disabled={isLoading}
+                  className={`h-9 px-5 rounded-xl text-sm font-semibold text-white inline-flex items-center gap-2 transition disabled:opacity-50 ${
+                    step === 3 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-black'
+                  }`}
+                >
+                  {isLoading ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : step === 3 ? (
+                    <>
+                      <Save size={14} />
+                      Saqlash
+                    </>
+                  ) : (
+                    <>
+                      Davom etish
+                      <ChevronRight size={14} />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
