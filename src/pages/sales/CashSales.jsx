@@ -37,12 +37,24 @@ const formatDate = (dateString) => {
 
 const getStatusLabel = (status) => {
   const s = String(status || '').toUpperCase();
-
   if (s === 'DRAFT') return 'Jarayonda';
   if (s === 'PAYMENT_PENDING') return "To'lov kutilmoqda";
   if (s === 'COMPLETED') return 'Yakunlangan';
-
   return status || '-';
+};
+
+const getStatusClasses = (status) => {
+  const s = String(status || '').toUpperCase();
+
+  if (s === 'COMPLETED') {
+    return 'bg-emerald-50 text-emerald-700 border border-emerald-100';
+  }
+
+  if (s === 'PAYMENT_PENDING') {
+    return 'bg-amber-50 text-amber-700 border border-amber-100';
+  }
+
+  return 'bg-slate-100 text-slate-700 border border-slate-200';
 };
 
 const CashSales = () => {
@@ -85,7 +97,7 @@ const CashSales = () => {
 
   const fetchSales = useCallback(
     async (
-      targetPage = page,
+      targetPage = 1,
       targetSearch = appliedSearch,
       targetStatus = filterStatus,
       signal = undefined
@@ -167,7 +179,7 @@ const CashSales = () => {
         toast.error(data?.error || "O'chirishda xatolik yuz berdi");
       }
     } catch (err) {
-      console.error('Delete order error:', err);
+      console.error(err);
       toast.error('Server xatosi!');
     } finally {
       setIsActionLoading(false);
@@ -196,7 +208,7 @@ const CashSales = () => {
         toast.error(data?.error || 'Tasdiqlashda xatolik yuz berdi');
       }
     } catch (err) {
-      console.error('Confirm order error:', err);
+      console.error(err);
       toast.error('Server xatosi!');
     } finally {
       setIsActionLoading(false);
@@ -231,9 +243,7 @@ const CashSales = () => {
       data: {
         ...prev.data,
         items: prev.data.items.map((item) =>
-          item.productId === productId
-            ? { ...item, quantity: newQty }
-            : item
+          item.productId === productId ? { ...item, quantity: newQty } : item
         )
       }
     }));
@@ -245,9 +255,7 @@ const CashSales = () => {
       data: {
         ...prev.data,
         items: prev.data.items.map((item) =>
-          item.productId === productId
-            ? { ...item, discountAmount }
-            : item
+          item.productId === productId ? { ...item, discountAmount } : item
         )
       }
     }));
@@ -262,7 +270,7 @@ const CashSales = () => {
 
     if (invalidBatchItem) {
       return toast.error(
-        `${invalidBatchItem.name} uchun partiya ma'lumoti topilmadi. Bu savdoni qayta yaratish kerak bo'lishi mumkin.`
+        `${invalidBatchItem.name} uchun partiya ma'lumoti topilmadi.`
       );
     }
 
@@ -306,7 +314,7 @@ const CashSales = () => {
         toast.error(data?.error || 'Tahrirlashda xatolik yuz berdi');
       }
     } catch (err) {
-      console.error('Update order error:', err);
+      console.error(err);
       toast.error('Server xatosi!');
     } finally {
       setIsActionLoading(false);
@@ -314,81 +322,80 @@ const CashSales = () => {
   };
 
   return (
-    <div className="p-6 min-h-screen bg-gray-50/50 animate-in fade-in duration-300">
-      <div className="flex justify-between items-center mb-6 gap-4 flex-wrap">
+    <div className="h-full min-h-0 flex flex-col bg-slate-50">
+      <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight">
-            Naqd Savdolar
-          </h1>
-          <p className="text-sm text-slate-500 font-medium mt-1">
-            Yaratilgan savdolar ro'yxati
-          </p>
+          <h1 className="text-xl font-medium text-slate-900">Naqd savdolar</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Savdolar ro‘yxati</p>
         </div>
 
         <button
           disabled={isLoading || isActionLoading}
           onClick={() => navigate('/naqd-savdo/qoshish')}
-          className="bg-blue-600 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition disabled:opacity-50"
         >
-          <Plus size={20} strokeWidth={3} /> Yangi Savdo
+          <Plus size={16} />
+          Yangi savdo
         </button>
       </div>
 
-      <div className="flex gap-4 mb-6 flex-col lg:flex-row">
-        <div className="flex-1 bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
-          <Search className="text-slate-400 ml-1" size={20} />
-          <input
-            type="text"
-            placeholder="Mijoz, order raqami yoki ID bo'yicha qidirish..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            className="w-full bg-transparent outline-none text-sm font-medium text-slate-700"
-          />
-          <button
-            onClick={handleSearchSubmit}
-            className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-black"
-          >
-            Qidirish
-          </button>
-        </div>
+      <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex gap-3 flex-col lg:flex-row">
+          <div className="flex-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <Search className="text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Mijoz, order raqami yoki ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              className="w-full bg-transparent outline-none text-sm text-slate-700 placeholder:text-slate-400"
+            />
+            <button
+              onClick={handleSearchSubmit}
+              className="rounded-lg bg-white border border-slate-200 px-3 py-2 text-sm font-normal text-slate-700 hover:bg-slate-50"
+            >
+              Qidirish
+            </button>
+          </div>
 
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 text-sm font-bold text-slate-700 outline-none"
-        >
-          <option value="ALL">Barchasi</option>
-          <option value="DRAFT">Jarayonda</option>
-          <option value="PAYMENT_PENDING">To'lov kutilmoqda</option>
-          <option value="COMPLETED">Yakunlangan</option>
-        </select>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-700 outline-none"
+          >
+            <option value="ALL">Barchasi</option>
+            <option value="DRAFT">Jarayonda</option>
+            <option value="PAYMENT_PENDING">To'lov kutilmoqda</option>
+            <option value="COMPLETED">Yakunlangan</option>
+          </select>
+        </div>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[650px] overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-x-auto">
+      <div className="flex-1 min-h-0 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+        <div className="flex-1 min-h-0 overflow-auto">
           <table className="w-full">
-            <thead className="bg-slate-50 text-left text-xs text-slate-400 uppercase">
+            <thead className="sticky top-0 z-10 bg-slate-50/95 text-left text-[10px] text-slate-500 uppercase tracking-[0.12em] border-b border-slate-200">
               <tr>
-                <th className="p-4">Order</th>
-                <th className="p-4">Mijoz</th>
-                <th className="p-4">Status</th>
-                <th className="p-4">Summa</th>
-                <th className="p-4">Sana</th>
-                <th className="p-4 text-center">Amallar</th>
+                <th className="px-4 py-3 font-medium">Order</th>
+                <th className="px-4 py-3 font-medium">Mijoz</th>
+                <th className="px-4 py-3 font-medium text-center">Holat</th>
+                <th className="px-4 py-3 font-medium">Summa</th>
+                <th className="px-4 py-3 font-medium">Sana</th>
+                <th className="px-4 py-3 font-medium text-center">Amallar</th>
               </tr>
             </thead>
 
-            <tbody className="text-sm font-semibold text-slate-700">
+            <tbody className="text-sm text-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan="6" className="p-16 text-center">
-                    <Loader2 className="animate-spin mx-auto text-blue-500" size={32} />
+                  <td colSpan="6" className="px-4 py-14 text-center">
+                    <Loader2 className="animate-spin mx-auto text-slate-400" size={24} />
                   </td>
                 </tr>
               ) : sales.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="p-16 text-center text-slate-400">
+                  <td colSpan="6" className="px-4 py-14 text-center text-slate-400 text-sm">
                     Savdolar topilmadi
                   </td>
                 </tr>
@@ -401,69 +408,68 @@ const CashSales = () => {
                   return (
                     <tr
                       key={sale.id}
-                      className="border-t hover:bg-slate-50/70 transition-colors"
+                      className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors"
                     >
-                      <td className="p-4">
-                        <div className="font-black text-slate-800">
+                      <td className="px-4 py-3 align-middle">
+                        <div className="text-[15px] font-semibold text-slate-800 tracking-tight">
                           #{sale.orderNumber || sale.id}
                         </div>
-                        <div className="text-xs text-slate-400">ID: {sale.id}</div>
+                        <div className="text-[12px] text-slate-400 mt-0.5 font-normal">
+                          ID: {sale.id}
+                        </div>
                       </td>
 
-                      <td className="p-4">
-                        <div className="font-bold">{customerName || '-'}</div>
+                      <td className="px-4 py-3 align-middle">
+                        <div className="text-[15px] font-medium text-slate-700 leading-6">
+                          {customerName || '-'}
+                        </div>
                       </td>
 
-                      <td className="p-4">
+                      <td className="px-4 py-3 align-middle text-center">
                         <span
-                          className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase ${
-                            String(sale.status).toUpperCase() === 'COMPLETED'
-                              ? 'bg-emerald-50 text-emerald-600'
-                              : String(sale.status).toUpperCase() === 'PAYMENT_PENDING'
-                              ? 'bg-amber-50 text-amber-600'
-                              : 'bg-blue-50 text-blue-600'
-                          }`}
+                          className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-[11px] font-normal leading-none ${getStatusClasses(
+                            sale.status
+                          )}`}
                         >
                           {getStatusLabel(sale.status)}
                         </span>
                       </td>
 
-                      <td className="p-4 font-black text-slate-800 whitespace-nowrap">
-                        {Number(sale.totalAmount || 0).toLocaleString()} UZS
+                      <td className="px-4 py-3 align-middle whitespace-nowrap">
+                        <div className="text-[15px] font-semibold text-slate-800">
+                          {Number(sale.totalAmount || 0).toLocaleString()} UZS
+                        </div>
                       </td>
 
-                      <td className="p-4 text-slate-500 whitespace-nowrap">
+                      <td className="px-4 py-3 align-middle whitespace-nowrap text-slate-500 text-[14px] font-normal">
                         {formatDate(sale.createdAt)}
                       </td>
 
-                      <td className="p-4">
+                      <td className="px-4 py-3 align-middle">
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => setDetailsModal({ isOpen: true, sale })}
-                            className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200"
-                            title="Ko'rish"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
                           >
-                            <Eye size={16} />
+                            <Eye size={14} />
                           </button>
 
                           {String(sale.status).toUpperCase() === 'DRAFT' && (
                             <>
                               <button
                                 onClick={() => openEditModal(sale)}
-                                className="p-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100"
-                                title="Tahrirlash"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
                               >
-                                <Edit2 size={16} />
+                                <Edit2 size={14} />
                               </button>
 
                               <button
                                 onClick={() =>
                                   setSendToPaymentModal({ isOpen: true, id: sale.id })
                                 }
-                                className="p-2 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-                                title="To'lovga yuborish"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                               >
-                                <CheckCircle size={16} />
+                                <CheckCircle size={14} />
                               </button>
                             </>
                           )}
@@ -471,10 +477,9 @@ const CashSales = () => {
                           {String(sale.status).toUpperCase() !== 'COMPLETED' && (
                             <button
                               onClick={() => setDeleteModal({ isOpen: true, sale })}
-                              className="p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100"
-                              title="O'chirish"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
                             >
-                              <Trash2 size={16} />
+                              <Trash2 size={14} />
                             </button>
                           )}
                         </div>
@@ -487,107 +492,81 @@ const CashSales = () => {
           </table>
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
-          <div className="text-sm font-bold text-slate-500">
-            Jami: <span className="text-slate-800">{total} ta</span>
+        <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+          <div className="text-sm text-slate-500">
+            Jami: <span className="font-medium text-slate-800">{total}</span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => fetchSales(page - 1, appliedSearch, filterStatus)}
               disabled={page <= 1 || isLoading}
-              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={15} />
               Oldingi
             </button>
 
-            <div className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-black text-sm min-w-[90px] text-center">
+            <div className="min-w-[84px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-sm font-normal text-slate-700">
               {Math.max(page, 1)} / {Math.max(totalPages, 1)}
             </div>
 
             <button
               onClick={() => fetchSales(page + 1, appliedSearch, filterStatus)}
               disabled={page >= totalPages || isLoading || totalPages === 0}
-              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               Keyingi
-              <ChevronRight size={16} />
+              <ChevronRight size={15} />
             </button>
           </div>
         </div>
       </div>
 
       {detailsModal.isOpen && detailsModal.sale && (
-        <div className="fixed inset-0 bg-black/50 z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-2xl p-6 shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-black text-slate-800">Savdo tafsiloti</h3>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <h3 className="text-base font-medium text-slate-900">Savdo tafsiloti</h3>
               <button
                 onClick={() => setDetailsModal({ isOpen: false, sale: null })}
-                className="p-2 rounded-full hover:bg-slate-100"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-3 text-sm font-semibold text-slate-700">
-              <div>
-                <span className="text-slate-400">Order:</span>{' '}
-                #{detailsModal.sale.orderNumber}
-              </div>
-              <div>
-                <span className="text-slate-400">Mijoz:</span>{' '}
-                {detailsModal.sale.customer
-                  ? `${detailsModal.sale.customer.firstName || ''} ${detailsModal.sale.customer.lastName || ''}`.trim()
-                  : detailsModal.sale.otherName || '-'}
-              </div>
-              <div>
-                <span className="text-slate-400">Status:</span>{' '}
-                {getStatusLabel(detailsModal.sale.status)}
-              </div>
-              <div>
-                <span className="text-slate-400">Jami summa:</span>{' '}
-                {Number(detailsModal.sale.totalAmount || 0).toLocaleString()} UZS
-              </div>
-              <div>
-                <span className="text-slate-400">Chegirma:</span>{' '}
-                {Number(detailsModal.sale.discountAmount || 0).toLocaleString()} UZS
-              </div>
-              <div>
-                <span className="text-slate-400">Izoh:</span>{' '}
-                {detailsModal.sale.note || '-'}
-              </div>
+            <div className="px-5 py-5 space-y-3 text-sm text-slate-700">
+              <div><span className="text-slate-400">Order:</span> #{detailsModal.sale.orderNumber}</div>
+              <div><span className="text-slate-400">Mijoz:</span> {detailsModal.sale.customer ? `${detailsModal.sale.customer.firstName || ''} ${detailsModal.sale.customer.lastName || ''}`.trim() : detailsModal.sale.otherName || '-'}</div>
+              <div><span className="text-slate-400">Status:</span> {getStatusLabel(detailsModal.sale.status)}</div>
+              <div><span className="text-slate-400">Jami summa:</span> {Number(detailsModal.sale.totalAmount || 0).toLocaleString()} UZS</div>
+              <div><span className="text-slate-400">Chegirma:</span> {Number(detailsModal.sale.discountAmount || 0).toLocaleString()} UZS</div>
+              <div><span className="text-slate-400">Izoh:</span> {detailsModal.sale.note || '-'}</div>
             </div>
           </div>
         </div>
       )}
 
       {deleteModal.isOpen && (
-        <div className="fixed inset-0 bg-black/50 z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center">
-            <AlertTriangle className="mx-auto text-rose-500 mb-4" size={40} />
-            <h3 className="text-xl font-black text-slate-800 mb-2">Savdo o‘chirilsinmi?</h3>
-            <p className="text-slate-500 text-sm mb-6">
-              Bu savdo butunlay o‘chiriladi.
-            </p>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-2xl p-6 text-center">
+            <AlertTriangle className="mx-auto text-rose-500 mb-4" size={32} />
+            <h3 className="text-base font-medium text-slate-900 mb-2">Savdo o‘chirilsinmi?</h3>
+            <p className="text-sm text-slate-500 mb-6">Bu savdo butunlay o‘chiriladi.</p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteModal({ isOpen: false, sale: null })}
-                className="flex-1 py-3 rounded-2xl bg-slate-100 text-slate-700 font-black"
+                className="flex-1 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-normal text-slate-700 hover:bg-slate-200"
               >
                 Bekor qilish
               </button>
               <button
                 onClick={handleDelete}
                 disabled={isActionLoading}
-                className="flex-1 py-3 rounded-2xl bg-rose-600 text-white font-black"
+                className="flex-1 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
               >
-                {isActionLoading ? (
-                  <Loader2 size={16} className="animate-spin mx-auto" />
-                ) : (
-                  "O‘chirish"
-                )}
+                {isActionLoading ? <Loader2 size={16} className="animate-spin mx-auto" /> : "O‘chirish"}
               </button>
             </div>
           </div>
@@ -595,30 +574,24 @@ const CashSales = () => {
       )}
 
       {sendToPaymentModal.isOpen && (
-        <div className="fixed inset-0 bg-black/50 z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center">
-            <Clock className="mx-auto text-emerald-500 mb-4" size={40} />
-            <h3 className="text-xl font-black text-slate-800 mb-2">To‘lovga yuborilsinmi?</h3>
-            <p className="text-slate-500 text-sm mb-6">
-              Savdo to‘lov kutilmoqda holatiga o‘tadi.
-            </p>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-2xl p-6 text-center">
+            <Clock className="mx-auto text-emerald-600 mb-4" size={32} />
+            <h3 className="text-base font-medium text-slate-900 mb-2">To‘lovga yuborilsinmi?</h3>
+            <p className="text-sm text-slate-500 mb-6">Savdo to‘lov kutilmoqda holatiga o‘tadi.</p>
             <div className="flex gap-3">
               <button
                 onClick={() => setSendToPaymentModal({ isOpen: false, id: null })}
-                className="flex-1 py-3 rounded-2xl bg-slate-100 text-slate-700 font-black"
+                className="flex-1 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-normal text-slate-700 hover:bg-slate-200"
               >
                 Bekor qilish
               </button>
               <button
                 onClick={handleConfirmOrder}
                 disabled={isActionLoading}
-                className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white font-black"
+                className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
               >
-                {isActionLoading ? (
-                  <Loader2 size={16} className="animate-spin mx-auto" />
-                ) : (
-                  'Tasdiqlash'
-                )}
+                {isActionLoading ? <Loader2 size={16} className="animate-spin mx-auto" /> : 'Tasdiqlash'}
               </button>
             </div>
           </div>
@@ -626,46 +599,42 @@ const CashSales = () => {
       )}
 
       {editModal.isOpen && editModal.data && (
-        <div className="fixed inset-0 bg-black/50 z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-3xl p-6 shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-black text-slate-800">Savdoni tahrirlash</h3>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <h3 className="text-base font-medium text-slate-900">Savdoni tahrirlash</h3>
               <button
                 onClick={() => setEditModal({ isOpen: false, data: null })}
-                className="p-2 rounded-full hover:bg-slate-100"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-4 max-h-[70vh] overflow-auto">
+            <div className="px-5 py-5 space-y-4 max-h-[70vh] overflow-auto">
               {editModal.data.items.map((item) => (
-                <div key={item.productId} className="p-4 rounded-2xl border border-slate-200">
-                  <div className="font-black text-slate-800 mb-2">{item.name}</div>
+                <div key={item.productId} className="rounded-xl border border-slate-200 p-4">
+                  <div className="font-medium text-slate-900 mb-3">{item.name}</div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <input
                       type="number"
                       min="1"
                       value={item.quantity}
-                      onChange={(e) =>
-                        updateEditQty(item.productId, Number(e.target.value))
-                      }
-                      className="p-3 rounded-xl border border-slate-200"
+                      onChange={(e) => updateEditQty(item.productId, Number(e.target.value))}
+                      className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-200"
                     />
                     <input
                       type="number"
                       value={item.unitPrice}
                       readOnly
-                      className="p-3 rounded-xl border border-slate-200 bg-slate-50"
+                      className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
                     />
                     <input
                       type="number"
                       min="0"
                       value={item.discountAmount}
-                      onChange={(e) =>
-                        updateEditDiscount(item.productId, Number(e.target.value || 0))
-                      }
-                      className="p-3 rounded-xl border border-slate-200"
+                      onChange={(e) => updateEditDiscount(item.productId, Number(e.target.value || 0))}
+                      className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-200"
                     />
                   </div>
                 </div>
@@ -683,28 +652,24 @@ const CashSales = () => {
                   }))
                 }
                 rows="4"
-                className="w-full p-4 rounded-2xl border border-slate-200"
+                className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-200"
                 placeholder="Izoh..."
               />
             </div>
 
-            <div className="flex justify-end gap-3 mt-6">
+            <div className="flex justify-end gap-3 px-5 py-4 border-t border-slate-200">
               <button
                 onClick={() => setEditModal({ isOpen: false, data: null })}
-                className="px-5 py-3 rounded-2xl bg-slate-100 text-slate-700 font-black"
+                className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-normal text-slate-700 hover:bg-slate-200"
               >
                 Bekor qilish
               </button>
               <button
                 onClick={saveEdit}
                 disabled={isActionLoading}
-                className="px-5 py-3 rounded-2xl bg-blue-600 text-white font-black"
+                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
               >
-                {isActionLoading ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  'Saqlash'
-                )}
+                {isActionLoading ? <Loader2 size={16} className="animate-spin" /> : 'Saqlash'}
               </button>
             </div>
           </div>

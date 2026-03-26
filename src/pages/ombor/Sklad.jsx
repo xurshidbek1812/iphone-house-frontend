@@ -15,7 +15,9 @@ import {
   CheckCircle,
   Save,
   Edit2,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import ReactDOMServer from 'react-dom/server';
 import QRCode from 'react-qr-code';
@@ -89,6 +91,9 @@ const Sklad = () => {
     salePriceTo: '',
     stockStatus: ''
   });
+
+  const [page, setPage] = useState(1);
+  const limit = 10;
 
   const fetchData = useCallback(async () => {
     try {
@@ -198,6 +203,7 @@ const Sklad = () => {
       setIsModalOpen(false);
       setIsSuccessOpen(true);
       await fetchData();
+      setPage(1);
 
       setTimeout(() => {
         setIsSuccessOpen(false);
@@ -417,32 +423,27 @@ const Sklad = () => {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-
           html, body {
             margin: 0;
             padding: 0;
             background: #fff;
             font-family: Arial, Helvetica, sans-serif;
           }
-
           @page {
             size: 58mm 40mm;
             margin: 0;
           }
-
           body {
             width: 58mm;
             height: 40mm;
             overflow: hidden;
           }
-
           .page {
             width: 58mm;
             height: 40mm;
             padding: 0;
             margin: 0;
           }
-
           .label-card {
             width: 58mm;
             height: 40mm;
@@ -453,7 +454,6 @@ const Sklad = () => {
             border: 0.2mm solid #d1d5db;
             background: #fff;
           }
-
           .header-row {
             display: flex;
             align-items: flex-start;
@@ -461,7 +461,6 @@ const Sklad = () => {
             gap: 2mm;
             min-height: 8.5mm;
           }
-
           .product-name {
             flex: 1;
             min-width: 0;
@@ -474,7 +473,6 @@ const Sklad = () => {
             max-height: 8mm;
             overflow: hidden;
           }
-
           .product-id {
             flex-shrink: 0;
             font-size: 2.2mm;
@@ -484,14 +482,12 @@ const Sklad = () => {
             white-space: nowrap;
             margin-top: 0.4mm;
           }
-
           .divider {
             width: 100%;
             height: 0.35mm;
             background: #d1d5db;
             margin: 1.6mm 0 1.8mm 0;
           }
-
           .bottom-row {
             flex: 1;
             display: flex;
@@ -500,7 +496,6 @@ const Sklad = () => {
             gap: 2mm;
             min-height: 0;
           }
-
           .price-box {
             flex: 1;
             min-width: 0;
@@ -508,7 +503,6 @@ const Sklad = () => {
             flex-direction: column;
             justify-content: center;
           }
-
           .price-label {
             font-size: 2.2mm;
             line-height: 1;
@@ -517,7 +511,6 @@ const Sklad = () => {
             text-transform: uppercase;
             margin-bottom: 1.2mm;
           }
-
           .price-value {
             font-size: 5.4mm;
             line-height: 1.05;
@@ -525,7 +518,6 @@ const Sklad = () => {
             color: #111827;
             word-break: break-word;
           }
-
           .qr-box {
             width: 16.5mm;
             min-width: 16.5mm;
@@ -537,17 +529,14 @@ const Sklad = () => {
             padding: 0.8mm;
             background: #fff;
           }
-
           .qr-box svg {
             width: 100%;
             height: 100%;
             display: block;
           }
-
           .print-note {
             display: none;
           }
-
           @media screen {
             body {
               background: #f3f4f6;
@@ -555,11 +544,9 @@ const Sklad = () => {
               padding: 10mm;
               width: auto;
             }
-
             .label-card {
               box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
             }
-
             .print-note {
               display: block;
               position: fixed;
@@ -582,30 +569,24 @@ const Sklad = () => {
               <div class="product-name">${safeName}</div>
               <div class="product-id">ID: ${printProduct.customId}</div>
             </div>
-
             <div class="divider"></div>
-
             <div class="bottom-row">
               <div class="price-box">
                 <div class="price-label">Narxi</div>
                 <div class="price-value">${safePrice} so'm</div>
               </div>
-
               <div class="qr-box">
                 ${qrCodeSvg}
               </div>
             </div>
           </div>
         </div>
-
         <div class="print-note">Print oynasi ochilmasa Ctrl+P bosing</div>
-
         <script>
           setTimeout(() => {
             window.focus();
             window.print();
           }, 300);
-
           window.onafterprint = () => {
             setTimeout(() => window.close(), 100);
           };
@@ -664,8 +645,26 @@ const Sklad = () => {
     });
   }, [products, searchTerm, filterValues]);
 
+  const totalFiltered = filteredProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / limit));
+
+  const paginatedProducts = useMemo(() => {
+    const start = (page - 1) * limit;
+    return filteredProducts.slice(start, start + limit);
+  }, [filteredProducts, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, filterValues]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   return (
-    <div className="p-6 relative min-h-screen bg-gray-50/50 animate-in fade-in duration-300">
+    <div className="h-full min-h-0 flex flex-col bg-slate-50 animate-in fade-in duration-300">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-black text-slate-800 tracking-tight">
           Tovarlar qoldig'i
@@ -712,136 +711,168 @@ const Sklad = () => {
         </button>
       </div>
 
-      <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50/50 text-slate-400 text-[11px] uppercase font-black tracking-widest border-b border-slate-100">
-            <tr>
-              <th className="p-5">ID (Kod)</th>
-              <th className="p-5">Nomi</th>
-              <th className="p-5 text-center">Kategoriya</th>
-              <th className="p-5 text-center">Birlik</th>
-              {canViewAmounts && (
-                <th className="p-5 text-right bg-amber-50/50 text-amber-700">Kirim Narxi</th>
-              )}
-              <th className="p-5 text-right text-emerald-700">Sotuv Narxi</th>
-              <th className="p-5 text-center">Ombor (Qoldiq)</th>
-              <th className="p-5 text-center">Amallar</th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-slate-50 text-sm font-bold">
-            {loading ? (
+      <div className="flex-1 min-h-0 bg-white rounded-[24px] shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50/50 text-slate-400 text-[11px] uppercase font-black tracking-widest border-b border-slate-100">
               <tr>
-                <td colSpan={canViewAmounts ? 8 : 7} className="p-20 text-center text-slate-400">
-                  <Loader2 className="animate-spin mx-auto" size={32} />
-                </td>
+                <th className="p-5">ID (Kod)</th>
+                <th className="p-5">Nomi</th>
+                <th className="p-5 text-center">Kategoriya</th>
+                <th className="p-5 text-center">Birlik</th>
+                {canViewAmounts && (
+                  <th className="p-5 text-right bg-amber-50/50 text-amber-700">Kirim Narxi</th>
+                )}
+                <th className="p-5 text-right text-emerald-700">Sotuv Narxi</th>
+                <th className="p-5 text-center">Ombor (Qoldiq)</th>
+                <th className="p-5 text-center">Amallar</th>
               </tr>
-            ) : filteredProducts.length > 0 ? (
-              filteredProducts.map((p) => (
-                <tr key={p.id} className="hover:bg-blue-50/30 transition-colors group">
-                  <td className="p-5 font-mono text-blue-600">#{p.customId ?? '-'}</td>
-                  <td className="p-5 text-slate-800">{p.name}</td>
+            </thead>
 
-                  <td className="p-5 text-center text-slate-500 font-medium">
-                    <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-[11px] uppercase tracking-wider">
-                      {p.category || 'Kategoriyasiz'}
-                    </span>
-                  </td>
-
-                  <td className="p-5 text-center text-slate-400">{p.unit}</td>
-
-                  {canViewAmounts && (
-                    <td className="p-5 text-right text-slate-600 bg-amber-50/20">
-                      {formatMoney(p.buyPrice || 0)}{' '}
-                      <span className="text-[10px] text-slate-400">{p.buyCurrency}</span>
-                    </td>
-                  )}
-
-                  <td className="p-5 text-right text-emerald-600">
-                    {formatMoney(p.salePrice || 0)}{' '}
-                    <span className="text-[10px] text-emerald-400">{p.saleCurrency}</span>
-                  </td>
-
-                  <td
-                    className={`p-5 text-center ${
-                      Number(p.quantity || 0) <= 0 ? 'text-rose-500' : 'text-slate-700'
-                    }`}
-                  >
-                    <span
-                      className={`px-3 py-1 rounded-lg ${
-                        Number(p.quantity || 0) <= 0 ? 'bg-rose-50' : 'bg-slate-100'
-                      }`}
-                    >
-                      {Number(p.quantity || 0)}
-                    </span>
-                  </td>
-
-                  <td className="p-5">
-                    <div className="flex justify-center gap-1.5">
-                      <button
-                        onClick={() => openCalculator(p.salePrice, p.saleCurrency)}
-                        className="p-2 text-blue-500 bg-blue-50 hover:bg-blue-500 hover:text-white rounded-xl transition-all"
-                        title="Kalkulyator"
-                      >
-                        <CalcIcon size={16} />
-                      </button>
-
-                      <button
-                        onClick={() => handleOpenPrintModal(p)}
-                        className="p-2 text-slate-500 bg-slate-100 hover:bg-slate-800 hover:text-white rounded-xl transition-all"
-                        title="QR Kod chiqarish"
-                      >
-                        <Printer size={16} />
-                      </button>
-
-                      {canManageProducts && (
-                        <>
-                          <button
-                            disabled={isActionLoading}
-                            onClick={() => handleEditClick(p)}
-                            className="p-2 text-amber-500 bg-amber-50 hover:bg-amber-500 hover:text-white rounded-xl transition-all disabled:opacity-50"
-                            title="Tahrirlash"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-
-                          <button
-                            disabled={isActionLoading}
-                            onClick={() => setDeleteModal({ isOpen: true, productId: p.id })}
-                            className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-500 hover:text-white rounded-xl transition-all disabled:opacity-50"
-                            title="O'chirish"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </>
-                      )}
-
-                      <button
-                        onClick={() => {
-                          setSelectedProduct(p);
-                          setIsDetailsOpen(true);
-                        }}
-                        className="p-2 text-indigo-500 bg-indigo-50 hover:bg-indigo-500 hover:text-white rounded-xl transition-all"
-                        title="Batafsil ma'lumot"
-                      >
-                        <Info size={16} />
-                      </button>
-                    </div>
+            <tbody className="divide-y divide-slate-50 text-sm font-bold">
+              {loading ? (
+                <tr>
+                  <td colSpan={canViewAmounts ? 8 : 7} className="p-20 text-center text-slate-400">
+                    <Loader2 className="animate-spin mx-auto" size={32} />
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td
-                  colSpan={canViewAmounts ? 8 : 7}
-                  className="p-20 text-center text-slate-300 font-bold uppercase tracking-widest text-sm"
-                >
-                  Mahsulot topilmadi
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              ) : paginatedProducts.length > 0 ? (
+                paginatedProducts.map((p) => (
+                  <tr key={p.id} className="hover:bg-blue-50/30 transition-colors group">
+                    <td className="p-5 font-mono text-blue-600">#{p.customId ?? '-'}</td>
+                    <td className="p-5 text-slate-800">{p.name}</td>
+
+                    <td className="p-5 text-center text-slate-500 font-medium">
+                      <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-[11px] uppercase tracking-wider">
+                        {p.category || 'Kategoriyasiz'}
+                      </span>
+                    </td>
+
+                    <td className="p-5 text-center text-slate-400">{p.unit}</td>
+
+                    {canViewAmounts && (
+                      <td className="p-5 text-right text-slate-600 bg-amber-50/20">
+                        {formatMoney(p.buyPrice || 0)}{' '}
+                        <span className="text-[10px] text-slate-400">{p.buyCurrency}</span>
+                      </td>
+                    )}
+
+                    <td className="p-5 text-right text-emerald-600">
+                      {formatMoney(p.salePrice || 0)}{' '}
+                      <span className="text-[10px] text-emerald-400">{p.saleCurrency}</span>
+                    </td>
+
+                    <td
+                      className={`p-5 text-center ${
+                        Number(p.quantity || 0) <= 0 ? 'text-rose-500' : 'text-slate-700'
+                      }`}
+                    >
+                      <span
+                        className={`px-3 py-1 rounded-lg ${
+                          Number(p.quantity || 0) <= 0 ? 'bg-rose-50' : 'bg-slate-100'
+                        }`}
+                      >
+                        {Number(p.quantity || 0)}
+                      </span>
+                    </td>
+
+                    <td className="p-5">
+                      <div className="flex justify-center gap-1.5">
+                        <button
+                          onClick={() => openCalculator(p.salePrice, p.saleCurrency)}
+                          className="p-2 text-blue-500 bg-blue-50 hover:bg-blue-500 hover:text-white rounded-xl transition-all"
+                          title="Kalkulyator"
+                        >
+                          <CalcIcon size={16} />
+                        </button>
+
+                        <button
+                          onClick={() => handleOpenPrintModal(p)}
+                          className="p-2 text-slate-500 bg-slate-100 hover:bg-slate-800 hover:text-white rounded-xl transition-all"
+                          title="QR Kod chiqarish"
+                        >
+                          <Printer size={16} />
+                        </button>
+
+                        {canManageProducts && (
+                          <>
+                            <button
+                              disabled={isActionLoading}
+                              onClick={() => handleEditClick(p)}
+                              className="p-2 text-amber-500 bg-amber-50 hover:bg-amber-500 hover:text-white rounded-xl transition-all disabled:opacity-50"
+                              title="Tahrirlash"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+
+                            <button
+                              disabled={isActionLoading}
+                              onClick={() => setDeleteModal({ isOpen: true, productId: p.id })}
+                              className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-500 hover:text-white rounded-xl transition-all disabled:opacity-50"
+                              title="O'chirish"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
+
+                        <button
+                          onClick={() => {
+                            setSelectedProduct(p);
+                            setIsDetailsOpen(true);
+                          }}
+                          className="p-2 text-indigo-500 bg-indigo-50 hover:bg-indigo-500 hover:text-white rounded-xl transition-all"
+                          title="Batafsil ma'lumot"
+                        >
+                          <Info size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={canViewAmounts ? 8 : 7}
+                    className="p-20 text-center text-slate-300 font-bold uppercase tracking-widest text-sm"
+                  >
+                    Mahsulot topilmadi
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
+          <div className="text-sm font-bold text-slate-500">
+            Filtrlangan: <span className="text-slate-800">{totalFiltered} ta</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={page <= 1 || loading}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+            >
+              <ChevronLeft size={16} />
+              Oldingi
+            </button>
+
+            <div className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-black text-sm min-w-[90px] text-center">
+              {page} / {totalPages}
+            </div>
+
+            <button
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={page >= totalPages || loading}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+            >
+              Keyingi
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
       </div>
 
       {isFilterOpen && (

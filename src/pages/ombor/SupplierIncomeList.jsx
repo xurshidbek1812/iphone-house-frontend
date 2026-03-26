@@ -95,7 +95,7 @@ const SupplierIncomeList = () => {
   }, [printModalOpen, viewInvoice, confirmModal.isOpen]);
 
   const fetchInvoices = useCallback(
-    async (targetPage = page, targetSearch = appliedSearch, targetStatus = statusFilter) => {
+    async (targetPage = 1, targetSearch = appliedSearch, targetStatus = statusFilter) => {
       try {
         setLoading(true);
 
@@ -133,7 +133,7 @@ const SupplierIncomeList = () => {
   };
 
   const formatDate = (d) => {
-    if (!d) return '';
+    if (!d) return '-';
     return new Date(d).toLocaleDateString('uz-UZ');
   };
 
@@ -166,7 +166,7 @@ const SupplierIncomeList = () => {
       if (viewInvoice) setViewInvoice(null);
     } catch (err) {
       console.error(err);
-      toast.error(`Xatolik: ${err.message}`);
+      toast.error(err.message || "Tasdiqlashda xatolik");
     } finally {
       setIsProcessing(false);
       setConfirmModal({ isOpen: false, type: null, invoiceId: null });
@@ -330,15 +330,12 @@ const SupplierIncomeList = () => {
                 <div class="product-name">${safeName}</div>
                 <div class="product-id">ID: ${safeCustomId}</div>
               </div>
-
               <div class="divider"></div>
-
               <div class="bottom-row">
                 <div class="price-box">
                   <div class="price-label">Narxi</div>
                   <div class="price-value">${safePrice} so'm</div>
                 </div>
-
                 <div class="qr-box">
                   <img src="${qrDataUrl}" alt="QR" />
                 </div>
@@ -358,19 +355,16 @@ const SupplierIncomeList = () => {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
               }
-
               html, body {
                 margin: 0;
                 padding: 0;
                 background: #fff;
                 font-family: Arial, Helvetica, sans-serif;
               }
-
               @page {
                 size: 58mm 40mm;
                 margin: 0;
               }
-
               body {
                 width: 58mm;
                 padding: 0;
@@ -380,7 +374,6 @@ const SupplierIncomeList = () => {
                 align-items: flex-start;
                 justify-content: flex-start;
               }
-
               .label-card {
                 width: 58mm;
                 height: 40mm;
@@ -393,7 +386,6 @@ const SupplierIncomeList = () => {
                 border: 0.2mm solid #d1d5db;
                 background: #fff;
               }
-
               .header-row {
                 display: flex;
                 align-items: flex-start;
@@ -401,7 +393,6 @@ const SupplierIncomeList = () => {
                 gap: 2mm;
                 min-height: 8.5mm;
               }
-
               .product-name {
                 flex: 1;
                 min-width: 0;
@@ -414,7 +405,6 @@ const SupplierIncomeList = () => {
                 max-height: 8mm;
                 overflow: hidden;
               }
-
               .product-id {
                 flex-shrink: 0;
                 font-size: 2.2mm;
@@ -424,14 +414,12 @@ const SupplierIncomeList = () => {
                 white-space: nowrap;
                 margin-top: 0.4mm;
               }
-
               .divider {
                 width: 100%;
                 height: 0.35mm;
                 background: #d1d5db;
                 margin: 1.6mm 0 1.8mm 0;
               }
-
               .bottom-row {
                 flex: 1;
                 display: flex;
@@ -440,7 +428,6 @@ const SupplierIncomeList = () => {
                 gap: 2mm;
                 min-height: 0;
               }
-
               .price-box {
                 flex: 1;
                 min-width: 0;
@@ -448,7 +435,6 @@ const SupplierIncomeList = () => {
                 flex-direction: column;
                 justify-content: center;
               }
-
               .price-label {
                 font-size: 2.2mm;
                 line-height: 1;
@@ -457,7 +443,6 @@ const SupplierIncomeList = () => {
                 text-transform: uppercase;
                 margin-bottom: 1.2mm;
               }
-
               .price-value {
                 font-size: 5.4mm;
                 line-height: 1.05;
@@ -465,7 +450,6 @@ const SupplierIncomeList = () => {
                 color: #111827;
                 word-break: break-word;
               }
-
               .qr-box {
                 width: 16.5mm;
                 min-width: 16.5mm;
@@ -477,13 +461,11 @@ const SupplierIncomeList = () => {
                 padding: 0.8mm;
                 background: #fff;
               }
-
               .qr-box img {
                 width: 100%;
                 height: auto;
                 display: block;
               }
-
               @media screen {
                 body {
                   background: #f3f4f6;
@@ -492,7 +474,6 @@ const SupplierIncomeList = () => {
                   gap: 4mm;
                   width: auto;
                 }
-
                 .label-card {
                   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
                 }
@@ -552,41 +533,57 @@ const SupplierIncomeList = () => {
   const checkedPrintCount = printItems.filter((item) => item.isChecked).length;
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen animate-in fade-in duration-300">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-black text-slate-800 tracking-tight">
-          Kirim qilingan fakturalar
-        </h1>
-      </div>
-
+    <div className="h-full min-h-0 flex flex-col bg-slate-50">
       {!canManageInvoiceDraft && !canApproveInvoice && (
-        <div className="bg-white mb-6 p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 text-slate-500">
-          <Lock size={18} className="text-slate-400" />
-          <span className="font-bold text-sm">
-            Siz bu bo‘limni ko‘ra olasiz, lekin kirim yaratish, yuborish, tasdiqlash yoki
-            o‘chirish huquqingiz yo‘q.
+        <div className="mb-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 flex items-center gap-3 text-slate-500">
+          <Lock size={16} className="text-slate-400" />
+          <span className="text-sm font-normal">
+            Siz bu bo‘limni ko‘ra olasiz, lekin kirim yaratish, yuborish, tasdiqlash yoki o‘chirish huquqingiz yo‘q.
           </span>
         </div>
       )}
 
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex gap-4 items-center mb-6 flex-col lg:flex-row">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-          <input
-            type="text"
-            placeholder="Ta'minotchi yoki Faktura raqami bo'yicha qidirish..."
-            className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-          />
+      <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-xl font-medium text-slate-900">Kirim fakturalar</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Ta'minotchi kirimlari ro‘yxati</p>
         </div>
 
-        <div className="flex gap-3 w-full lg:w-auto">
+        {canManageInvoiceDraft && (
+          <button
+            onClick={() => navigate('/ombor/taminotchi-kirim/qoshish')}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition"
+          >
+            <Plus size={16} />
+            Yangi kirim
+          </button>
+        )}
+      </div>
+
+      <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex gap-3 flex-col lg:flex-row">
+          <div className="flex-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <Search className="text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Ta'minotchi yoki faktura raqami..."
+              className="w-full bg-transparent outline-none text-sm text-slate-700 placeholder:text-slate-400"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+            />
+            <button
+              onClick={handleSearchSubmit}
+              className="rounded-lg bg-white border border-slate-200 px-3 py-2 text-sm font-normal text-slate-700 hover:bg-slate-50"
+            >
+              Qidirish
+            </button>
+          </div>
+
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-slate-700"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-700 outline-none"
           >
             <option value="ALL">Barchasi</option>
             <option value="Jarayonda">Jarayonda</option>
@@ -594,50 +591,39 @@ const SupplierIncomeList = () => {
             <option value="Tasdiqlandi">Tasdiqlandi</option>
             <option value="Bekor qilindi">Bekor qilindi</option>
           </select>
-
-          <button
-            onClick={handleSearchSubmit}
-            className="px-5 py-3 rounded-xl bg-blue-600 text-white font-black hover:bg-blue-700 transition-colors"
-          >
-            Qidirish
-          </button>
-
-          {canManageInvoiceDraft && (
-            <button
-              onClick={() => navigate('/ombor/taminotchi-kirim/qoshish')}
-              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95 whitespace-nowrap"
-            >
-              <Plus size={18} /> Yangi Kirim
-            </button>
-          )}
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[650px] overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50 text-slate-500 text-[11px] font-black uppercase tracking-widest border-b border-slate-200">
+      <div className="flex-1 min-h-0 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="w-full">
+            <thead className="sticky top-0 z-10 bg-slate-50/95 text-left text-[10px] text-slate-500 uppercase tracking-[0.12em] border-b border-slate-200">
               <tr>
-                <th className="p-5">Sana</th>
-                <th className="p-5">Faktura №</th>
-                <th className="p-5">Ta'minotchi</th>
-                {canSeeAmount && <th className="p-5 text-right">Summa (Kirim)</th>}
-                <th className="p-5 text-center">Holat</th>
-                <th className="p-5 text-center">Amal</th>
+                <th className="px-4 py-3 font-medium">Sana</th>
+                <th className="px-4 py-3 font-medium">Faktura</th>
+                <th className="px-4 py-3 font-medium">Ta'minotchi</th>
+                {canSeeAmount && (
+                  <th className="px-4 py-3 font-medium text-right">Summa</th>
+                )}
+                <th className="px-4 py-3 font-medium text-center">Holat</th>
+                <th className="px-4 py-3 font-medium text-center">Amallar</th>
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
+            <tbody className="text-sm text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={canSeeAmount ? 6 : 5} className="p-10 text-center text-slate-400">
-                    <Loader2 className="animate-spin mx-auto" size={24} />
+                  <td colSpan={canSeeAmount ? 6 : 5} className="px-4 py-14 text-center">
+                    <Loader2 className="animate-spin mx-auto text-slate-400" size={24} />
                   </td>
                 </tr>
               ) : invoices.length === 0 ? (
                 <tr>
-                  <td colSpan={canSeeAmount ? 6 : 5} className="p-10 text-center text-slate-400">
-                    Hech qanday faktura topilmadi
+                  <td
+                    colSpan={canSeeAmount ? 6 : 5}
+                    className="px-4 py-14 text-center text-slate-400 text-sm"
+                  >
+                    Fakturalar topilmadi
                   </td>
                 </tr>
               ) : (
@@ -654,88 +640,104 @@ const SupplierIncomeList = () => {
                     canApproveInvoice && inv.status !== 'Tasdiqlandi';
 
                   return (
-                    <tr key={inv.id} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="p-5 text-slate-500 font-medium">
+                    <tr
+                      key={inv.id}
+                      className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors"
+                    >
+                      <td className="px-4 py-3 align-middle whitespace-nowrap text-[14px] text-slate-500 font-normal">
                         {formatDate(inv.date || inv.createdAt)}
                       </td>
-                      <td className="p-5 font-mono text-blue-600">#{inv.invoiceNumber}</td>
-                      <td className="p-5">{inv.supplierName || inv.supplier || "Noma'lum"}</td>
+
+                      <td className="px-4 py-3 align-middle">
+                        <div className="text-[15px] font-semibold text-slate-800 tracking-tight">
+                          #{inv.invoiceNumber}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3 align-middle">
+                        <div className="text-[15px] font-medium text-slate-700 leading-6">
+                          {inv.supplierName || inv.supplier || "Noma'lum"}
+                        </div>
+                      </td>
 
                       {canSeeAmount && (
-                        <td className="p-5 text-right text-emerald-600">
-                          {Number(inv.totalSum || 0).toLocaleString('uz-UZ')}{' '}
-                          <span className="text-[10px] text-slate-400">UZS</span>
+                        <td className="px-4 py-3 align-middle whitespace-nowrap text-right">
+                          <div className="text-[15px] font-semibold text-slate-800">
+                            {Number(inv.totalSum || 0).toLocaleString('uz-UZ')} UZS
+                          </div>
                         </td>
                       )}
 
-                      <td className="p-5 text-center">
+                      <td className="px-4 py-3 align-middle text-center">
                         <span
-                          className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider ${
+                          className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-[11px] font-normal leading-none ${
                             inv.status === 'Tasdiqlandi'
-                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                               : inv.status === 'Yuborildi'
-                              ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-100'
                               : inv.status === 'Bekor qilindi'
-                              ? 'bg-rose-50 text-rose-600 border border-rose-100'
-                              : 'bg-amber-50 text-amber-600 border border-amber-100'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-100'
+                              : 'bg-amber-50 text-amber-700 border border-amber-100'
                           }`}
                         >
                           {inv.status}
                         </span>
                       </td>
 
-                      <td className="p-5 text-center relative menu-container">
-                        <button
-                          onClick={(e) => toggleMenu(e, inv.id)}
-                          className="p-2 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-xl transition-colors"
-                        >
-                          <MoreVertical size={18} />
-                        </button>
+                      <td className="px-4 py-3 align-middle text-center relative menu-container">
+                        <div className="inline-block relative">
+                          <button
+                            onClick={(e) => toggleMenu(e, inv.id)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                          >
+                            <MoreVertical size={14} />
+                          </button>
 
-                        {activeMenu === inv.id && (
-                          <div className="absolute right-12 top-8 w-52 bg-white shadow-xl border border-slate-100 rounded-xl z-50 overflow-hidden font-bold text-sm animate-in zoom-in-95">
-                            <button
-                              onClick={() => handleAction('view', inv.id)}
-                              className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"
-                            >
-                              <Eye size={16} /> Ko'rish
-                            </button>
-
-                            <button
-                              onClick={() => handleAction('print', inv.id)}
-                              className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-50 transition-colors"
-                            >
-                              <Printer size={16} /> QR Chop etish
-                            </button>
-
-                            {canDeleteThisInvoice && (
+                          {activeMenu === inv.id && (
+                            <div className="absolute right-0 top-10 w-52 bg-white shadow-xl border border-slate-200 rounded-xl z-50 overflow-hidden text-sm">
                               <button
-                                onClick={() => handleAction('delete', inv.id)}
-                                className="w-full text-left px-4 py-3 hover:bg-rose-50 text-rose-600 flex items-center gap-2 transition-colors"
+                                onClick={() => handleAction('view', inv.id)}
+                                className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-100"
                               >
-                                <Trash2 size={16} /> O'chirish
+                                <Eye size={15} /> Ko'rish
                               </button>
-                            )}
 
-                            {canApproveThisInvoice && (
                               <button
-                                onClick={() => handleAction('approve', inv.id)}
-                                className="w-full text-left px-4 py-3 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 flex items-center gap-2 transition-all"
+                                onClick={() => handleAction('print', inv.id)}
+                                className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-2 border-b border-slate-100"
                               >
-                                <CheckCircle size={16} /> Tasdiqlash
+                                <Printer size={15} /> QR chop etish
                               </button>
-                            )}
 
-                            {canSendThisInvoice && (
-                              <button
-                                onClick={() => handleAction('send', inv.id)}
-                                className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 flex items-center gap-2 transition-all"
-                              >
-                                <Send size={16} /> Yuborish
-                              </button>
-                            )}
-                          </div>
-                        )}
+                              {canDeleteThisInvoice && (
+                                <button
+                                  onClick={() => handleAction('delete', inv.id)}
+                                  className="w-full text-left px-4 py-3 hover:bg-rose-50 text-rose-600 flex items-center gap-2 border-b border-slate-100"
+                                >
+                                  <Trash2 size={15} /> O'chirish
+                                </button>
+                              )}
+
+                              {canApproveThisInvoice && (
+                                <button
+                                  onClick={() => handleAction('approve', inv.id)}
+                                  className="w-full text-left px-4 py-3 hover:bg-emerald-50 text-emerald-700 flex items-center gap-2 border-b border-slate-100"
+                                >
+                                  <CheckCircle size={15} /> Tasdiqlash
+                                </button>
+                              )}
+
+                              {canSendThisInvoice && (
+                                <button
+                                  onClick={() => handleAction('send', inv.id)}
+                                  className="w-full text-left px-4 py-3 hover:bg-blue-50 text-blue-700 flex items-center gap-2"
+                                >
+                                  <Send size={15} /> Yuborish
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -745,47 +747,48 @@ const SupplierIncomeList = () => {
           </table>
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
-          <div className="text-sm font-bold text-slate-500">
-            Jami: <span className="text-slate-800">{total} ta</span>
+        <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+          <div className="text-sm text-slate-500">
+            Jami: <span className="font-medium text-slate-800">{total}</span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => fetchInvoices(page - 1, appliedSearch, statusFilter)}
               disabled={page <= 1 || loading}
-              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={15} />
               Oldingi
             </button>
 
-            <div className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-black text-sm min-w-[90px] text-center">
+            <div className="min-w-[84px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-sm font-normal text-slate-700">
               {Math.max(page, 1)} / {Math.max(totalPages, 1)}
             </div>
 
             <button
               onClick={() => fetchInvoices(page + 1, appliedSearch, statusFilter)}
               disabled={page >= totalPages || loading || totalPages === 0}
-              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               Keyingi
-              <ChevronRight size={16} />
+              <ChevronRight size={15} />
             </button>
           </div>
         </div>
       </div>
 
       {printModalOpen && invoiceToPrint && (
-        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-4xl rounded-[24px] shadow-2xl p-6 animate-in zoom-in-95">
-            <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex justify-between items-center px-5 py-4 border-b border-slate-200">
               <div>
-                <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 mb-1">
-                  <Printer className="text-blue-600" /> Yorliq chop etish
-                </h2>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                  Faktura: #{invoiceToPrint.invoiceNumber} | Holat: {invoiceToPrint.status}
+                <h3 className="text-base font-medium text-slate-900 flex items-center gap-2">
+                  <Printer size={18} />
+                  Yorliq chop etish
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Faktura: #{invoiceToPrint.invoiceNumber}
                 </p>
               </div>
 
@@ -795,123 +798,121 @@ const SupplierIncomeList = () => {
                   setInvoiceToPrint(null);
                   setPrintItems([]);
                 }}
-                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500"
               >
-                <X size={24} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="max-h-[55vh] overflow-y-auto mb-6 custom-scrollbar border border-slate-100 rounded-xl">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 sticky top-0 text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100">
-                  <tr>
-                    <th
-                      className="p-4 w-12 text-center cursor-pointer hover:text-blue-500 transition-colors"
-                      onClick={toggleAllPrintItems}
-                    >
-                      {printItems.length > 0 && printItems.every((item) => item.isChecked) ? (
-                        <CheckSquare size={18} className="text-blue-600 mx-auto" />
-                      ) : (
-                        <Square size={18} className="mx-auto" />
-                      )}
-                    </th>
-                    <th className="p-4">Kod</th>
-                    <th className="p-4">Nomi</th>
-                    <th className="p-4 text-right">Narxi</th>
-                    <th className="p-4 text-center">Nusxa</th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-slate-50 font-bold text-slate-700">
-                  {printItems.map((item) => (
-                    <tr
-                      key={item.rowId}
-                      className={item.isChecked ? 'bg-blue-50/30' : 'hover:bg-slate-50'}
-                    >
-                      <td
-                        className="p-4 text-center cursor-pointer"
-                        onClick={() => togglePrintItem(item.rowId)}
+            <div className="px-5 py-5">
+              <div className="max-h-[55vh] overflow-y-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-sm text-left">
+                  <thead className="sticky top-0 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-[0.12em] border-b border-slate-200">
+                    <tr>
+                      <th
+                        className="p-4 w-12 text-center cursor-pointer"
+                        onClick={toggleAllPrintItems}
                       >
-                        {item.isChecked ? (
-                          <CheckSquare size={18} className="text-blue-600 mx-auto" />
+                        {printItems.length > 0 && printItems.every((item) => item.isChecked) ? (
+                          <CheckSquare size={18} className="text-slate-700 mx-auto" />
                         ) : (
-                          <Square size={18} className="text-slate-300 mx-auto" />
+                          <Square size={18} className="mx-auto text-slate-400" />
                         )}
-                      </td>
-
-                      <td className="p-4 font-mono text-blue-600">#{item.customId ?? '-'}</td>
-                      <td className="p-4">{item.name}</td>
-
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          min="0"
-                          value={item.labelPrice}
-                          onChange={(e) =>
-                            updatePrintItem(
-                              item.rowId,
-                              'labelPrice',
-                              Number(e.target.value || 0)
-                            )
-                          }
-                          className="w-full p-2.5 border border-slate-200 rounded-lg text-right font-black outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
-                        />
-                      </td>
-
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.copies}
-                          onChange={(e) =>
-                            updatePrintItem(
-                              item.rowId,
-                              'copies',
-                              Math.max(1, Number(e.target.value || 1))
-                            )
-                          }
-                          className="w-full p-2.5 border border-slate-200 rounded-lg text-center font-black outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
-                        />
-                      </td>
+                      </th>
+                      <th className="p-4 font-medium">Kod</th>
+                      <th className="p-4 font-medium">Nomi</th>
+                      <th className="p-4 font-medium text-right">Narxi</th>
+                      <th className="p-4 font-medium text-center">Nusxa</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
 
-            <div className="flex justify-between items-center gap-4 pt-2">
-              <div className="text-sm font-bold text-slate-500">
-                Tanlangan: <span className="text-slate-800">{checkedPrintCount} ta</span>
+                  <tbody className="text-sm text-slate-700">
+                    {printItems.map((item) => (
+                      <tr
+                        key={item.rowId}
+                        className={`border-b border-slate-100 ${item.isChecked ? 'bg-slate-50/60' : ''}`}
+                      >
+                        <td
+                          className="p-4 text-center cursor-pointer"
+                          onClick={() => togglePrintItem(item.rowId)}
+                        >
+                          {item.isChecked ? (
+                            <CheckSquare size={18} className="text-slate-700 mx-auto" />
+                          ) : (
+                            <Square size={18} className="text-slate-300 mx-auto" />
+                          )}
+                        </td>
+
+                        <td className="p-4 text-[15px] font-semibold text-slate-800">
+                          #{item.customId ?? '-'}
+                        </td>
+                        <td className="p-4 text-[15px] font-medium text-slate-700">
+                          {item.name}
+                        </td>
+
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.labelPrice}
+                            onChange={(e) =>
+                              updatePrintItem(
+                                item.rowId,
+                                'labelPrice',
+                                Number(e.target.value || 0)
+                              )
+                            }
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-right outline-none focus:ring-2 focus:ring-slate-200"
+                          />
+                        </td>
+
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.copies}
+                            onChange={(e) =>
+                              updatePrintItem(
+                                item.rowId,
+                                'copies',
+                                Math.max(1, Number(e.target.value || 1))
+                              )
+                            }
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setPrintModalOpen(false);
-                    setInvoiceToPrint(null);
-                    setPrintItems([]);
-                  }}
-                  className="px-8 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors"
-                >
-                  Yopish
-                </button>
+              <div className="mt-4 flex justify-between items-center gap-4">
+                <div className="text-sm text-slate-500">
+                  Tanlangan: <span className="font-medium text-slate-800">{checkedPrintCount}</span>
+                </div>
 
-                <button
-                  onClick={handlePrintAllLabels}
-                  disabled={checkedPrintCount === 0 || isPrinting}
-                  className={`px-8 py-3 rounded-xl font-black flex items-center gap-2 shadow-lg transition-all ${
-                    checkedPrintCount > 0 && !isPrinting
-                      ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'
-                      : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                  }`}
-                >
-                  {isPrinting ? (
-                    <Loader2 size={18} className="animate-spin" />
-                  ) : (
-                    <Printer size={18} />
-                  )}
-                  Chop etish ({checkedPrintCount})
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setPrintModalOpen(false);
+                      setInvoiceToPrint(null);
+                      setPrintItems([]);
+                    }}
+                    className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-normal text-slate-700 hover:bg-slate-200"
+                  >
+                    Yopish
+                  </button>
+
+                  <button
+                    onClick={handlePrintAllLabels}
+                    disabled={checkedPrintCount === 0 || isPrinting}
+                    className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    {isPrinting ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
+                    Chop etish ({checkedPrintCount})
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -919,165 +920,146 @@ const SupplierIncomeList = () => {
       )}
 
       {viewInvoice && (
-        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-4xl rounded-[32px] shadow-2xl p-8 animate-in zoom-in-95">
-            <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-6">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
               <div>
-                <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2 mb-2 tracking-tight">
-                  Faktura:
-                  <span className="text-blue-600 px-3 py-1 bg-blue-50 rounded-lg ml-2">
-                    № {viewInvoice.invoiceNumber}
-                  </span>
-                </h2>
-
-                <div className="text-xs text-slate-500 font-bold flex gap-4 uppercase tracking-widest">
-                  <span className="flex items-center gap-1">
-                    Ta'minotchi:
-                    <span className="text-slate-800">
-                      {viewInvoice.supplierName || viewInvoice.supplier}
-                    </span>
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    Kiritdi:
-                    <span className="text-slate-800">
-                      {viewInvoice.userName || "Noma’lum"}
-                    </span>
-                  </span>
-                </div>
+                <h3 className="text-base font-medium text-slate-900">
+                  Faktura № {viewInvoice.invoiceNumber}
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  {viewInvoice.supplierName || viewInvoice.supplier}
+                </p>
               </div>
 
               <button
                 disabled={isProcessing}
                 onClick={() => setViewInvoice(null)}
-                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors disabled:opacity-50"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500"
               >
-                <X size={24} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="max-h-[50vh] overflow-y-auto mb-8 border border-slate-100 rounded-2xl custom-scrollbar">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 sticky top-0 text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100">
-                  <tr>
-                    <th className="p-4">Kod</th>
-                    <th className="p-4">Nomi</th>
-                    <th className="p-4 text-center">Soni</th>
-                    {canSeeAmount && <th className="p-4 text-right text-amber-600">Kirim Narx</th>}
-                    <th className="p-4 text-right text-emerald-600">Sotuv Narx</th>
-                    {canSeeAmount && (
-                      <th className="p-4 text-right text-slate-800">Jami Kirim Summa</th>
-                    )}
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-slate-50 font-bold text-slate-700">
-                  {(Array.isArray(viewInvoice.items) ? viewInvoice.items : []).map((item, i) => (
-                    <tr key={i} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-4 font-mono text-slate-400">#{item.customId ?? '-'}</td>
-                      <td className="p-4">{item.name}</td>
-                      <td className="p-4 text-center text-blue-600">
-                        {Number(item.count || 0)}
-                      </td>
-
-                      {canSeeAmount && (
-                        <td className="p-4 text-right text-amber-700">
-                          {Number(item.price || 0).toLocaleString('uz-UZ')}{' '}
-                          <span className="text-[10px] text-amber-500">
-                            {item.currency || 'UZS'}
-                          </span>
-                        </td>
-                      )}
-
-                      <td className="p-4 text-right text-emerald-600">
-                        {Number(item.salePrice || 0).toLocaleString('uz-UZ')}{' '}
-                        <span className="text-[10px] text-emerald-400">
-                          {item.currency || 'UZS'}
-                        </span>
-                      </td>
-
-                      {canSeeAmount && (
-                        <td className="p-4 text-right font-black text-slate-800">
-                          {(Number(item.count || 0) * Number(item.price || 0)).toLocaleString('uz-UZ')}{' '}
-                          <span className="text-[10px] text-slate-400">
-                            {item.currency || 'UZS'}
-                          </span>
-                        </td>
-                      )}
+            <div className="px-5 py-5">
+              <div className="max-h-[50vh] overflow-y-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-sm text-left">
+                  <thead className="sticky top-0 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-[0.12em] border-b border-slate-200">
+                    <tr>
+                      <th className="p-4 font-medium">Kod</th>
+                      <th className="p-4 font-medium">Nomi</th>
+                      <th className="p-4 font-medium text-center">Soni</th>
+                      {canSeeAmount && <th className="p-4 font-medium text-right">Kirim narx</th>}
+                      <th className="p-4 font-medium text-right">Sotuv narx</th>
+                      {canSeeAmount && <th className="p-4 font-medium text-right">Jami</th>}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 bg-slate-50/50 -mx-8 -mb-8 p-6 rounded-b-[32px]">
-              <button
-                disabled={isProcessing}
-                onClick={() => setViewInvoice(null)}
-                className="px-8 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
-              >
-                Yopish
-              </button>
+                  <tbody className="text-sm text-slate-700">
+                    {(Array.isArray(viewInvoice.items) ? viewInvoice.items : []).map((item, i) => (
+                      <tr key={i} className="border-b border-slate-100">
+                        <td className="p-4 text-[15px] font-semibold text-slate-800">
+                          #{item.customId ?? '-'}
+                        </td>
+                        <td className="p-4 text-[15px] font-medium text-slate-700">
+                          {item.name}
+                        </td>
+                        <td className="p-4 text-center text-[15px] font-medium text-slate-700">
+                          {Number(item.count || 0)}
+                        </td>
 
-              {canApproveInvoice && viewInvoice.status !== 'Tasdiqlandi' && (
+                        {canSeeAmount && (
+                          <td className="p-4 text-right text-[15px] font-medium text-slate-700">
+                            {Number(item.price || 0).toLocaleString('uz-UZ')} {item.currency || 'UZS'}
+                          </td>
+                        )}
+
+                        <td className="p-4 text-right text-[15px] font-medium text-slate-700">
+                          {Number(item.salePrice || 0).toLocaleString('uz-UZ')} {item.currency || 'UZS'}
+                        </td>
+
+                        {canSeeAmount && (
+                          <td className="p-4 text-right text-[15px] font-semibold text-slate-800">
+                            {(Number(item.count || 0) * Number(item.price || 0)).toLocaleString('uz-UZ')} {item.currency || 'UZS'}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 flex justify-end gap-3">
                 <button
                   disabled={isProcessing}
-                  onClick={() => {
-                    setViewInvoice(null);
-                    handleAction('approve', viewInvoice.id);
-                  }}
-                  className="px-8 py-3 bg-emerald-600 text-white rounded-xl font-black shadow-lg shadow-emerald-200 hover:bg-emerald-700 flex items-center gap-2 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                  onClick={() => setViewInvoice(null)}
+                  className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-normal text-slate-700 hover:bg-slate-200"
                 >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" /> Tasdiqlanmoqda...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle size={20} /> Fakturani Tasdiqlash
-                    </>
-                  )}
+                  Yopish
                 </button>
-              )}
+
+                {canApproveInvoice && viewInvoice.status !== 'Tasdiqlandi' && (
+                  <button
+                    disabled={isProcessing}
+                    onClick={() => {
+                      setViewInvoice(null);
+                      handleAction('approve', viewInvoice.id);
+                    }}
+                    className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Tasdiqlanmoqda...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={16} />
+                        Tasdiqlash
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-8 animate-in zoom-in-95 text-center">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-2xl p-6 text-center">
             <div
-              className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg rotate-3 ${
+              className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
                 confirmModal.type === 'approve'
-                  ? 'bg-emerald-50 text-emerald-500 shadow-emerald-100'
-                  : 'bg-rose-50 text-rose-500 shadow-rose-100'
+                  ? 'bg-emerald-50 text-emerald-600'
+                  : 'bg-rose-50 text-rose-600'
               }`}
             >
               {confirmModal.type === 'approve' ? (
-                <CheckCircle size={40} strokeWidth={2.5} />
+                <CheckCircle size={30} />
               ) : (
-                <AlertTriangle size={40} strokeWidth={2.5} />
+                <AlertTriangle size={30} />
               )}
             </div>
 
-            <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">
+            <h3 className="text-base font-medium text-slate-900 mb-2">
               {confirmModal.type === 'approve'
                 ? 'Fakturani tasdiqlaysizmi?'
                 : "O'chirilsinmi?"}
             </h3>
 
-            <p className="text-center text-slate-500 font-medium text-sm mb-8 leading-relaxed">
+            <p className="text-sm text-slate-500 mb-6">
               {confirmModal.type === 'approve'
-                ? "Tasdiqlaganingizdan so'ng tovarlar omborga qo'shiladi va bu jarayonni ortga qaytarib bo'lmaydi."
-                : "Bu faktura tizimdan butunlay o'chirib tashlanadi. Buni ortga qaytarib bo'lmaydi."}
+                ? "Tasdiqlangandan so'ng tovarlar omborga qo'shiladi."
+                : "Bu faktura tizimdan butunlay o'chiriladi."}
             </p>
 
             <div className="flex gap-3">
               <button
                 disabled={isProcessing}
                 onClick={() => setConfirmModal({ isOpen: false, type: null, invoiceId: null })}
-                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all uppercase text-xs tracking-widest disabled:opacity-50"
+                className="flex-1 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-normal text-slate-700 hover:bg-slate-200"
               >
                 Bekor qilish
               </button>
@@ -1089,14 +1071,14 @@ const SupplierIncomeList = () => {
                     ? executeApprove(confirmModal.invoiceId)
                     : executeDelete(confirmModal.invoiceId)
                 }
-                className={`flex-1 py-4 text-white rounded-2xl font-black shadow-xl active:scale-95 transition-all uppercase text-xs tracking-widest flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed ${
+                className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50 ${
                   confirmModal.type === 'approve'
-                    ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
-                    : 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-rose-600 hover:bg-rose-700'
                 }`}
               >
                 {isProcessing ? (
-                  <Loader2 size={16} className="animate-spin" />
+                  <Loader2 size={16} className="animate-spin mx-auto" />
                 ) : confirmModal.type === 'approve' ? (
                   'Tasdiqlash'
                 ) : (

@@ -159,23 +159,29 @@ const MainLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   return (
-    <div className="flex min-h-screen bg-[#F8FAFC] font-sans">
+    <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
 
-      <div className={`flex-1 p-8 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
-        <header className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-black text-slate-800">Iphone House</h1>
+      <div
+        className={`flex flex-1 flex-col transition-all duration-300 ${
+          isSidebarOpen ? 'ml-64' : 'ml-20'
+        }`}
+      >
+        <header className="h-16 shrink-0 flex items-center justify-end px-4 md:px-6 bg-slate-50/95 backdrop-blur border-b border-slate-200">
           <button
             onClick={() => setIsCalcOpen(true)}
-            className="flex items-center gap-2 bg-white text-blue-600 px-4 py-2 rounded-xl shadow-sm border border-blue-100 hover:bg-blue-50 font-bold transition-colors"
+            className="inline-flex items-center gap-2 rounded-xl bg-white text-slate-700 px-4 py-2.5 border border-slate-200 hover:bg-slate-100 text-sm font-normal transition-colors shadow-sm"
           >
-            <CalcIcon size={20} /> Kalkulyator
+            <CalcIcon size={18} />
+            Kalkulyator
           </button>
         </header>
 
-        <Suspense fallback={<LoadingSpinner />}>
-          <Outlet />
-        </Suspense>
+        <main className="flex-1 overflow-hidden p-4 md:p-5">
+          <Suspense fallback={<LoadingSpinner />}>
+            <Outlet />
+          </Suspense>
+        </main>
       </div>
 
       <Calculator isOpen={isCalcOpen} onClose={() => setIsCalcOpen(false)} />
