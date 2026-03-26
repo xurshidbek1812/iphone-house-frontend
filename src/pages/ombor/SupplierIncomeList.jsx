@@ -15,7 +15,8 @@ import {
   CheckSquare,
   Square,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Pencil
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -137,6 +138,11 @@ const SupplierIncomeList = () => {
     return new Date(d).toLocaleDateString('uz-UZ');
   };
 
+  const formatDateTime = (d) => {
+    if (!d) return '-';
+    return new Date(d).toLocaleString('uz-UZ');
+  };
+
   const handleSearchSubmit = () => {
     setAppliedSearch(searchTerm.trim());
   };
@@ -145,6 +151,63 @@ const SupplierIncomeList = () => {
     if (e.key === 'Enter') {
       handleSearchSubmit();
     }
+  };
+
+  const buildEditPayload = (invoice) => {
+    const items = Array.isArray(invoice?.items) ? invoice.items : [];
+
+    return {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber || '',
+      supplierName: invoice.supplierName || invoice.supplier || '',
+      supplier: invoice.supplier || invoice.supplierName || '',
+      supplierId: invoice.supplierId || null,
+      date: invoice.date || invoice.createdAt || '',
+      status: invoice.status || 'Jarayonda',
+      note: invoice.note || '',
+      userName: invoice.userName || '',
+      totalSum: Number(invoice.totalSum || 0),
+      items: items.map((item, index) => ({
+        localId: `${invoice.id}-${item.customId ?? item.id ?? index}`,
+        id: item.id ?? null,
+        customId: item.customId ?? '',
+        name: item.name || '',
+        count: Number(item.count || 0),
+        price: Number(item.price || 0),
+        salePrice: Number(item.salePrice || 0),
+        currency: item.currency || 'UZS',
+        barcode: item.barcode || '',
+        imei: item.imei || '',
+        serialNumber: item.serialNumber || '',
+        categoryId: item.categoryId || null,
+        brandId: item.brandId || null,
+        productId: item.productId || null,
+        color: item.color || '',
+        memory: item.memory || '',
+        model: item.model || ''
+      }))
+    };
+  };
+
+  const openEditPage = (invoice) => {
+    if (!invoice) return toast.error('Faktura topilmadi');
+    if (invoice.status !== 'Jarayonda') {
+      return toast.error("Faqat 'Jarayonda' turgan kirimni tahrirlash mumkin");
+    }
+    if (!canManageInvoiceDraft) {
+      return toast.error("Sizda tahrirlash huquqi yo'q");
+    }
+
+    setActiveMenu(null);
+    if (viewInvoice?.id === invoice.id) setViewInvoice(null);
+
+    navigate(`/ombor/taminotchi-kirim/tahrirlash/${invoice.id}`, {
+      state: {
+        mode: 'edit',
+        invoiceId: invoice.id,
+        invoiceData: buildEditPayload(invoice)
+      }
+    });
   };
 
   const executeApprove = async (id) => {
@@ -504,13 +567,19 @@ const SupplierIncomeList = () => {
   const handleAction = (action, id) => {
     setActiveMenu(null);
 
+    const invoice = invoices.find((i) => i.id === id) || null;
+
     if (action === 'view') {
-      setViewInvoice(invoices.find((i) => i.id === id) || null);
+      setViewInvoice(invoice);
+      return;
+    }
+
+    if (action === 'edit') {
+      openEditPage(invoice);
       return;
     }
 
     if (action === 'print') {
-      const invoice = invoices.find((i) => i.id === id) || null;
       if (invoice) openPrintModal(invoice);
       return;
     }
@@ -639,6 +708,9 @@ const SupplierIncomeList = () => {
                   const canApproveThisInvoice =
                     canApproveInvoice && inv.status !== 'Tasdiqlandi';
 
+                  const canEditThisInvoice =
+                    canManageInvoiceDraft && inv.status === 'Jarayonda';
+
                   return (
                     <tr
                       key={inv.id}
@@ -701,6 +773,15 @@ const SupplierIncomeList = () => {
                               >
                                 <Eye size={15} /> Ko'rish
                               </button>
+
+                              {canEditThisInvoice && (
+                                <button
+                                  onClick={() => handleAction('edit', inv.id)}
+                                  className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-indigo-700 flex items-center gap-2 border-b border-slate-100"
+                                >
+                                  <Pencil size={15} /> Tahrirlash
+                                </button>
+                              )}
 
                               <button
                                 onClick={() => handleAction('print', inv.id)}
@@ -920,76 +1001,151 @@ const SupplierIncomeList = () => {
       )}
 
       {viewInvoice && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-              <div>
-                <h3 className="text-base font-medium text-slate-900">
+        <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="w-full max-w-5xl rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50/70">
+              <div className="min-w-0">
+                <h3 className="text-lg font-medium text-slate-900 truncate">
                   Faktura № {viewInvoice.invoiceNumber}
                 </h3>
                 <p className="text-sm text-slate-500 mt-1">
-                  {viewInvoice.supplierName || viewInvoice.supplier}
+                  {viewInvoice.supplierName || viewInvoice.supplier || "Noma'lum"}
                 </p>
               </div>
 
               <button
                 disabled={isProcessing}
                 onClick={() => setViewInvoice(null)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 transition-colors disabled:opacity-50"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="px-5 py-5">
-              <div className="max-h-[50vh] overflow-y-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-sm text-left">
-                  <thead className="sticky top-0 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-[0.12em] border-b border-slate-200">
-                    <tr>
-                      <th className="p-4 font-medium">Kod</th>
-                      <th className="p-4 font-medium">Nomi</th>
-                      <th className="p-4 font-medium text-center">Soni</th>
-                      {canSeeAmount && <th className="p-4 font-medium text-right">Kirim narx</th>}
-                      <th className="p-4 font-medium text-right">Sotuv narx</th>
-                      {canSeeAmount && <th className="p-4 font-medium text-right">Jami</th>}
-                    </tr>
-                  </thead>
+            <div className="p-5 max-h-[82vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                    Faktura
+                  </div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    #{viewInvoice.invoiceNumber}
+                  </div>
+                </div>
 
-                  <tbody className="text-sm text-slate-700">
-                    {(Array.isArray(viewInvoice.items) ? viewInvoice.items : []).map((item, i) => (
-                      <tr key={i} className="border-b border-slate-100">
-                        <td className="p-4 text-[15px] font-semibold text-slate-800">
-                          #{item.customId ?? '-'}
-                        </td>
-                        <td className="p-4 text-[15px] font-medium text-slate-700">
-                          {item.name}
-                        </td>
-                        <td className="p-4 text-center text-[15px] font-medium text-slate-700">
-                          {Number(item.count || 0)}
-                        </td>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                    Sana
+                  </div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    {formatDateTime(viewInvoice.date || viewInvoice.createdAt)}
+                  </div>
+                </div>
 
-                        {canSeeAmount && (
-                          <td className="p-4 text-right text-[15px] font-medium text-slate-700">
-                            {Number(item.price || 0).toLocaleString('uz-UZ')} {item.currency || 'UZS'}
-                          </td>
-                        )}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                    Ta'minotchi
+                  </div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    {viewInvoice.supplierName || viewInvoice.supplier || '-'}
+                  </div>
+                </div>
 
-                        <td className="p-4 text-right text-[15px] font-medium text-slate-700">
-                          {Number(item.salePrice || 0).toLocaleString('uz-UZ')} {item.currency || 'UZS'}
-                        </td>
-
-                        {canSeeAmount && (
-                          <td className="p-4 text-right text-[15px] font-semibold text-slate-800">
-                            {(Number(item.count || 0) * Number(item.price || 0)).toLocaleString('uz-UZ')} {item.currency || 'UZS'}
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                    Holat
+                  </div>
+                  <div>
+                    <span
+                      className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-[11px] font-normal leading-none ${
+                        viewInvoice.status === 'Tasdiqlandi'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                          : viewInvoice.status === 'Yuborildi'
+                          ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                          : viewInvoice.status === 'Bekor qilindi'
+                          ? 'bg-rose-50 text-rose-700 border border-rose-100'
+                          : 'bg-amber-50 text-amber-700 border border-amber-100'
+                      }`}
+                    >
+                      {viewInvoice.status}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-4 flex justify-end gap-3">
+              <div className="rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-medium text-slate-800">
+                  Kiritilgan mahsulotlar
+                </div>
+
+                <div className="overflow-auto max-h-[46vh]">
+                  <table className="w-full text-sm text-left">
+                    <thead className="sticky top-0 bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-200">
+                      <tr>
+                        <th className="p-4">Kod</th>
+                        <th className="p-4">Nomi</th>
+                        <th className="p-4 text-center">Soni</th>
+                        {canSeeAmount && <th className="p-4 text-right">Kirim narx</th>}
+                        <th className="p-4 text-right">Sotuv narx</th>
+                        {canSeeAmount && <th className="p-4 text-right">Jami</th>}
+                      </tr>
+                    </thead>
+
+                    <tbody className="text-sm text-slate-700">
+                      {(Array.isArray(viewInvoice.items) ? viewInvoice.items : []).length === 0 ? (
+                        <tr>
+                          <td colSpan={canSeeAmount ? 6 : 4} className="px-4 py-10 text-center text-slate-400">
+                            Mahsulotlar topilmadi
+                          </td>
+                        </tr>
+                      ) : (
+                        (Array.isArray(viewInvoice.items) ? viewInvoice.items : []).map((item, i) => (
+                          <tr key={i} className="border-b border-slate-100">
+                            <td className="p-4 text-[14px] font-semibold text-slate-800">
+                              #{item.customId ?? '-'}
+                            </td>
+                            <td className="p-4 text-[14px] font-medium text-slate-700">
+                              {item.name}
+                            </td>
+                            <td className="p-4 text-center text-[14px] font-medium text-slate-700">
+                              {Number(item.count || 0)}
+                            </td>
+
+                            {canSeeAmount && (
+                              <td className="p-4 text-right text-[14px] font-medium text-slate-700">
+                                {Number(item.price || 0).toLocaleString('uz-UZ')} {item.currency || 'UZS'}
+                              </td>
+                            )}
+
+                            <td className="p-4 text-right text-[14px] font-medium text-slate-700">
+                              {Number(item.salePrice || 0).toLocaleString('uz-UZ')} {item.currency || 'UZS'}
+                            </td>
+
+                            {canSeeAmount && (
+                              <td className="p-4 text-right text-[14px] font-semibold text-slate-800">
+                                {(Number(item.count || 0) * Number(item.price || 0)).toLocaleString('uz-UZ')} {item.currency || 'UZS'}
+                              </td>
+                            )}
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {!!viewInvoice.note && (
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                    Izoh
+                  </div>
+                  <div className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-6">
+                    {viewInvoice.note}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-5 flex justify-end gap-3">
                 <button
                   disabled={isProcessing}
                   onClick={() => setViewInvoice(null)}
@@ -997,6 +1153,17 @@ const SupplierIncomeList = () => {
                 >
                   Yopish
                 </button>
+
+                {canManageInvoiceDraft && viewInvoice.status === 'Jarayonda' && (
+                  <button
+                    disabled={isProcessing}
+                    onClick={() => openEditPage(viewInvoice)}
+                    className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    <Pencil size={16} />
+                    Tahrirlash
+                  </button>
+                )}
 
                 {canApproveInvoice && viewInvoice.status !== 'Tasdiqlandi' && (
                   <button

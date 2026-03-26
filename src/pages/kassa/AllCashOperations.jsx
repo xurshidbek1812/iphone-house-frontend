@@ -1,16 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Search,
-  Filter,
   AlertCircle,
   Loader2,
   ArrowRightLeft,
   Wallet,
   Eye,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  User2,
+  ReceiptText
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const ITEMS_PER_PAGE = 10;
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('uz-UZ');
 
@@ -163,8 +168,10 @@ const normalizeOperations = (transactions) => {
 const AllCashOperations = () => {
   const [operations, setOperations] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedOperation, setSelectedOperation] = useState(null);
+  const [page, setPage] = useState(1);
 
   const token = sessionStorage.getItem('token');
 
@@ -221,7 +228,7 @@ const AllCashOperations = () => {
   }, [token]);
 
   const filteredOperations = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
+    const q = appliedSearch.trim().toLowerCase();
 
     if (!q) return operations;
 
@@ -239,126 +246,166 @@ const AllCashOperations = () => {
 
       return searchStr.includes(q);
     });
-  }, [operations, searchTerm]);
+  }, [operations, appliedSearch]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [appliedSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOperations.length / ITEMS_PER_PAGE));
+
+  const paginatedOperations = useMemo(() => {
+    const start = (page - 1) * ITEMS_PER_PAGE;
+    return filteredOperations.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredOperations, page]);
+
+  const handleSearchSubmit = () => {
+    setAppliedSearch(searchTerm.trim());
+  };
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSearchSubmit();
+    }
+  };
 
   return (
-    <div className="space-y-6 p-6 bg-slate-50 min-h-screen">
-      <div className="flex items-center justify-between">
+    <div className="h-full min-h-0 flex flex-col bg-slate-50">
+      <div className="mb-3 flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-black text-slate-800">Barcha kassa amaliyotlari</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <h1 className="text-xl font-semibold text-slate-900">
+            Barcha kassa amaliyotlari
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">
             Kassalar bo'yicha barcha amaliyotlar va transferlar tarixi
           </p>
         </div>
 
-        <div className="px-4 py-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 font-bold text-sm">
-          Jami: {operations.length} ta
+        <div className="px-3 py-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 font-semibold text-sm">
+          Jami: {filteredOperations.length} ta
         </div>
       </div>
 
-      <div className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-          <input
-            type="text"
-            placeholder="Amaliyot, kassa, foydalanuvchi yoki izoh bo'yicha izlash..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-          />
-        </div>
+      <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex gap-3 flex-col lg:flex-row">
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+              size={17}
+            />
+            <input
+              type="text"
+              placeholder="Amaliyot, kassa, foydalanuvchi yoki izoh bo'yicha izlash..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-sm font-medium text-slate-700"
+            />
+          </div>
 
-        <button className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 font-bold">
-          <Filter size={18} />
-          Filtr
-        </button>
+          <button
+            onClick={handleSearchSubmit}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Qidirish
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left whitespace-nowrap">
-            <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase">
+      <div className="flex-1 min-h-0 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="w-full text-left">
+            <thead className="sticky top-0 z-10 bg-slate-50/95 text-[10px] font-black text-slate-500 uppercase tracking-[0.12em] border-b border-slate-200">
               <tr>
-                <th className="p-4">Amaliyot</th>
-                <th className="p-4">Yo'nalish</th>
-                <th className="p-4">Summasi</th>
-                <th className="p-4">Kim bajardi</th>
-                <th className="p-4">Holati</th>
-                <th className="p-4 text-center">Ko'rish</th>
+                <th className="px-4 py-3">Amaliyot</th>
+                <th className="px-4 py-3">Yo'nalish</th>
+                <th className="px-4 py-3">Summasi</th>
+                <th className="px-4 py-3">Kim bajardi</th>
+                <th className="px-4 py-3">Holati</th>
+                <th className="px-4 py-3 text-center">Ko'rish</th>
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100 text-sm">
+            <tbody className="text-sm text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="p-10 text-center text-slate-500">
-                    <Loader2 className="animate-spin mx-auto" size={24} />
+                  <td colSpan="6" className="px-4 py-14 text-center">
+                    <Loader2 className="animate-spin mx-auto text-slate-400" size={24} />
                   </td>
                 </tr>
-              ) : filteredOperations.length === 0 ? (
+              ) : paginatedOperations.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="p-10 text-center">
+                  <td colSpan="6" className="px-4 py-14 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-400">
-                      <AlertCircle size={40} className="mb-3 text-slate-300" />
-                      <p className="font-bold text-base">Amaliyotlar topilmadi</p>
+                      <AlertCircle size={34} className="mb-3 text-slate-300" />
+                      <p className="font-semibold text-base">Amaliyotlar topilmadi</p>
                       <p className="text-xs mt-1">
-                        Hozircha kassa amaliyotlari mavjud emas yoki qidiruvga mos kelmadi.
+                        Hozircha kassa amaliyotlari mavjud emas yoki qidiruvga mos kelmadi
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredOperations.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
+                paginatedOperations.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
                         {item.type === 'TRANSFER' ? (
-                          <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center">
+                          <div className="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
                             <ArrowRightLeft size={16} />
                           </div>
                         ) : (
-                          <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                             <Wallet size={16} />
                           </div>
                         )}
 
                         <div className="min-w-0">
-                          <p className="font-bold text-slate-800">
+                          <p className="font-semibold text-slate-800 text-[14px]">
                             {item.title}
                           </p>
-                          <p className="text-xs text-slate-400">
+                          <p className="text-[12px] text-slate-400 mt-0.5 font-medium">
                             {formatDateTime(item.createdAt)}
                           </p>
                         </div>
                       </div>
                     </td>
 
-                    <td className="p-4 text-slate-700 font-medium">
+                    <td className="px-4 py-3 text-slate-700 font-medium text-[14px]">
                       {item.direction !== '-' ? item.direction : item.cashboxName}
                     </td>
 
-                    <td className="p-4 font-black text-slate-800">
-                      {formatMoney(item.amount)}{' '}
-                      <span className="text-xs text-slate-400">{item.currency}</span>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-[14px] font-semibold text-slate-800">
+                        {formatMoney(item.amount)}
+                        <span className="ml-1 text-[10px] text-slate-400 font-medium">
+                          {item.currency}
+                        </span>
+                      </div>
                     </td>
 
-                    <td className="p-4 text-slate-600 font-medium">
+                    <td className="px-4 py-3 text-slate-600 font-medium text-[14px]">
                       {item.userName}
                     </td>
 
-                    <td className="p-4">
-                      <span className={`px-3 py-1.5 rounded-xl border text-xs font-black ${item.statusBadge}`}>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold border ${item.statusBadge}`}
+                      >
                         {item.statusLabel}
                       </span>
                     </td>
 
-                    <td className="p-4 text-center">
+                    <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => setSelectedOperation(item)}
-                        className="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-all"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition"
                         title="Batafsil ko'rish"
                       >
-                        <Eye size={18} />
+                        <Eye size={15} />
                       </button>
                     </td>
                   </tr>
@@ -367,82 +414,146 @@ const AllCashOperations = () => {
             </tbody>
           </table>
         </div>
+
+        <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+          <div className="text-sm text-slate-500">
+            Jami: <span className="font-semibold text-slate-800">{filteredOperations.length} ta</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={page <= 1 || loading}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <ChevronLeft size={15} />
+              Oldingi
+            </button>
+
+            <div className="min-w-[84px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700">
+              {page} / {totalPages}
+            </div>
+
+            <button
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={page >= totalPages || loading}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Keyingi
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        </div>
       </div>
 
       {selectedOperation && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[2000] p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[28px] shadow-2xl overflow-hidden animate-in zoom-in-95">
-            <div className="flex justify-between items-start p-6 border-b border-slate-100">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="flex justify-between items-start px-5 py-4 border-b border-slate-200 bg-slate-50/70">
               <div>
-                <h3 className="text-2xl font-black text-slate-800">
+                <h3 className="text-lg font-semibold text-slate-800">
                   Amaliyot tafsilotlari
                 </h3>
-                <p className="text-sm text-slate-400 mt-1">
+                <p className="text-sm text-slate-500 mt-0.5">
                   {selectedOperation.title}
                 </p>
               </div>
 
               <button
                 onClick={() => setSelectedOperation(null)}
-                className="p-2 rounded-full hover:bg-slate-100 text-slate-500"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500"
               >
-                <X size={22} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Amaliyot</p>
-                <p className="font-black text-slate-800">{selectedOperation.title}</p>
+            <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[80vh] overflow-auto">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
+                  <ReceiptText size={14} />
+                  Amaliyot
+                </div>
+                <div className="text-sm font-semibold text-slate-800">
+                  {selectedOperation.title}
+                </div>
               </div>
 
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Holati</p>
-                <span className={`px-3 py-1.5 rounded-xl border text-xs font-black ${selectedOperation.statusBadge}`}>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                  Holati
+                </div>
+                <span
+                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold border ${selectedOperation.statusBadge}`}
+                >
                   {selectedOperation.statusLabel}
                 </span>
               </div>
 
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Summa</p>
-                <p className="font-black text-slate-800 text-lg">
-                  {formatMoney(selectedOperation.amount)}{' '}
-                  <span className="text-sm text-slate-400">{selectedOperation.currency}</span>
-                </p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
+                  <Wallet size={14} />
+                  Summa
+                </div>
+                <div className="text-lg font-semibold text-slate-800">
+                  {formatMoney(selectedOperation.amount)}
+                  <span className="ml-1 text-sm text-slate-400">
+                    {selectedOperation.currency}
+                  </span>
+                </div>
               </div>
 
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Kim bajardi</p>
-                <p className="font-bold text-slate-700">{selectedOperation.userName}</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
+                  <User2 size={14} />
+                  Kim bajardi
+                </div>
+                <div className="text-sm font-semibold text-slate-800">
+                  {selectedOperation.userName}
+                </div>
               </div>
 
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Sana</p>
-                <p className="font-bold text-slate-700">{formatDateTime(selectedOperation.createdAt)}</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
+                  <CalendarDays size={14} />
+                  Sana
+                </div>
+                <div className="text-sm font-semibold text-slate-800">
+                  {formatDateTime(selectedOperation.createdAt)}
+                </div>
               </div>
 
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Asosiy kassa</p>
-                <p className="font-bold text-slate-700">{selectedOperation.cashboxName}</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                  Asosiy kassa
+                </div>
+                <div className="text-sm font-semibold text-slate-800">
+                  {selectedOperation.cashboxName}
+                </div>
               </div>
 
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 md:col-span-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Yo'nalish</p>
-                <p className="font-bold text-slate-700">{selectedOperation.direction}</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:col-span-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                  Yo'nalish
+                </div>
+                <div className="text-sm font-semibold text-slate-800">
+                  {selectedOperation.direction}
+                </div>
               </div>
 
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 md:col-span-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Izoh</p>
-                <p className="font-medium text-slate-700 leading-relaxed">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:col-span-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                  Izoh
+                </div>
+                <div className="text-sm text-slate-700 leading-6 whitespace-pre-wrap break-words">
                   {selectedOperation.note || '-'}
-                </p>
+                </div>
               </div>
             </div>
 
-            <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-end">
+            <div className="px-5 py-4 border-t border-slate-200 bg-white flex justify-end">
               <button
                 onClick={() => setSelectedOperation(null)}
-                className="px-6 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-100"
+                className="px-4 py-2.5 rounded-xl bg-slate-100 text-sm font-medium text-slate-700 hover:bg-slate-200"
               >
                 Yopish
               </button>
