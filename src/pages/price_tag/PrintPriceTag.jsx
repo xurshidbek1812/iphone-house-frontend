@@ -276,37 +276,40 @@ const PrintPriceTag = () => {
                   align-items: flex-start;
                   justify-content: space-between;
                   gap: 2mm;
-                  min-height: 8.5mm;
+                  min-height: 12.5mm;
                 }
 
                 .product-name {
                   flex: 1;
                   min-width: 0;
-                  font-size: 3.1mm;
-                  line-height: 1.15;
+                  font-size: 2.95mm;
+                  line-height: 1.12;
                   font-weight: 900;
                   color: #111827;
                   text-transform: uppercase;
                   word-break: break-word;
-                  max-height: 8mm;
                   overflow: hidden;
+                  display: -webkit-box;
+                  -webkit-line-clamp: 3;
+                  -webkit-box-orient: vertical;
+                  padding-right: 1mm;
                 }
 
                 .product-id {
                   flex-shrink: 0;
-                  font-size: 2.2mm;
+                  font-size: 2.15mm;
                   line-height: 1;
                   font-weight: 800;
                   color: #4b5563;
                   white-space: nowrap;
-                  margin-top: 0.4mm;
+                  margin-top: 0.6mm;
                 }
 
                 .divider {
                   width: 100%;
                   height: 0.35mm;
                   background: #d1d5db;
-                  margin: 1.6mm 0 1.8mm 0;
+                  margin: 2.1mm 0 2.1mm 0;
                 }
 
                 .bottom-row {
@@ -324,20 +327,21 @@ const PrintPriceTag = () => {
                   display: flex;
                   flex-direction: column;
                   justify-content: center;
+                  padding-top: 0.5mm;
                 }
 
                 .price-label {
-                  font-size: 2.2mm;
+                  font-size: 2.15mm;
                   line-height: 1;
                   font-weight: 700;
                   color: #6b7280;
                   text-transform: uppercase;
-                  margin-bottom: 1.2mm;
+                  margin-bottom: 1.4mm;
                 }
 
                 .price-value {
-                  font-size: 5.4mm;
-                  line-height: 1.05;
+                  font-size: 5.1mm;
+                  line-height: 1.04;
                   font-weight: 900;
                   color: #111827;
                   word-break: break-word;

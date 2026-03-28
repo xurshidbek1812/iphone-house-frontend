@@ -423,130 +423,158 @@ const Sklad = () => {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          html, body {
+
+          html,
+          body {
             margin: 0;
             padding: 0;
             background: #fff;
             font-family: Arial, Helvetica, sans-serif;
           }
+
           @page {
             size: 58mm 40mm;
             margin: 0;
           }
+
           body {
             width: 58mm;
-            height: 40mm;
-            overflow: hidden;
-          }
-          .page {
-            width: 58mm;
-            height: 40mm;
             padding: 0;
             margin: 0;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: flex-start;
           }
+
           .label-card {
             width: 58mm;
             height: 40mm;
             padding: 2.2mm 2.4mm;
             overflow: hidden;
+            page-break-inside: avoid;
+            break-inside: avoid;
             display: flex;
             flex-direction: column;
             border: 0.2mm solid #d1d5db;
             background: #fff;
           }
+
           .header-row {
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
-            gap: 2mm;
-            min-height: 8.5mm;
+            gap: 1.8mm;
+            min-height: 13.5mm;
           }
+
           .product-name {
             flex: 1;
             min-width: 0;
-            font-size: 3.1mm;
-            line-height: 1.15;
+            font-size: 2.9mm;
+            line-height: 1.1;
             font-weight: 900;
             color: #111827;
             text-transform: uppercase;
             word-break: break-word;
-            max-height: 8mm;
             overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            padding-right: 0.8mm;
           }
+
           .product-id {
             flex-shrink: 0;
-            font-size: 2.2mm;
+            font-size: 2.05mm;
             line-height: 1;
             font-weight: 800;
             color: #4b5563;
             white-space: nowrap;
-            margin-top: 0.4mm;
+            margin-top: 0.8mm;
           }
+
           .divider {
             width: 100%;
             height: 0.35mm;
             background: #d1d5db;
-            margin: 1.6mm 0 1.8mm 0;
+            margin: 2.4mm 0 2.2mm 0;
           }
+
           .bottom-row {
             flex: 1;
             display: flex;
-            align-items: stretch;
+            align-items: flex-end;
             justify-content: space-between;
-            gap: 2mm;
+            gap: 2.2mm;
             min-height: 0;
           }
+
           .price-box {
             flex: 1;
             min-width: 0;
             display: flex;
             flex-direction: column;
             justify-content: center;
+            padding-bottom: 0.4mm;
           }
+
           .price-label {
-            font-size: 2.2mm;
+            font-size: 2.1mm;
             line-height: 1;
             font-weight: 700;
             color: #6b7280;
             text-transform: uppercase;
-            margin-bottom: 1.2mm;
+            margin-bottom: 1.3mm;
           }
+
           .price-value {
-            font-size: 5.4mm;
-            line-height: 1.05;
+            font-size: 5mm;
+            line-height: 1.02;
             font-weight: 900;
             color: #111827;
             word-break: break-word;
           }
+
           .qr-box {
-            width: 16.5mm;
-            min-width: 16.5mm;
+            width: 14.2mm;
+            min-width: 14.2mm;
+            height: 14.2mm;
             display: flex;
             align-items: center;
             justify-content: center;
+            align-self: flex-end;
             border: 0.25mm solid #d1d5db;
             border-radius: 1.2mm;
-            padding: 0.8mm;
+            padding: 0.7mm;
             background: #fff;
+            margin-bottom: 0.4mm;
           }
+
+          .qr-box img,
           .qr-box svg {
             width: 100%;
             height: 100%;
             display: block;
           }
+
           .print-note {
             display: none;
           }
+
           @media screen {
             body {
               background: #f3f4f6;
               min-height: 100vh;
               padding: 10mm;
+              gap: 4mm;
               width: auto;
             }
+
             .label-card {
               box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
             }
+
             .print-note {
               display: block;
               position: fixed;
