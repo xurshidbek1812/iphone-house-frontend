@@ -258,7 +258,7 @@ const SupplierIncome = () => {
   }, [invoiceItems, currencyRate]);
 
   const filteredProducts = useMemo(() => {
-    if (!searchTerm) return [];
+    if (!searchTerm || selectedProduct) return [];
 
     const cleanSearch = searchTerm.trim().toLowerCase();
 
@@ -267,7 +267,7 @@ const SupplierIncome = () => {
         (p.name || '').toLowerCase().includes(cleanSearch) ||
         (p.customId != null && String(p.customId).includes(cleanSearch))
     );
-  }, [allProducts, searchTerm]);
+  }, [allProducts, searchTerm, selectedProduct]);
 
   const handleSave = async () => {
     if (!canManageInvoiceDraft) {
@@ -365,24 +365,27 @@ const SupplierIncome = () => {
   }
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen animate-in fade-in duration-300">
-      <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+    <div className="h-full min-h-0 flex flex-col bg-slate-50">
+      <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <button
             disabled={isSubmitting}
             onClick={() => navigate(-1)}
-            className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors disabled:opacity-50"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={16} />
           </button>
-          <h1 className="text-xl font-black text-slate-800">Yangi Kirim (Faktura)</h1>
+          <div>
+            <h1 className="text-xl font-semibold text-slate-900">Yangi Kirim</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Ta'minotchi fakturasi yaratish</p>
+          </div>
         </div>
 
         <div className="flex gap-3">
           <button
             disabled={isSubmitting}
             onClick={() => navigate(-1)}
-            className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors disabled:opacity-50"
+            className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
           >
             Bekor qilish
           </button>
@@ -390,15 +393,15 @@ const SupplierIncome = () => {
           <button
             onClick={handleSave}
             disabled={isSubmitting || invoiceItems.length === 0}
-            className="px-8 py-2.5 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 shadow-lg shadow-blue-200 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
               <>
-                <Loader2 size={18} className="animate-spin" /> Saqlanmoqda...
+                <Loader2 size={16} className="animate-spin" /> Saqlanmoqda...
               </>
             ) : (
               <>
-                <Save size={18} /> Saqlash
+                <Save size={16} /> Saqlash
               </>
             )}
           </button>
@@ -406,36 +409,36 @@ const SupplierIncome = () => {
       </div>
 
       {!canSeeAmount && (
-        <div className="bg-white mb-6 p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 text-slate-500">
-          <Lock size={18} className="text-slate-400" />
-          <span className="font-bold text-sm">
+        <div className="bg-white mb-3 p-3 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-3 text-slate-500">
+          <Lock size={16} className="text-slate-400 shrink-0" />
+          <span className="font-medium text-sm">
             Siz kirim summalarini ko‘rmaysiz. Shu sabab kirim narxi va jami summa yashirilgan.
           </span>
         </div>
       )}
 
       {loading ? (
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[400px] flex items-center justify-center">
-          <Loader2 size={32} className="animate-spin text-slate-400" />
+        <div className="flex-1 min-h-0 bg-white rounded-3xl shadow-sm border border-slate-200 flex items-center justify-center">
+          <Loader2 size={30} className="animate-spin text-slate-400" />
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-            <div className="lg:col-span-8 flex flex-col gap-6">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
+            <div className="lg:col-span-9 flex flex-col gap-4">
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                <h3 className="font-semibold text-slate-700 mb-3 border-b border-slate-100 pb-2 text-sm">
                   Asosiy ma'lumotlar
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
                       Faktura Raqami
                     </label>
                     <input
                       type="number"
                       disabled={isSubmitting}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono font-semibold text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                       value={invoiceNumber}
                       onChange={(e) => setInvoiceNumber(e.target.value)}
                       placeholder="123456"
@@ -443,12 +446,12 @@ const SupplierIncome = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
                       Ta'minotchi <span className="text-red-500">*</span>
                     </label>
                     <select
                       disabled={isSubmitting}
-                      className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-800 transition-all disabled:opacity-50 cursor-pointer"
+                      className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium text-slate-800 transition-all disabled:opacity-50 cursor-pointer"
                       value={supplierName}
                       onChange={(e) => setSupplierName(e.target.value)}
                     >
@@ -462,52 +465,50 @@ const SupplierIncome = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
                       Sana
                     </label>
                     <input
                       type="date"
                       disabled={isSubmitting}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                     />
                   </div>
-                </div>
 
-                {canSeeAmount && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-5">
+                  {canSeeAmount && (
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">
-                        Valyuta kursi (1 USD)
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                        Valyuta kursi
                       </label>
                       <input
                         type="number"
                         disabled={isSubmitting}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                        className="w-full p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm font-semibold text-amber-700 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-50"
                         value={currencyRate}
                         onChange={(e) => setCurrencyRate(e.target.value)}
                       />
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                <h3 className="font-semibold text-slate-700 mb-3 border-b border-slate-100 pb-2 text-sm">
                   Tovarni tanlash va narxlash
                 </h3>
 
                 <div className="flex flex-col gap-4">
-                  <div className="flex flex-wrap md:flex-nowrap gap-4 items-start">
-                    <div className="flex-1 relative min-w-[220px]">
-                      <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">
+                  <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_90px_110px_100px_110px_120px_auto] gap-3 items-start">
+                    <div className="relative min-w-0">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
                         Tovar nomi / Kod
                       </label>
                       <input
                         type="text"
                         disabled={isSubmitting}
-                        className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm disabled:bg-gray-50"
+                        className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium text-sm disabled:bg-gray-50"
                         placeholder="Qidirish..."
                         value={searchTerm}
                         onChange={(e) => {
@@ -517,19 +518,17 @@ const SupplierIncome = () => {
                       />
 
                       {searchTerm && !selectedProduct && filteredProducts.length > 0 && (
-                        <ul className="absolute z-50 w-full bg-white border rounded-xl shadow-xl mt-1 max-h-60 overflow-y-auto custom-scrollbar">
+                        <ul className="absolute z-50 w-full bg-white border rounded-xl shadow-xl mt-1 max-h-60 overflow-y-auto">
                           {filteredProducts.map((p) => (
                             <li
                               key={p.id}
                               onClick={() => handleSelectProduct(p)}
                               className="p-3 hover:bg-blue-50 cursor-pointer text-sm border-b transition-colors"
                             >
-                              <div className="font-bold text-gray-800">{p.name}</div>
-                              <div className="text-blue-600 font-mono font-bold text-xs mt-1">
+                              <div className="font-semibold text-gray-800">{p.name}</div>
+                              <div className="text-blue-600 font-mono font-semibold text-xs mt-1">
                                 ID: #{p.customId ?? '-'}
-                                {canSeeAmount && (
-                                  <> | Narx: {p.buyPrice} {p.buyCurrency}</>
-                                )}
+                                {canSeeAmount && <> | {p.buyPrice} {p.buyCurrency}</>}
                               </div>
                             </li>
                           ))}
@@ -537,27 +536,43 @@ const SupplierIncome = () => {
                       )}
                     </div>
 
-                    <div className="w-24">
-                      <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
                         Soni
                       </label>
                       <input
                         type="number"
                         min="0"
                         disabled={isSubmitting}
-                        className="w-full p-3 border border-slate-200 rounded-xl outline-blue-500 text-center font-bold text-sm disabled:bg-gray-50"
+                        className="w-full p-3 border border-slate-200 rounded-xl outline-blue-500 text-center font-medium text-sm disabled:bg-gray-50"
                         value={inputCount}
                         onChange={(e) => setInputCount(e.target.value)}
                       />
                     </div>
 
-                    <div className="w-28">
-                      <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">
+                    {canSeeAmount && (
+                      <div>
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+                          Kirim narx
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          disabled={isSubmitting}
+                          className="w-full p-3 border border-slate-200 rounded-xl outline-blue-500 font-medium text-sm disabled:bg-gray-50"
+                          value={inputPrice}
+                          onChange={(e) => handlePriceChange(e.target.value)}
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
                         Valyuta
                       </label>
                       <select
                         disabled={isSubmitting}
-                        className="w-full p-3 border border-slate-200 rounded-xl outline-blue-500 text-sm font-bold bg-white disabled:bg-gray-50 cursor-pointer"
+                        className="w-full p-3 border border-slate-200 rounded-xl outline-blue-500 text-sm font-medium bg-white disabled:bg-gray-50 cursor-pointer"
                         value={inputCurrency}
                         onChange={(e) => handleCurrencyChange(e.target.value)}
                       >
@@ -567,32 +582,14 @@ const SupplierIncome = () => {
                     </div>
 
                     {canSeeAmount && (
-                      <div className="w-36">
-                        <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 block">
-                          Kirim narx
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          disabled={isSubmitting}
-                          className="w-full p-3 border border-slate-200 rounded-xl outline-blue-500 font-bold text-sm disabled:bg-gray-50"
-                          value={inputPrice}
-                          onChange={(e) => handlePriceChange(e.target.value)}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap md:flex-nowrap gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200 mt-2">
-                    {canSeeAmount && (
-                      <div className="w-28">
-                        <label className="text-[11px] font-bold text-amber-600 uppercase mb-1 block">
-                          Ustama (%)
+                      <div>
+                        <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 block">
+                          Ustama %
                         </label>
                         <input
                           type="number"
                           disabled={isSubmitting}
-                          className="w-full p-3 border border-amber-200 bg-white rounded-xl outline-amber-500 font-bold text-amber-700 text-sm text-center disabled:opacity-50"
+                          className="w-full p-3 border border-amber-200 bg-amber-50 rounded-xl outline-amber-500 font-semibold text-amber-700 text-sm text-center disabled:opacity-50"
                           placeholder="10"
                           value={inputMarkup}
                           onChange={(e) => handleMarkupChange(e.target.value)}
@@ -600,28 +597,28 @@ const SupplierIncome = () => {
                       </div>
                     )}
 
-                    <div className="flex-1">
-                      <label className="text-[11px] font-bold text-emerald-600 uppercase mb-1 block">
-                        Sotuv narx <span className="text-gray-400 font-normal">(UZS)</span>
+                    <div>
+                      <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 block">
+                        Sotuv narx
                       </label>
                       <input
                         type="number"
                         disabled={isSubmitting}
-                        className="w-full p-3 border border-emerald-200 bg-white rounded-xl outline-emerald-500 font-bold text-emerald-700 text-sm disabled:opacity-50"
-                        placeholder={canSeeAmount ? 'Avtomat hisoblanadi' : 'Sotuv narxini kiriting'}
+                        className="w-full p-3 border border-emerald-200 bg-emerald-50 rounded-xl outline-emerald-500 font-semibold text-emerald-700 text-sm disabled:opacity-50"
+                        placeholder={canSeeAmount ? 'Avtomat' : 'Kiriting'}
                         value={inputSalePrice}
                         onChange={(e) => handleSalePriceChange(e.target.value)}
                       />
                     </div>
 
-                    <div className="w-40">
+                    <div className="pt-6">
                       <button
                         type="button"
                         disabled={isSubmitting}
                         onClick={handleAddItem}
-                        className="w-full h-[46px] bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all flex justify-center items-center shadow-md font-bold gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full h-[46px] bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all flex justify-center items-center shadow-sm font-semibold gap-2 disabled:opacity-50 disabled:cursor-not-allowed px-4"
                       >
-                        <Plus size={20} /> Qo'shish
+                        <Plus size={18} /> Qo'shish
                       </button>
                     </div>
                   </div>
@@ -629,75 +626,72 @@ const SupplierIncome = () => {
               </div>
             </div>
 
-            <div className="lg:col-span-4 flex flex-col gap-6">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col justify-center relative overflow-hidden">
-                <div className="absolute right-[-20px] top-[-20px] opacity-5">
-                  <Package size={140} />
+            <div className="lg:col-span-3 flex flex-col gap-4">
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">
+                  Pozitsiyalar
                 </div>
-                <div className="text-slate-400 text-[11px] font-black uppercase tracking-widest mb-1">
-                  Faktura pozitsiyalari
-                </div>
-                <div className="text-4xl font-black text-blue-600 relative z-10">
-                  {invoiceItems.length}{' '}
-                  <span className="text-base text-slate-400 font-bold ml-1">xil tovar</span>
+                <div className="text-3xl font-black text-blue-600">
+                  {invoiceItems.length}
+                  <span className="text-sm text-slate-400 font-semibold ml-1">xil</span>
                 </div>
               </div>
 
               {canSeeAmount && (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col justify-center relative overflow-hidden">
-                  <div className="absolute right-[-20px] top-[-20px] opacity-5">
-                    <DollarSign size={140} />
-                  </div>
-                  <div className="text-slate-400 text-[11px] font-black uppercase tracking-widest mb-1">
-                    Jami summasi
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                  <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">
+                    Jami summa
                   </div>
                   <div
-                    className="text-3xl lg:text-4xl font-black text-emerald-500 relative z-10 truncate"
+                    className="text-2xl font-black text-emerald-500 truncate"
                     title={`${grandTotalUZS.toLocaleString('uz-UZ')} UZS`}
                   >
-                    {grandTotalUZS.toLocaleString('uz-UZ')}{' '}
-                    <span className="text-base text-emerald-600/50 font-bold ml-1">UZS</span>
+                    {grandTotalUZS.toLocaleString('uz-UZ')}
+                    <span className="text-sm text-emerald-600/60 font-semibold ml-1">UZS</span>
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[300px] flex flex-col overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-              <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                <Package size={18} className="text-blue-500" /> Qo'shilgan tovarlar ro'yxati
+          <div className="flex-1 min-h-0 bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
+              <h3 className="font-semibold text-slate-700 flex items-center gap-2 text-sm">
+                <Package size={16} className="text-blue-500" /> Qo'shilgan tovarlar
               </h3>
+              <div className="text-sm text-slate-400 font-medium">
+                {invoiceItems.length} ta qator
+              </div>
             </div>
 
-            <div className="flex flex-col h-full flex-1 p-6">
+            <div className="flex-1 min-h-0 p-5">
               {invoiceItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center flex-1 text-slate-400 py-10 border-2 border-dashed border-slate-200 rounded-2xl">
-                  <Package size={48} className="mb-3 text-slate-300" />
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 py-10 border-2 border-dashed border-slate-200 rounded-2xl">
+                  <Package size={42} className="mb-3 text-slate-300" />
                   <p className="font-medium text-sm">
-                    Faktura hozircha bo'sh. Yuqoridagi formadan mahsulot qo'shing.
+                    Faktura bo'sh. Yuqoridan mahsulot qo'shing.
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto border border-slate-200 rounded-xl custom-scrollbar">
-                  <table className="w-full text-left whitespace-nowrap">
-                    <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-wider border-b border-slate-200">
+                <div className="h-full overflow-auto border border-slate-200 rounded-xl">
+                  <table className="w-full min-w-[880px] text-left whitespace-nowrap">
+                    <thead className="sticky top-0 bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-wider border-b border-slate-200">
                       <tr>
                         <th className="p-4">ID</th>
                         <th className="p-4">Nomi</th>
                         <th className="p-4 w-24 text-center">Soni</th>
-                        {canSeeAmount && <th className="p-4 w-32 text-right">Kirim narx</th>}
+                        {canSeeAmount && <th className="p-4 w-32 text-right">Kirim</th>}
                         {canSeeAmount && <th className="p-4 w-24 text-center">Valyuta</th>}
                         {canSeeAmount && (
                           <th className="p-4 w-24 text-center text-amber-600">Ustama %</th>
                         )}
-                        <th className="p-4 w-36 text-right text-emerald-600">Sotuv (UZS)</th>
-                        {canSeeAmount && <th className="p-4 w-32 text-right">Jami kirim</th>}
+                        <th className="p-4 w-36 text-right text-emerald-600">Sotuv</th>
+                        {canSeeAmount && <th className="p-4 w-32 text-right">Jami</th>}
                         <th className="p-4 w-16 text-center">X</th>
                       </tr>
                     </thead>
 
-                    <tbody className="divide-y divide-slate-100 text-sm font-bold">
+                    <tbody className="divide-y divide-slate-100 text-sm font-semibold">
                       {invoiceItems.map((item) => (
                         <tr key={item.id} className="hover:bg-blue-50/20 transition-colors">
                           <td className="p-4 font-mono text-slate-400">
@@ -727,7 +721,7 @@ const SupplierIncome = () => {
                           </td>
 
                           {canSeeAmount && (
-                            <td className="p-4 text-right font-black text-slate-800">
+                            <td className="p-4 text-right font-bold text-slate-800">
                               {Number(item.total || 0).toLocaleString('uz-UZ')}
                             </td>
                           )}
@@ -739,7 +733,7 @@ const SupplierIncome = () => {
                               className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50"
                               title="O'chirish"
                             >
-                              <Trash2 size={20} />
+                              <Trash2 size={18} />
                             </button>
                           </td>
                         </tr>
