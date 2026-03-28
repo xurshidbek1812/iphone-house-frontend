@@ -17,7 +17,6 @@ import {
   User,
   Calendar,
   Receipt,
-  PencilLine,
   Wallet
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -65,6 +64,26 @@ const getStatusClasses = (status) => {
   }
 
   return 'bg-slate-100 text-slate-700 border border-slate-200';
+};
+
+const getAdjustmentMeta = (value) => {
+  const amount = Number(value || 0);
+
+  if (amount < 0) {
+    return {
+      label: 'Ustama',
+      absValue: Math.abs(amount),
+      textClass: 'text-rose-600',
+      softClass: 'bg-rose-50 border-rose-200 text-rose-700'
+    };
+  }
+
+  return {
+    label: 'Chegirma',
+    absValue: amount,
+    textClass: 'text-amber-600',
+    softClass: 'bg-amber-50 border-amber-200 text-amber-700'
+  };
 };
 
 const CashSales = () => {
@@ -299,22 +318,36 @@ const CashSales = () => {
   };
 
   const editSummary = useMemo(() => {
-    if (!editModal.data) return { subtotal: 0, discount: 0, total: 0 };
+    if (!editModal.data) {
+      return {
+        subtotal: 0,
+        discount: 0,
+        markup: 0,
+        total: 0
+      };
+    }
 
     const subtotal = editModal.data.items.reduce(
       (sum, item) => sum + Number(item.unitPrice || 0) * Number(item.quantity || 0),
       0
     );
-    const discount = editModal.data.items.reduce(
+
+    const discount = editModal.data.items.reduce((sum, item) => {
+      const v = Number(item.discountAmount || 0);
+      return v > 0 ? sum + v : sum;
+    }, 0);
+
+    const markup = editModal.data.items.reduce((sum, item) => {
+      const v = Number(item.discountAmount || 0);
+      return v < 0 ? sum + Math.abs(v) : sum;
+    }, 0);
+
+    const total = subtotal - editModal.data.items.reduce(
       (sum, item) => sum + Number(item.discountAmount || 0),
       0
     );
 
-    return {
-      subtotal,
-      discount,
-      total: subtotal - discount
-    };
+    return { subtotal, discount, markup, total };
   }, [editModal.data]);
 
   const saveEdit = async () => {
@@ -330,11 +363,12 @@ const CashSales = () => {
 
     const invalidDiscountItem = items.find((item) => {
       const subtotal = Number(item.unitPrice || 0) * Number(item.quantity || 0);
-      return Number(item.discountAmount || 0) > subtotal;
+      const adjustment = Number(item.discountAmount || 0);
+      return adjustment > subtotal;
     });
 
     if (invalidDiscountItem) {
-      return toast.error("Chegirma summasi jami summadan ko'p bo'lishi mumkin emas!");
+      return toast.error("Chegirma summasi mahsulot jami summasidan ko'p bo'lishi mumkin emas!");
     }
 
     setIsActionLoading(true);
@@ -459,6 +493,7 @@ const CashSales = () => {
                   const saleSubtotal = getSaleSubtotal(sale);
                   const saleDiscount = getSaleDiscount(sale);
                   const saleFinal = getSaleFinal(sale);
+                  const adjustmentMeta = getAdjustmentMeta(saleDiscount);
 
                   return (
                     <tr
@@ -494,11 +529,13 @@ const CashSales = () => {
                         <div className="text-[15px] font-semibold text-slate-800">
                           {formatMoney(saleFinal)}
                         </div>
-                        {saleDiscount > 0 && (
-                          <div className="text-[12px] text-amber-600 mt-0.5 font-medium">
-                            Chegirma: {formatMoney(saleDiscount)}
+
+                        {saleDiscount !== 0 && (
+                          <div className={`text-[12px] mt-0.5 font-medium ${adjustmentMeta.textClass}`}>
+                            {adjustmentMeta.label}: {formatMoney(adjustmentMeta.absValue)}
                           </div>
                         )}
+
                         {saleSubtotal !== saleFinal && saleDiscount === 0 && (
                           <div className="text-[12px] text-slate-400 mt-0.5 font-medium">
                             Umumiy: {formatMoney(saleSubtotal)}
@@ -660,7 +697,7 @@ const CashSales = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="rounded-2xl bg-slate-900 text-white p-4">
                   <div className="text-[11px] uppercase tracking-widest text-slate-400 font-black">
                     Umumiy summa
@@ -675,7 +712,20 @@ const CashSales = () => {
                     Chegirma
                   </div>
                   <div className="mt-2 text-2xl font-semibold text-amber-700">
-                    {formatMoney(getSaleDiscount(detailsModal.sale))}
+                    {formatMoney(
+                      Math.max(0, Number(getSaleDiscount(detailsModal.sale) || 0))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                  <div className="text-[11px] uppercase tracking-widest text-rose-600 font-black">
+                    Ustama
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold text-rose-700">
+                    {formatMoney(
+                      Math.abs(Math.min(0, Number(getSaleDiscount(detailsModal.sale) || 0)))
+                    )}
                   </div>
                 </div>
 
@@ -702,9 +752,10 @@ const CashSales = () => {
                     </div>
                   ) : (
                     detailsModal.sale.items.map((item, index) => {
-                      const rowTotal =
-                        Number(item.unitPrice || 0) * Number(item.quantity || 0) -
-                        Number(item.discountAmount || 0);
+                      const rowSubtotal =
+                        Number(item.unitPrice || 0) * Number(item.quantity || 0);
+                      const adjustmentMeta = getAdjustmentMeta(item.discountAmount);
+                      const rowTotal = rowSubtotal - Number(item.discountAmount || 0);
 
                       return (
                         <div
@@ -740,10 +791,10 @@ const CashSales = () => {
 
                           <div>
                             <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black">
-                              Chegirma
+                              {adjustmentMeta.label}
                             </div>
-                            <div className="mt-1 text-sm font-semibold text-amber-600">
-                              {formatMoney(item.discountAmount)}
+                            <div className={`mt-1 text-sm font-semibold ${adjustmentMeta.textClass}`}>
+                              {formatMoney(adjustmentMeta.absValue)}
                             </div>
                           </div>
 
@@ -826,8 +877,8 @@ const CashSales = () => {
       )}
 
       {editModal.isOpen && editModal.data && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
-          <div className="w-full max-w-5xl rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="w-full max-w-6xl rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50/70">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Savdoni tahrirlash</h3>
@@ -844,115 +895,100 @@ const CashSales = () => {
               </button>
             </div>
 
-            <div className="px-5 py-5 max-h-[82vh] overflow-auto space-y-5">
-              <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-5">
-                <div className="space-y-4">
-                  {editModal.data.items.map((item) => {
-                    const rowSubtotal = Number(item.unitPrice || 0) * Number(item.quantity || 0);
-                    const rowTotal = rowSubtotal - Number(item.discountAmount || 0);
+            <div className="px-5 py-5 max-h-[82vh] overflow-auto">
+              <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-5">
+                <div className="rounded-2xl border border-slate-200 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-semibold text-slate-800">
+                    Mahsulotlar
+                  </div>
 
-                    return (
-                      <div
-                        key={item.localId}
-                        className="rounded-2xl border border-slate-200 bg-white p-4"
-                      >
-                        <div className="flex items-start justify-between gap-3 mb-4">
-                          <div>
-                            <div className="text-[15px] font-semibold text-slate-800">
-                              {item.name}
-                            </div>
-                            <div className="text-xs text-slate-400 mt-1">
-                              Product ID: #{item.productId || '-'}
-                            </div>
-                          </div>
+                  <div className="overflow-auto">
+                    <table className="w-full min-w-[980px] text-sm">
+                      <thead className="bg-slate-50 text-[10px] text-slate-500 uppercase tracking-[0.12em] border-b border-slate-200">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold">Mahsulot</th>
+                          <th className="px-4 py-3 text-center font-semibold">Miqdor</th>
+                          <th className="px-4 py-3 text-right font-semibold">Narxi</th>
+                          <th className="px-4 py-3 text-right font-semibold">Chegirma / Ustama</th>
+                          <th className="px-4 py-3 text-center font-semibold">Holati</th>
+                          <th className="px-4 py-3 text-right font-semibold">Yakuniy</th>
+                        </tr>
+                      </thead>
 
-                          <div className="h-9 w-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                            <PencilLine size={16} />
-                          </div>
-                        </div>
+                      <tbody className="divide-y divide-slate-100">
+                        {editModal.data.items.map((item) => {
+                          const rowSubtotal =
+                            Number(item.unitPrice || 0) * Number(item.quantity || 0);
+                          const adjustmentMeta = getAdjustmentMeta(item.discountAmount);
+                          const rowTotal = rowSubtotal - Number(item.discountAmount || 0);
 
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                          <div>
-                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                              Miqdor
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) =>
-                                updateEditQty(item.localId, Number(e.target.value))
-                              }
-                              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-slate-200"
-                            />
-                          </div>
+                          return (
+                            <tr key={item.localId}>
+                              <td className="px-4 py-3">
+                                <div className="font-semibold text-slate-800">{item.name}</div>
+                                <div className="text-xs text-slate-400 mt-1">
+                                  Product ID: #{item.productId || '-'}
+                                </div>
+                              </td>
 
-                          <div>
-                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                              Narxi
-                            </label>
-                            <input
-                              type="number"
-                              value={item.unitPrice}
-                              readOnly
-                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
-                            />
-                          </div>
+                              <td className="px-4 py-3">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={(e) =>
+                                    updateEditQty(item.localId, Number(e.target.value))
+                                  }
+                                  className="w-24 rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-center font-semibold outline-none focus:ring-2 focus:ring-slate-200"
+                                />
+                              </td>
 
-                          <div>
-                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                              Chegirma
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.discountAmount}
-                              onChange={(e) =>
-                                updateEditDiscount(item.localId, Number(e.target.value || 0))
-                              }
-                              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-slate-200"
-                            />
-                          </div>
+                              <td className="px-4 py-3">
+                                <input
+                                  type="number"
+                                  value={item.unitPrice}
+                                  readOnly
+                                  className="w-36 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-right font-semibold text-slate-700"
+                                />
+                              </td>
 
-                          <div>
-                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                              Yakuniy
-                            </label>
-                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">
-                              {formatMoney(rowTotal)}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                              <td className="px-4 py-3">
+                                <input
+                                  type="number"
+                                  value={item.discountAmount}
+                                  onChange={(e) =>
+                                    updateEditDiscount(item.localId, Number(e.target.value || 0))
+                                  }
+                                  className="w-40 rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-right font-semibold outline-none focus:ring-2 focus:ring-slate-200"
+                                  placeholder="Musbat yoki manfiy"
+                                />
+                              </td>
 
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                      Izoh
-                    </label>
-                    <textarea
-                      value={editModal.data.note}
-                      onChange={(e) =>
-                        setEditModal((prev) => ({
-                          ...prev,
-                          data: {
-                            ...prev.data,
-                            note: e.target.value
-                          }
-                        }))
-                      }
-                      rows="5"
-                      className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-200 resize-none"
-                      placeholder="Izoh..."
-                    />
+                              <td className="px-4 py-3 text-center">
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${adjustmentMeta.softClass}`}
+                                >
+                                  {adjustmentMeta.label}
+                                </span>
+                              </td>
+
+                              <td className="px-4 py-3">
+                                <div className="w-36 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-right font-semibold text-emerald-700">
+                                  {formatMoney(rowTotal)}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   <div className="rounded-2xl bg-slate-900 text-white p-5">
                     <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black">
-                      Tahrirlash yakuni
+                      Yakuniy hisob
                     </div>
 
                     <div className="mt-4 space-y-3 text-sm">
@@ -978,6 +1014,11 @@ const CashSales = () => {
                         <span className="font-semibold">{formatMoney(editSummary.discount)}</span>
                       </div>
 
+                      <div className="flex justify-between text-rose-300">
+                        <span>Ustama</span>
+                        <span className="font-semibold">{formatMoney(editSummary.markup)}</span>
+                      </div>
+
                       <div className="pt-3 border-t border-slate-700/60">
                         <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black">
                           Yakuniy summa
@@ -990,13 +1031,25 @@ const CashSales = () => {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-2">
-                      Eslatma
-                    </div>
-                    <div className="text-sm text-slate-600 leading-6">
-                      Chegirma summasi har bir mahsulot uchun jami summadan katta bo‘lmasligi kerak.
-                    </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                      Izoh
+                    </label>
+                    <textarea
+                      value={editModal.data.note}
+                      onChange={(e) =>
+                        setEditModal((prev) => ({
+                          ...prev,
+                          data: {
+                            ...prev.data,
+                            note: e.target.value
+                          }
+                        }))
+                      }
+                      rows="6"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-200 resize-none"
+                      placeholder="Izoh..."
+                    />
                   </div>
                 </div>
               </div>
