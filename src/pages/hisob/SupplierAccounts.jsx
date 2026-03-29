@@ -40,9 +40,16 @@ const SupplierAccounts = () => {
         }
 
         const suppliers = await suppliersRes.json();
-        const incomes = await invoicesRes.json();
+        const invoicesData = await invoicesRes.json();
 
-        const calculatedData = suppliers.map((supplier) => {
+        const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
+        const incomes = Array.isArray(invoicesData)
+          ? invoicesData
+          : Array.isArray(invoicesData?.items)
+          ? invoicesData.items
+          : [];
+
+        const calculatedData = safeSuppliers.map((supplier) => {
           let debtUZS = 0;
           let debtUSD = 0;
           let creditUZS = 0;
@@ -54,11 +61,20 @@ const SupplierAccounts = () => {
           );
 
           supplierIncomes.forEach((inc) => {
-            inc.items.forEach((item) => {
-              if (item.currency === 'USD') {
-                debtUSD += Number(item.total);
-              } else {
-                debtUZS += Number(item.total);
+            (supplierIncomes || []).forEach((inc) => {
+              (Array.isArray(inc.items) ? inc.items : []).forEach((item) => {
+                const itemTotal =
+                  Number(item.total || 0) || Number(item.count || 0) * Number(item.price || 0);
+
+                if (item.currency === 'USD') {
+                  debtUSD += itemTotal;
+                } else {
+                  debtUZS += itemTotal;
+                }
+              });
+
+              if (inc.date && (!lastDate || new Date(inc.date) > new Date(lastDate))) {
+                lastDate = inc.date;
               }
             });
 
