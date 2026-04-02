@@ -132,7 +132,6 @@ const OrderListKassa = lazy(() => import('./pages/kassa/OrderListKassa'));
 const SmsSend = lazy(() => import('./pages/sms/SmsSend'));
 
 // --- SETTINGS ---
-const Expenses = lazy(() => import('./pages/Expenses'));
 const StaffList = lazy(() => import('./pages/settings/StaffList'));
 const ProfileSettings = lazy(() => import('./pages/settings/ProfileSettings'));
 const CategorySettings = lazy(() => import('./pages/settings/CategorySettings'));
