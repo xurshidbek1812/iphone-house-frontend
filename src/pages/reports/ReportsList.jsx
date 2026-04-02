@@ -1,101 +1,284 @@
-import React, { useState } from 'react';
-import { Search, FileSpreadsheet, Calendar, Download } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import {
+  FileSpreadsheet,
+  Calendar,
+  Download,
+  Package,
+  Warehouse,
+  Coins,
+  ShoppingCart,
+  Landmark,
+  CreditCard,
+  Loader2
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const ReportsList = () => {
+  const token = sessionStorage.getItem('token');
+
   const [activeTab, setActiveTab] = useState('Ombor');
+  const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
+  const [downloadingReportId, setDownloadingReportId] = useState(null);
 
-  const tabs = ['Ombor', 'Undiruv', 'Xarajat', 'Kassa', 'Savdo', 'Naqdsiz pullar'];
-
-  const reports = [
-    { id: 'R0001', title: "R0001 - Tovarlar qoldig'i", hasDate: false },
-    { id: 'R0009', title: "R0009 - Chiqim tovarlar", hasDate: false },
-    { id: 'R0010', title: "R0010 - Ta'minotchilardan olingan tovarlar", hasDate: false },
-    { id: 'R0011', title: "R0011 - Ta'minotchilarga qaytarilgan tovarlar", hasDate: false },
-    { id: 'R0012', title: "R0012 - FIFO bo'yicha tovar qoldig'i", hasDate: true, date: '26.01.2026' },
-    { id: 'R0015', title: "R0015 - Tovar chiqimi JSHSHIR", hasDate: false },
-    { id: 'R0019', title: "R0019 - Tovar buyurtmalari", hasDate: false },
+  const tabs = [
+    { key: 'Ombor', icon: Warehouse },
+    { key: 'Undiruv', icon: Package },
+    { key: 'Xarajat', icon: Coins },
+    { key: 'Kassa', icon: Landmark },
+    { key: 'Savdo', icon: ShoppingCart },
+    { key: 'Naqdsiz pullar', icon: CreditCard }
   ];
 
+  const reportsByTab = useMemo(
+    () => ({
+      Ombor: [
+        {
+          id: 'R0001',
+          title: "R0001 - Tovarlar qoldig'i",
+          description:
+            "Tanlangan sanadagi ombordagi barcha tovarlar qoldig'ini Excel formatida yuklab oladi.",
+          requiresDate: true,
+          enabled: true
+        }
+      ],
+      Undiruv: [
+        {
+          id: 'R0101',
+          title: 'Undiruv hisobotlari',
+          description: 'Tez orada qo‘shiladi.',
+          requiresDate: false,
+          enabled: false
+        }
+      ],
+      Xarajat: [
+        {
+          id: 'R0201',
+          title: 'Xarajat hisobotlari',
+          description: 'Tez orada qo‘shiladi.',
+          requiresDate: false,
+          enabled: false
+        }
+      ],
+      Kassa: [
+        {
+          id: 'R0301',
+          title: 'Kassa hisobotlari',
+          description: 'Tez orada qo‘shiladi.',
+          requiresDate: false,
+          enabled: false
+        }
+      ],
+      Savdo: [
+        {
+          id: 'R0401',
+          title: 'Savdo hisobotlari',
+          description: 'Tez orada qo‘shiladi.',
+          requiresDate: false,
+          enabled: false
+        }
+      ],
+      'Naqdsiz pullar': [
+        {
+          id: 'R0501',
+          title: 'Naqdsiz pullar hisobotlari',
+          description: 'Tez orada qo‘shiladi.',
+          requiresDate: false,
+          enabled: false
+        }
+      ]
+    }),
+    []
+  );
+
+  const currentReports = reportsByTab[activeTab] || [];
+
+  const handleDownloadWarehouseStock = async () => {
+    if (!reportDate) {
+      toast.error('Sanani tanlang');
+      return;
+    }
+
+    setDownloadingReportId('R0001');
+
+    try {
+      const url = `${API_URL}/api/reports/warehouse-stock?date=${reportDate}&format=xlsx`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        let errorText = "Hisobotni yuklab bo'lmadi";
+        try {
+          const errorData = await response.json();
+          errorText = errorData?.error || errorText;
+        } catch {
+          //
+        }
+        throw new Error(errorText);
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `tovarlar-qoldigi-${reportDate}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      toast.success("Excel fayl yuklab olindi");
+    } catch (error) {
+      console.error('Warehouse stock report download error:', error);
+      toast.error(error.message || "Hisobotni yuklashda xatolik yuz berdi");
+    } finally {
+      setDownloadingReportId(null);
+    }
+  };
+
+  const handleDownload = async (report) => {
+    if (!report.enabled) {
+      toast('Bu hisobot hali tayyor emas');
+      return;
+    }
+
+    if (report.id === 'R0001') {
+      await handleDownloadWarehouseStock();
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">Hisobotlar ro'yxati</h1>
-      
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Left Sidebar Filter */}
-        <div className="w-full lg:w-1/4 space-y-4">
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 h-full">
-                <div className="relative mb-4">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                    <input type="text" placeholder="Search" className="w-full pl-10 pr-4 py-2 border rounded-lg outline-none text-sm" />
-                </div>
-                <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-sm text-gray-600">
-                        <input type="checkbox" className="rounded border-gray-300" />
-                        Tashkilot nomi
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-gray-600 pl-4">
-                        <input type="checkbox" className="rounded border-gray-300" defaultChecked />
-                        Qo'shko'pir filiali
-                    </label>
-                </div>
-            </div>
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          Hisobotlar ro‘yxati
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Bo‘lim bo‘yicha hisobotlarni ko‘rish va Excel formatida yuklab olish
+        </p>
+      </div>
+
+      <div className="rounded-[28px] border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="flex gap-2 overflow-x-auto">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.key;
+
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`inline-flex min-w-fit items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Icon size={16} />
+                {tab.key}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-100 px-5 py-4">
+          <h2 className="text-base font-semibold text-slate-800">{activeTab} hisobotlari</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {activeTab === 'Ombor'
+              ? "Omborga oid hisobotlarni Excel formatida yuklab oling"
+              : "Bu bo‘lim uchun hisobotlar keyingi bosqichda qo‘shiladi"}
+          </p>
         </div>
 
-        {/* Main Content */}
-        <div className="w-full lg:w-3/4 space-y-4">
-            {/* Tabs */}
-            <div className="flex bg-gray-100 p-1 rounded-xl overflow-x-auto">
-                {tabs.map((tab) => (
-                    <button 
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === tab ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+        <div className="p-5 space-y-4">
+          {currentReports.map((report) => {
+            const isDownloading = downloadingReportId === report.id;
+
+            return (
+              <div
+                key={report.id}
+                className={`rounded-2xl border p-4 transition ${
+                  report.enabled
+                    ? 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                    : 'border-slate-100 bg-slate-50'
+                }`}
+              >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div
+                      className={`mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                        report.enabled
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : 'bg-slate-100 text-slate-400'
+                      }`}
                     >
-                        {tab}
+                      <FileSpreadsheet size={20} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <h3 className="text-base font-semibold text-slate-800">{report.title}</h3>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">{report.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[360px]">
+                    {report.requiresDate && (
+                      <div className="relative">
+                        <Calendar
+                          size={18}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                        />
+                        <input
+                          type="date"
+                          value={reportDate}
+                          onChange={(e) => setReportDate(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        />
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={!report.enabled || isDownloading}
+                      onClick={() => handleDownload(report)}
+                      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition ${
+                        report.enabled
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'cursor-not-allowed bg-slate-100 text-slate-400'
+                      }`}
+                    >
+                      {isDownloading ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Download size={16} />
+                      )}
+                      {isDownloading ? 'Yuklanmoqda...' : 'Yuklab olish'}
                     </button>
-                ))}
-            </div>
-
-            {/* Reports List */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <div className="relative mb-4">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                    <input type="text" placeholder="Search" className="w-full pl-10 pr-4 py-2 border rounded-lg outline-none" />
+                  </div>
                 </div>
+              </div>
+            );
+          })}
 
-                <div className="space-y-3">
-                    {reports.map((report) => (
-                        <div key={report.id} className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 border rounded-xl hover:shadow-md transition-shadow">
-                            <div className="flex items-center gap-3 w-full md:w-auto">
-                                <div className="bg-blue-500 p-2 rounded-lg text-white">
-                                    <FileSpreadsheet size={20} />
-                                </div>
-                                <span className="font-bold text-gray-700 text-sm">{report.title}</span>
-                            </div>
-                            
-                            <div className="flex items-center gap-3 w-full md:w-auto">
-                                <div className="relative flex-1 md:w-48">
-                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                                        <Calendar size={18} />
-                                    </div>
-                                    <input 
-                                        type="text" 
-                                        defaultValue={report.hasDate ? report.date : ''} 
-                                        className="w-full pl-10 pr-4 py-2 border rounded-lg outline-none text-sm" 
-                                        disabled={!report.hasDate}
-                                    />
-                                </div>
-                                <button className="px-4 py-2 bg-blue-100 text-blue-600 rounded-lg flex items-center gap-2 font-bold text-sm hover:bg-blue-200 whitespace-nowrap">
-                                    <Download size={18}/> Yuklab olish
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+          {currentReports.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-12 text-center text-slate-400">
+              Hisobot topilmadi
             </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
+
 export default ReportsList;

@@ -211,7 +211,7 @@ function App() {
                 <Route path="/naqdsiz" element={<ComingSoon />} />
 
                 {/* HISOBOTLAR */}
-                <Route path="/hisobotlar/royxat" element={<ComingSoon />} />
+                <Route path="/hisobotlar/royxat" element={<ReportsList />} />
                 <Route path="/hisobotlar" element={<ComingSoon />} />
 
                 {/* XARAJATLAR */}
