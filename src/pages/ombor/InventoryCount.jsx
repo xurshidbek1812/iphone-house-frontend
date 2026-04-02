@@ -110,8 +110,14 @@ const InventoryCount = () => {
         setAllBatches([]);
         }
 
-        if (invoicesRes.ok && Array.isArray(invoicesData)) {
-        setInvoices(invoicesData);
+        const safeInvoices = Array.isArray(invoicesData)
+        ? invoicesData
+        : Array.isArray(invoicesData?.items)
+        ? invoicesData.items
+        : [];
+
+        if (invoicesRes.ok) {
+        setInvoices(safeInvoices);
         } else {
         setInvoices([]);
         }
@@ -212,7 +218,9 @@ const InventoryCount = () => {
 
     // 2) Tasdiqlanmagan kirim (invoice) QR bo'lsa
     if (invoiceKey) {
-        const foundInvoice = invoices.find((inv) => String(inv.id) === String(invoiceKey));
+        const foundInvoice = invoices.find(
+        (inv) => String(inv.id) === String(invoiceKey)
+        );
 
         if (!foundInvoice) {
         toast.error("QR koddagi kirim fakturasi topilmadi!");
@@ -220,8 +228,13 @@ const InventoryCount = () => {
         return;
         }
 
-        const foundItem = (foundInvoice.items || []).find(
-        (item) => String(item.customId) === String(searchKey)
+        const invoiceItems = Array.isArray(foundInvoice.items) ? foundInvoice.items : [];
+
+        const foundItem = invoiceItems.find(
+        (item) =>
+            String(item.customId ?? '') === String(searchKey) ||
+            String(item.productId ?? '') === String(searchKey) ||
+            String(item.id ?? '') === String(searchKey)
         );
 
         if (!foundItem) {
@@ -231,7 +244,10 @@ const InventoryCount = () => {
         }
 
         const product = products.find(
-        (p) => String(p.customId) === String(searchKey) || String(p.id) === String(foundItem.productId)
+        (p) =>
+            String(p.customId ?? '') === String(searchKey) ||
+            String(p.id ?? '') === String(foundItem.productId ?? '') ||
+            String(p.id ?? '') === String(foundItem.id ?? '')
         );
 
         if (!product) {
@@ -246,7 +262,14 @@ const InventoryCount = () => {
         return;
         }
 
-        const uniqueKey = `${product.id}-none`;
+        const activeBatches = Array.isArray(product.batches)
+        ? product.batches.filter((b) => !b.isArchived)
+        : [];
+
+        const autoBatchId =
+        activeBatches.length === 1 ? String(activeBatches[0].id) : null;
+
+        const uniqueKey = `${product.id}-${autoBatchId || 'none'}`;
 
         setScannedItems((prev) => {
         const currentCount = prev[uniqueKey] || 0;
@@ -255,7 +278,7 @@ const InventoryCount = () => {
 
         setLastScanned({
         ...product,
-        scannedBatch: null,
+        scannedBatch: autoBatchId,
         scanType: 'INV',
         scannedInvoice: foundInvoice.id
         });

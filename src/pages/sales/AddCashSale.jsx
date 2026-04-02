@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   ChevronRight,
@@ -28,6 +28,35 @@ const parseJsonSafe = async (response) => {
   } catch {
     return null;
   }
+};
+
+const normalizeSaleForEdit = (sale) => {
+  return {
+    isAnonymous: !sale?.customer,
+    mainCustomer: sale?.customer || null,
+    otherName: sale?.customer ? '' : sale?.otherName || '',
+    otherPhone: sale?.customer ? '+998 ' : sale?.otherPhone || '+998 ',
+    note: sale?.note || '',
+    items: (sale?.items || []).map((item, index) => {
+      const allocation = item.allocations?.[0];
+      const batch = allocation?.batch;
+
+      return {
+        localId: `${item.productId || 'p'}-${allocation?.batchId || index}`,
+        id: item.productId,
+        batchId: allocation?.batchId || null,
+        customId: item.product?.customId ?? '',
+        name: item.product?.name || "Noma'lum tovar",
+        quantity:
+          Number(batch?.quantity || 0) + Number(item.quantity || 0),
+        qty: Number(item.quantity || 0),
+        salePrice: Number(item.unitPrice || 0),
+        discount: Number(item.discountAmount || 0),
+        unit: item.product?.unit || 'Dona',
+        scanType: 'BATCH'
+      };
+    })
+  };
 };
 
 const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
@@ -114,6 +143,10 @@ const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
 
 const AddCashSale = () => {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const location = useLocation();
+
+  const isEditMode = Boolean(id);
   const token = sessionStorage.getItem('token');
   const barcodeInputRef = useRef(null);
 
@@ -477,9 +510,9 @@ const AddCashSale = () => {
     const code = e.target.value.trim();
     const parsed = parseQrCode(code);
 
-    const searchKey = parsed.id;
-    const batchKey = parsed.batchId;
-    const invoiceKey = parsed.invoiceId;
+    const searchKey = String(parsed.id || '').trim();
+    const batchKey = parsed.batchId ? String(parsed.batchId) : null;
+    const invoiceKey = parsed.invoiceId ? String(parsed.invoiceId) : null;
 
     if (!parsed.isValid || !searchKey) {
       toast.error("QR kod noto'g'ri yoki o'qilmadi");
@@ -488,6 +521,7 @@ const AddCashSale = () => {
       return;
     }
 
+    // Kirim/invoice QR kodi savdoda ishlamasin
     if (invoiceKey) {
       toast.error(
         "Bu QR kod hali tasdiqlanmagan kirimga tegishli. U faqat sanoq bo'limida ishlatiladi."
@@ -497,24 +531,55 @@ const AddCashSale = () => {
       return;
     }
 
-    if (!batchKey) {
-      toast.error("Savdoda faqat tasdiqlangan partiya QR kodi ishlaydi");
+    // 1) Agar batchId bo'lsa - to'g'ridan batch topamiz
+    if (batchKey) {
+      const foundBatch = allBatches.find(
+        (b) =>
+          String(b.batchId) === batchKey &&
+          String(b.customId) === searchKey
+      );
+
+      if (foundBatch) {
+        addBatchToCart(foundBatch);
+        setProductTab('cart');
+      } else {
+        toast.error("QR kod bo'yicha tasdiqlangan partiya topilmadi");
+      }
+
       e.target.value = '';
       barcodeInputRef.current?.focus();
       return;
     }
 
-    const foundBatch = allBatches.find(
-      (b) =>
-        String(b.batchId) === String(batchKey) &&
-        String(b.customId) === String(searchKey)
+    // 2) Agar batchId bo'lmasa - customId bo'yicha mahsulotni topamiz
+    const matchedBatches = allBatches.filter(
+      (b) => String(b.customId) === searchKey && Number(b.quantity || 0) > 0
     );
 
-    if (foundBatch) {
-      addBatchToCart(foundBatch);
+    if (matchedBatches.length === 0) {
+      toast.error("QR kod bo'yicha tovar topilmadi");
+      e.target.value = '';
+      barcodeInputRef.current?.focus();
+      return;
+    }
+
+    // Faqat bitta aktiv partiya bo'lsa avtomatik qo'shamiz
+    if (matchedBatches.length === 1) {
+      addBatchToCart(matchedBatches[0]);
       setProductTab('cart');
+      e.target.value = '';
+      barcodeInputRef.current?.focus();
+      return;
+    }
+
+    // Bir nechta partiya bo'lsa tanlash oynasini ochamiz
+    const matchedProduct = products.find((p) => String(p.customId) === searchKey);
+
+    if (matchedProduct) {
+      setSelectedProductForBatches(matchedProduct);
+      toast("Bu tovarning bir nechta partiyasi bor, keraklisini tanlang");
     } else {
-      toast.error("QR kod bo'yicha tasdiqlangan partiya topilmadi");
+      toast.error("Tovar topildi, lekin partiya tanlash uchun mahsulot ochilmadi");
     }
 
     e.target.value = '';

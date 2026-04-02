@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -73,16 +73,14 @@ const getAdjustmentMeta = (value) => {
     return {
       label: 'Ustama',
       absValue: Math.abs(amount),
-      textClass: 'text-rose-600',
-      softClass: 'bg-rose-50 border-rose-200 text-rose-700'
+      textClass: 'text-rose-600'
     };
   }
 
   return {
     label: 'Chegirma',
     absValue: amount,
-    textClass: 'text-amber-600',
-    softClass: 'bg-amber-50 border-amber-200 text-amber-700'
+    textClass: 'text-amber-600'
   };
 };
 
@@ -105,21 +103,12 @@ const CashSales = () => {
   const [detailsModal, setDetailsModal] = useState({ isOpen: false, sale: null });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, sale: null });
   const [sendToPaymentModal, setSendToPaymentModal] = useState({ isOpen: false, id: null });
-  const [editModal, setEditModal] = useState({ isOpen: false, data: null });
 
   const token = sessionStorage.getItem('token');
 
   const getAuthHeaders = useCallback(
     () => ({
       Authorization: `Bearer ${token}`
-    }),
-    [token]
-  );
-
-  const getJsonAuthHeaders = useCallback(
-    () => ({
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
     }),
     [token]
   );
@@ -210,6 +199,14 @@ const CashSales = () => {
     }
   };
 
+  const openEditPage = (sale) => {
+    navigate(`/naqd-savdo/tahrirlash/${sale.id}`, {
+      state: {
+        saleData: sale
+      }
+    });
+  };
+
   const handleDelete = async () => {
     if (!deleteModal.sale) return;
 
@@ -266,146 +263,6 @@ const CashSales = () => {
     } finally {
       setIsActionLoading(false);
       setSendToPaymentModal({ isOpen: false, id: null });
-    }
-  };
-
-  const openEditModal = (sale) => {
-    setEditModal({
-      isOpen: true,
-      data: {
-        id: sale.id,
-        note: sale.note || '',
-        customerName: getCustomerName(sale),
-        orderNumber: sale.orderNumber || sale.id,
-        items: (sale.items || []).map((item, index) => ({
-          localId: `${item.productId || 'p'}-${index}`,
-          productId: item.productId,
-          name: item.product?.name || "Noma'lum tovar",
-          quantity: Number(item.quantity),
-          unitPrice: Number(item.unitPrice),
-          discountAmount: Number(item.discountAmount || 0),
-          batchId: item.allocations?.[0]?.batchId || null,
-          scanType: 'BATCH'
-        }))
-      }
-    });
-  };
-
-  const updateEditQty = (localId, newQty) => {
-    if (newQty < 1) return;
-
-    setEditModal((prev) => ({
-      ...prev,
-      data: {
-        ...prev.data,
-        items: prev.data.items.map((item) =>
-          item.localId === localId ? { ...item, quantity: newQty } : item
-        )
-      }
-    }));
-  };
-
-  const updateEditDiscount = (localId, discountAmount) => {
-    setEditModal((prev) => ({
-      ...prev,
-      data: {
-        ...prev.data,
-        items: prev.data.items.map((item) =>
-          item.localId === localId ? { ...item, discountAmount } : item
-        )
-      }
-    }));
-  };
-
-  const editSummary = useMemo(() => {
-    if (!editModal.data) {
-      return {
-        subtotal: 0,
-        discount: 0,
-        markup: 0,
-        total: 0
-      };
-    }
-
-    const subtotal = editModal.data.items.reduce(
-      (sum, item) => sum + Number(item.unitPrice || 0) * Number(item.quantity || 0),
-      0
-    );
-
-    const discount = editModal.data.items.reduce((sum, item) => {
-      const v = Number(item.discountAmount || 0);
-      return v > 0 ? sum + v : sum;
-    }, 0);
-
-    const markup = editModal.data.items.reduce((sum, item) => {
-      const v = Number(item.discountAmount || 0);
-      return v < 0 ? sum + Math.abs(v) : sum;
-    }, 0);
-
-    const total = subtotal - editModal.data.items.reduce(
-      (sum, item) => sum + Number(item.discountAmount || 0),
-      0
-    );
-
-    return { subtotal, discount, markup, total };
-  }, [editModal.data]);
-
-  const saveEdit = async () => {
-    const { id, note, items } = editModal.data;
-
-    const invalidBatchItem = items.find(
-      (item) => !item.batchId || String(item.scanType || '').toUpperCase() !== 'BATCH'
-    );
-
-    if (invalidBatchItem) {
-      return toast.error(`${invalidBatchItem.name} uchun partiya ma'lumoti topilmadi.`);
-    }
-
-    const invalidDiscountItem = items.find((item) => {
-      const subtotal = Number(item.unitPrice || 0) * Number(item.quantity || 0);
-      const adjustment = Number(item.discountAmount || 0);
-      return adjustment > subtotal;
-    });
-
-    if (invalidDiscountItem) {
-      return toast.error("Chegirma summasi mahsulot jami summasidan ko'p bo'lishi mumkin emas!");
-    }
-
-    setIsActionLoading(true);
-
-    try {
-      const payload = {
-        note: note.trim() || null,
-        items: items.map((item) => ({
-          productId: item.productId,
-          quantity: Number(item.quantity),
-          unitPrice: Number(item.unitPrice),
-          discountAmount: Number(item.discountAmount || 0),
-          batchId: item.batchId ? Number(item.batchId) : null,
-          scanType: item.scanType || 'BATCH'
-        }))
-      };
-
-      const res = await fetch(`${API_URL}/api/orders/${id}`, {
-        method: 'PUT',
-        headers: getJsonAuthHeaders(),
-        body: JSON.stringify(payload)
-      });
-
-      const data = await parseJsonSafe(res);
-
-      if (res.ok) {
-        toast.success('Savdo muvaffaqiyatli tahrirlandi!');
-        setEditModal({ isOpen: false, data: null });
-        await fetchSales(page, appliedSearch, filterStatus);
-      } else {
-        toast.error(data?.error || 'Tahrirlashda xatolik yuz berdi');
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Server xatosi!');
-    } finally {
-      setIsActionLoading(false);
     }
   };
 
@@ -560,7 +417,7 @@ const CashSales = () => {
                           {String(sale.status).toUpperCase() === 'DRAFT' && (
                             <>
                               <button
-                                onClick={() => openEditModal(sale)}
+                                onClick={() => openEditPage(sale)}
                                 className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-indigo-600 transition"
                                 title="Tahrirlash"
                               >
@@ -712,9 +569,7 @@ const CashSales = () => {
                     Chegirma
                   </div>
                   <div className="mt-2 text-2xl font-semibold text-amber-700">
-                    {formatMoney(
-                      Math.max(0, Number(getSaleDiscount(detailsModal.sale) || 0))
-                    )}
+                    {formatMoney(Math.max(0, Number(getSaleDiscount(detailsModal.sale) || 0)))}
                   </div>
                 </div>
 
@@ -870,204 +725,6 @@ const CashSales = () => {
                 className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
               >
                 {isActionLoading ? <Loader2 size={16} className="animate-spin mx-auto" /> : 'Tasdiqlash'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editModal.isOpen && editModal.data && (
-        <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
-          <div className="w-full max-w-6xl rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50/70">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Savdoni tahrirlash</h3>
-                <p className="text-sm text-slate-500 mt-0.5">
-                  #{editModal.data.orderNumber} · {editModal.data.customerName}
-                </p>
-              </div>
-
-              <button
-                onClick={() => setEditModal({ isOpen: false, data: null })}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="px-5 py-5 max-h-[82vh] overflow-auto">
-              <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-5">
-                <div className="rounded-2xl border border-slate-200 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-semibold text-slate-800">
-                    Mahsulotlar
-                  </div>
-
-                  <div className="overflow-auto">
-                    <table className="w-full min-w-[980px] text-sm">
-                      <thead className="bg-slate-50 text-[10px] text-slate-500 uppercase tracking-[0.12em] border-b border-slate-200">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-semibold">Mahsulot</th>
-                          <th className="px-4 py-3 text-center font-semibold">Miqdor</th>
-                          <th className="px-4 py-3 text-right font-semibold">Narxi</th>
-                          <th className="px-4 py-3 text-right font-semibold">Chegirma / Ustama</th>
-                          <th className="px-4 py-3 text-center font-semibold">Holati</th>
-                          <th className="px-4 py-3 text-right font-semibold">Yakuniy</th>
-                        </tr>
-                      </thead>
-
-                      <tbody className="divide-y divide-slate-100">
-                        {editModal.data.items.map((item) => {
-                          const rowSubtotal =
-                            Number(item.unitPrice || 0) * Number(item.quantity || 0);
-                          const adjustmentMeta = getAdjustmentMeta(item.discountAmount);
-                          const rowTotal = rowSubtotal - Number(item.discountAmount || 0);
-
-                          return (
-                            <tr key={item.localId}>
-                              <td className="px-4 py-3">
-                                <div className="font-semibold text-slate-800">{item.name}</div>
-                                <div className="text-xs text-slate-400 mt-1">
-                                  Product ID: #{item.productId || '-'}
-                                </div>
-                              </td>
-
-                              <td className="px-4 py-3">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={item.quantity}
-                                  onChange={(e) =>
-                                    updateEditQty(item.localId, Number(e.target.value))
-                                  }
-                                  className="w-24 rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-center font-semibold outline-none focus:ring-2 focus:ring-slate-200"
-                                />
-                              </td>
-
-                              <td className="px-4 py-3">
-                                <input
-                                  type="number"
-                                  value={item.unitPrice}
-                                  readOnly
-                                  className="w-36 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-right font-semibold text-slate-700"
-                                />
-                              </td>
-
-                              <td className="px-4 py-3">
-                                <input
-                                  type="number"
-                                  value={item.discountAmount}
-                                  onChange={(e) =>
-                                    updateEditDiscount(item.localId, Number(e.target.value || 0))
-                                  }
-                                  className="w-40 rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-right font-semibold outline-none focus:ring-2 focus:ring-slate-200"
-                                  placeholder="Musbat yoki manfiy"
-                                />
-                              </td>
-
-                              <td className="px-4 py-3 text-center">
-                                <span
-                                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${adjustmentMeta.softClass}`}
-                                >
-                                  {adjustmentMeta.label}
-                                </span>
-                              </td>
-
-                              <td className="px-4 py-3">
-                                <div className="w-36 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-right font-semibold text-emerald-700">
-                                  {formatMoney(rowTotal)}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="rounded-2xl bg-slate-900 text-white p-5">
-                    <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black">
-                      Yakuniy hisob
-                    </div>
-
-                    <div className="mt-4 space-y-3 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Tovarlar soni</span>
-                        <span className="font-semibold text-white">
-                          {editModal.data.items.reduce(
-                            (sum, item) => sum + Number(item.quantity || 0),
-                            0
-                          )} ta
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Umumiy summa</span>
-                        <span className="font-semibold text-white">
-                          {formatMoney(editSummary.subtotal)}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between text-amber-300">
-                        <span>Chegirma</span>
-                        <span className="font-semibold">{formatMoney(editSummary.discount)}</span>
-                      </div>
-
-                      <div className="flex justify-between text-rose-300">
-                        <span>Ustama</span>
-                        <span className="font-semibold">{formatMoney(editSummary.markup)}</span>
-                      </div>
-
-                      <div className="pt-3 border-t border-slate-700/60">
-                        <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black">
-                          Yakuniy summa
-                        </div>
-                        <div className="mt-2 text-3xl font-semibold text-emerald-400">
-                          {editSummary.total.toLocaleString()}
-                          <span className="text-sm ml-1 text-emerald-500 font-medium">UZS</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                      Izoh
-                    </label>
-                    <textarea
-                      value={editModal.data.note}
-                      onChange={(e) =>
-                        setEditModal((prev) => ({
-                          ...prev,
-                          data: {
-                            ...prev.data,
-                            note: e.target.value
-                          }
-                        }))
-                      }
-                      rows="6"
-                      className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-200 resize-none"
-                      placeholder="Izoh..."
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 px-5 py-4 border-t border-slate-200 bg-white">
-              <button
-                onClick={() => setEditModal({ isOpen: false, data: null })}
-                className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200"
-              >
-                Bekor qilish
-              </button>
-              <button
-                onClick={saveEdit}
-                disabled={isActionLoading}
-                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
-              >
-                {isActionLoading ? <Loader2 size={16} className="animate-spin" /> : 'Saqlash'}
               </button>
             </div>
           </div>

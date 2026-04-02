@@ -192,7 +192,7 @@ const PrintPriceTag = () => {
         const copies = Math.max(1, Number(item.copies) || 1);
         const qrValue = buildQrValue(item);
         const qrDataUrl = await QRCode.toDataURL(qrValue, {
-          width: 220,
+          width: 320,
           margin: 0
         });
 
@@ -231,153 +231,154 @@ const PrintPriceTag = () => {
             <title>Universal Yorliqlar</title>
             <style>
               * {
-                  box-sizing: border-box;
-                  -webkit-print-color-adjust: exact !important;
-                  print-color-adjust: exact !important;
-                }
+                box-sizing: border-box;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
 
-                html, body {
-                  margin: 0;
-                  padding: 0;
-                  background: #fff;
-                  font-family: Arial, Helvetica, sans-serif;
-                }
+              html, body {
+                margin: 0;
+                padding: 0;
+                background: #fff;
+                font-family: Arial, Helvetica, sans-serif;
+              }
 
-                @page {
-                  size: 58mm 40mm;
-                  margin: 0;
-                }
+              @page {
+                size: 58mm 40mm;
+                margin: 0;
+              }
 
+              body {
+                width: 58mm;
+                padding: 0;
+                margin: 0;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: flex-start;
+                justify-content: flex-start;
+              }
+
+              .label-card {
+                width: 58mm;
+                height: 40mm;
+                padding: 2.1mm 2.2mm;
+                overflow: hidden;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                display: flex;
+                flex-direction: column;
+                border: 0.2mm solid #d1d5db;
+                background: #fff;
+              }
+
+              .header-row {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 1.6mm;
+                min-height: 11.8mm;
+              }
+
+              .product-name {
+                flex: 1;
+                min-width: 0;
+                font-size: 2.8mm;
+                line-height: 1.1;
+                font-weight: 900;
+                color: #111827;
+                text-transform: uppercase;
+                word-break: break-word;
+                overflow: hidden;
+                display: -webkit-box;
+                -webkit-line-clamp: 3;
+                -webkit-box-orient: vertical;
+                padding-right: 0.8mm;
+              }
+
+              .product-id {
+                flex-shrink: 0;
+                font-size: 2mm;
+                line-height: 1;
+                font-weight: 800;
+                color: #4b5563;
+                white-space: nowrap;
+                margin-top: 0.5mm;
+              }
+
+              .divider {
+                width: 100%;
+                height: 0.35mm;
+                background: #d1d5db;
+                margin: 1.8mm 0 1.7mm 0;
+              }
+
+              .bottom-row {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 1.4mm;
+                min-height: 0;
+              }
+
+              .price-box {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                padding-top: 0.2mm;
+              }
+
+              .price-label {
+                font-size: 1.95mm;
+                line-height: 1;
+                font-weight: 700;
+                color: #6b7280;
+                text-transform: uppercase;
+                margin-bottom: 1mm;
+              }
+
+              .price-value {
+                font-size: 4.1mm;
+                line-height: 1.02;
+                font-weight: 900;
+                color: #111827;
+                word-break: break-word;
+              }
+
+              .qr-box {
+                width: 19.8mm;
+                min-width: 19.8mm;
+                height: 19.8mm;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border: 0.25mm solid #d1d5db;
+                border-radius: 1.2mm;
+                padding: 0.5mm;
+                background: #fff;
+              }
+
+              .qr-box img {
+                width: 100%;
+                height: 100%;
+                display: block;
+              }
+
+              @media screen {
                 body {
-                  width: 58mm;
-                  padding: 0;
-                  margin: 0;
-                  display: flex;
-                  flex-wrap: wrap;
-                  align-items: flex-start;
-                  justify-content: flex-start;
+                  background: #f3f4f6;
+                  min-height: 100vh;
+                  padding: 10mm;
+                  gap: 4mm;
+                  width: auto;
                 }
 
                 .label-card {
-                  width: 58mm;
-                  height: 40mm;
-                  padding: 2.2mm 2.4mm;
-                  overflow: hidden;
-                  page-break-inside: avoid;
-                  break-inside: avoid;
-                  display: flex;
-                  flex-direction: column;
-                  border: 0.2mm solid #d1d5db;
-                  background: #fff;
+                  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
                 }
-
-                .header-row {
-                  display: flex;
-                  align-items: flex-start;
-                  justify-content: space-between;
-                  gap: 2mm;
-                  min-height: 12.5mm;
-                }
-
-                .product-name {
-                  flex: 1;
-                  min-width: 0;
-                  font-size: 2.95mm;
-                  line-height: 1.12;
-                  font-weight: 900;
-                  color: #111827;
-                  text-transform: uppercase;
-                  word-break: break-word;
-                  overflow: hidden;
-                  display: -webkit-box;
-                  -webkit-line-clamp: 3;
-                  -webkit-box-orient: vertical;
-                  padding-right: 1mm;
-                }
-
-                .product-id {
-                  flex-shrink: 0;
-                  font-size: 2.15mm;
-                  line-height: 1;
-                  font-weight: 800;
-                  color: #4b5563;
-                  white-space: nowrap;
-                  margin-top: 0.6mm;
-                }
-
-                .divider {
-                  width: 100%;
-                  height: 0.35mm;
-                  background: #d1d5db;
-                  margin: 2.1mm 0 2.1mm 0;
-                }
-
-                .bottom-row {
-                  flex: 1;
-                  display: flex;
-                  align-items: stretch;
-                  justify-content: space-between;
-                  gap: 2mm;
-                  min-height: 0;
-                }
-
-                .price-box {
-                  flex: 1;
-                  min-width: 0;
-                  display: flex;
-                  flex-direction: column;
-                  justify-content: center;
-                  padding-top: 0.5mm;
-                }
-
-                .price-label {
-                  font-size: 2.15mm;
-                  line-height: 1;
-                  font-weight: 700;
-                  color: #6b7280;
-                  text-transform: uppercase;
-                  margin-bottom: 1.4mm;
-                }
-
-                .price-value {
-                  font-size: 5.1mm;
-                  line-height: 1.04;
-                  font-weight: 900;
-                  color: #111827;
-                  word-break: break-word;
-                }
-
-                .qr-box {
-                  width: 16.5mm;
-                  min-width: 16.5mm;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  border: 0.25mm solid #d1d5db;
-                  border-radius: 1.2mm;
-                  padding: 0.8mm;
-                  background: #fff;
-                }
-
-                .qr-box img {
-                  width: 100%;
-                  height: auto;
-                  display: block;
-                }
-
-                @media screen {
-                  body {
-                    background: #f3f4f6;
-                    min-height: 100vh;
-                    padding: 10mm;
-                    gap: 4mm;
-                    width: auto;
-                  }
-
-                  .label-card {
-                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-                  }
-                }
+              }
             </style>
           </head>
           <body>

@@ -286,6 +286,7 @@ function App() {
                     </PermissionRoute>
                   }
                 />
+                <Route path="/naqd-savdo/tahrirlash/:id" element={<AddCashSale />} />
                 <Route path="/ombor/taminotchi-qaytarish" element={<ComingSoon />} />
                 <Route path="/ombor/yakunlanmagan" element={<ComingSoon />} />
                 <Route path="/ombor/mijoz-kirim" element={<ComingSoon />} />
