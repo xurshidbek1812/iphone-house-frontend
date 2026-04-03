@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ChevronRight,
@@ -42,13 +42,14 @@ const normalizeSaleForEdit = (sale) => {
       const batch = allocation?.batch;
 
       return {
-        localId: `${item.productId || 'p'}-${allocation?.batchId || index}`,
+        localId: allocation?.batchId
+          ? `batch-${allocation.batchId}`
+          : `old-${item.productId || 'p'}-${index}`,
         id: item.productId,
         batchId: allocation?.batchId || null,
         customId: item.product?.customId ?? '',
         name: item.product?.name || "Noma'lum tovar",
-        quantity:
-          Number(batch?.quantity || 0) + Number(item.quantity || 0),
+        quantity: Number(batch?.quantity || 0) + Number(item.quantity || 0),
         qty: Number(item.quantity || 0),
         salePrice: Number(item.unitPrice || 0),
         discount: Number(item.discountAmount || 0),
@@ -59,7 +60,7 @@ const normalizeSaleForEdit = (sale) => {
   };
 };
 
-const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
+const SearchableSelect = ({ placeholder, onSelect, customers = [], selectedCustomer = null }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const wrapperRef = useRef(null);
@@ -74,6 +75,16 @@ const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (selectedCustomer) {
+      setSearch(
+        `${selectedCustomer.lastName || ''} ${selectedCustomer.firstName || ''} ${
+          selectedCustomer.middleName || ''
+        }`.trim()
+      );
+    }
+  }, [selectedCustomer]);
 
   const filteredCustomers = useMemo(() => {
     if (!search.trim()) return customers.slice(0, 30);
@@ -119,7 +130,11 @@ const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
                 onClick={() => {
                   onSelect(customer);
                   setIsOpen(false);
-                  setSearch('');
+                  setSearch(
+                    `${customer.lastName || ''} ${customer.firstName || ''} ${
+                      customer.middleName || ''
+                    }`.trim()
+                  );
                 }}
                 className="w-full border-b border-slate-100 p-3 text-left transition-colors last:border-0 hover:bg-blue-50"
               >
@@ -144,7 +159,6 @@ const SearchableSelect = ({ placeholder, onSelect, customers = [] }) => {
 const AddCashSale = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const location = useLocation();
 
   const isEditMode = Boolean(id);
   const token = sessionStorage.getItem('token');
@@ -168,6 +182,7 @@ const AddCashSale = () => {
     note: ''
   });
 
+  const [saleLoaded, setSaleLoaded] = useState(false);
   const [productTab, setProductTab] = useState('catalog');
   const [productSearch, setProductSearch] = useState('');
   const [catalogPage, setCatalogPage] = useState(1);
@@ -214,84 +229,167 @@ const AddCashSale = () => {
     return Number(item.discount || 0) / qty;
   }, []);
 
-  const fetchData = useCallback(
+  const fetchBaseData = useCallback(
     async (signal = undefined) => {
       if (!token) return;
 
-      try {
-        setDataLoading(true);
+      const [custRes, prodRes] = await Promise.allSettled([
+        fetch(`${API_URL}/api/customers`, { headers: getAuthHeaders(), signal }),
+        fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal })
+      ]);
 
-        const [custRes, prodRes] = await Promise.allSettled([
-          fetch(`${API_URL}/api/customers`, { headers: getAuthHeaders(), signal }),
-          fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal })
-        ]);
+      if (custRes.status === 'fulfilled' && custRes.value.ok) {
+        const cData = await parseJsonSafe(custRes.value);
+        if (Array.isArray(cData)) setCustomers(cData);
+      }
 
-        if (custRes.status === 'fulfilled' && custRes.value.ok) {
-          const cData = await parseJsonSafe(custRes.value);
-          if (Array.isArray(cData)) setCustomers(cData);
+      if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
+        const pData = await parseJsonSafe(prodRes.value);
+
+        if (Array.isArray(pData)) {
+          const catalogProducts = [];
+          const extractedBatches = [];
+
+          pData.forEach((prod) => {
+            const productSalePrice = Number(prod.salePrice || 0);
+
+            if (Number(prod.quantity || 0) > 0) {
+              catalogProducts.push({
+                id: prod.id,
+                customId: prod.customId,
+                name: prod.name,
+                quantity: Number(prod.quantity || 0),
+                salePrice: productSalePrice,
+                unit: prod.unit || 'Dona'
+              });
+            }
+
+            if (Array.isArray(prod.batches) && prod.batches.length > 0) {
+              prod.batches.forEach((batch) => {
+                if (Number(batch.quantity || 0) > 0 && !batch.isArchived) {
+                  extractedBatches.push({
+                    id: prod.id,
+                    batchId: batch.id,
+                    customId: prod.customId,
+                    name: prod.name,
+                    quantity: Number(batch.quantity || 0),
+                    buyPrice: Number(batch.buyPrice || 0),
+                    salePrice: productSalePrice,
+                    buyCurrency: batch.buyCurrency,
+                    unit: prod.unit || 'Dona',
+                    scanType: 'BATCH'
+                  });
+                }
+              });
+            }
+          });
+
+          setProducts(catalogProducts);
+          setAllBatches(extractedBatches);
         }
-
-        if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
-          const pData = await parseJsonSafe(prodRes.value);
-
-          if (Array.isArray(pData)) {
-            const catalogProducts = [];
-            const extractedBatches = [];
-
-            pData.forEach((prod) => {
-              const productSalePrice = Number(prod.salePrice || 0);
-
-              if (Number(prod.quantity || 0) > 0) {
-                catalogProducts.push({
-                  id: prod.id,
-                  customId: prod.customId,
-                  name: prod.name,
-                  quantity: Number(prod.quantity || 0),
-                  salePrice: productSalePrice,
-                  unit: prod.unit || 'Dona'
-                });
-              }
-
-              if (Array.isArray(prod.batches) && prod.batches.length > 0) {
-                prod.batches.forEach((batch) => {
-                  if (Number(batch.quantity || 0) > 0 && !batch.isArchived) {
-                    extractedBatches.push({
-                      id: prod.id,
-                      batchId: batch.id,
-                      customId: prod.customId,
-                      name: prod.name,
-                      quantity: Number(batch.quantity || 0),
-                      buyPrice: Number(batch.buyPrice || 0),
-                      salePrice: productSalePrice,
-                      buyCurrency: batch.buyCurrency,
-                      unit: prod.unit || 'Dona',
-                      scanType: 'BATCH'
-                    });
-                  }
-                });
-              }
-            });
-
-            setProducts(catalogProducts);
-            setAllBatches(extractedBatches);
-          }
-        }
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          toast.error("Ma'lumotlarni yuklashda xatolik yuz berdi");
-        }
-      } finally {
-        if (!signal?.aborted) setDataLoading(false);
       }
     },
     [token, getAuthHeaders]
   );
 
+  const loadEditSale = useCallback(
+    async (signal = undefined) => {
+      if (!isEditMode) return;
+
+      const res = await fetch(`${API_URL}/api/orders/${id}`, {
+        headers: getAuthHeaders(),
+        signal
+      });
+
+      const data = await parseJsonSafe(res);
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Savdo ma'lumotini yuklab bo'lmadi");
+      }
+
+      setSaleData(normalizeSaleForEdit(data));
+      setSaleLoaded(true);
+    },
+    [isEditMode, id, getAuthHeaders]
+  );
+
   useEffect(() => {
     const controller = new AbortController();
-    fetchData(controller.signal);
+
+    const loadAll = async () => {
+      try {
+        setDataLoading(true);
+        await fetchBaseData(controller.signal);
+
+        if (isEditMode) {
+          await loadEditSale(controller.signal);
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          toast.error(err.message || "Ma'lumotlarni yuklashda xatolik yuz berdi");
+          if (isEditMode) navigate('/savdo');
+        }
+      } finally {
+        if (!controller.signal.aborted) setDataLoading(false);
+      }
+    };
+
+    loadAll();
+
     return () => controller.abort();
-  }, [fetchData]);
+  }, [fetchBaseData, loadEditSale, isEditMode, navigate]);
+
+  useEffect(() => {
+    if (!isEditMode) return;
+    if (!saleLoaded) return;
+    if (!Array.isArray(allBatches) || allBatches.length === 0) return;
+    if (!Array.isArray(saleData.items) || saleData.items.length === 0) return;
+
+    const hasMissingBatch = saleData.items.some((item) => !item.batchId);
+    if (!hasMissingBatch) return;
+
+    setSaleData((prev) => ({
+      ...prev,
+      items: prev.items.map((item) => {
+        if (item.batchId) return item;
+
+        const matchedBatches = allBatches.filter(
+          (b) =>
+            Number(b.id) === Number(item.id) &&
+            Number(b.salePrice || 0) === Number(item.salePrice || 0)
+        );
+
+        if (matchedBatches.length === 1) {
+          const batch = matchedBatches[0];
+          return {
+            ...item,
+            batchId: batch.batchId,
+            quantity: Number(batch.quantity || 0) + Number(item.qty || 0),
+            localId: `batch-${batch.batchId}`,
+            scanType: 'BATCH'
+          };
+        }
+
+        if (matchedBatches.length > 1) {
+          const batchWithEnoughQty =
+            matchedBatches.find((b) => Number(b.quantity || 0) >= Number(item.qty || 0)) ||
+            matchedBatches[0];
+
+          if (batchWithEnoughQty) {
+            return {
+              ...item,
+              batchId: batchWithEnoughQty.batchId,
+              quantity: Number(batchWithEnoughQty.quantity || 0) + Number(item.qty || 0),
+              localId: `batch-${batchWithEnoughQty.batchId}`,
+              scanType: 'BATCH'
+            };
+          }
+        }
+
+        return item;
+      })
+    }));
+  }, [isEditMode, saleLoaded, allBatches, saleData.items]);
 
   const filteredProducts = useMemo(() => {
     if (!productSearch.trim()) return products;
@@ -354,6 +452,7 @@ const AddCashSale = () => {
           ...prev.items,
           {
             ...batch,
+            localId: `batch-${batch.batchId}`,
             qty: 1,
             discount: 0,
             scanType: 'BATCH'
@@ -365,10 +464,10 @@ const AddCashSale = () => {
     }
   };
 
-  const removeItem = (batchId) => {
+  const removeItem = (localId) => {
     setSaleData((prev) => ({
       ...prev,
-      items: prev.items.filter((i) => i.batchId !== batchId)
+      items: prev.items.filter((i) => i.localId !== localId)
     }));
   };
 
@@ -388,14 +487,14 @@ const AddCashSale = () => {
     toast.error("Ushbu tovar uchun faol partiya topilmadi");
   };
 
-  const updateCartItemQty = (batchId, value) => {
+  const updateCartItemQty = (localId, value) => {
     const numericValue = Number(value);
 
     if (value === '') {
       setSaleData((prev) => ({
         ...prev,
         items: prev.items.map((item) =>
-          item.batchId === batchId ? { ...item, qty: '' } : item
+          item.localId === localId ? { ...item, qty: '' } : item
         )
       }));
       return;
@@ -403,7 +502,7 @@ const AddCashSale = () => {
 
     if (isNaN(numericValue)) return;
 
-    const targetItem = saleData.items.find((item) => item.batchId === batchId);
+    const targetItem = saleData.items.find((item) => item.localId === localId);
     if (!targetItem) return;
 
     if (numericValue <= 0) {
@@ -427,7 +526,7 @@ const AddCashSale = () => {
     setSaleData((prev) => ({
       ...prev,
       items: prev.items.map((item) =>
-        item.batchId === batchId
+        item.localId === localId
           ? {
               ...item,
               qty: numericValue,
@@ -438,12 +537,12 @@ const AddCashSale = () => {
     }));
   };
 
-  const updateItemTotalDiscount = (batchId, value) => {
+  const updateItemTotalDiscount = (localId, value) => {
     if (value === '') {
       setSaleData((prev) => ({
         ...prev,
         items: prev.items.map((item) =>
-          item.batchId === batchId ? { ...item, discount: '' } : item
+          item.localId === localId ? { ...item, discount: '' } : item
         )
       }));
       return;
@@ -452,7 +551,7 @@ const AddCashSale = () => {
     const numericValue = Number(value);
     if (isNaN(numericValue)) return;
 
-    const targetItem = saleData.items.find((item) => item.batchId === batchId);
+    const targetItem = saleData.items.find((item) => item.localId === localId);
     if (!targetItem) return;
 
     const maxDiscount = Number(targetItem.salePrice || 0) * Number(targetItem.qty || 0);
@@ -465,17 +564,17 @@ const AddCashSale = () => {
     setSaleData((prev) => ({
       ...prev,
       items: prev.items.map((item) =>
-        item.batchId === batchId ? { ...item, discount: numericValue } : item
+        item.localId === localId ? { ...item, discount: numericValue } : item
       )
     }));
   };
 
-  const updateItemPerUnitDiscount = (batchId, value) => {
+  const updateItemPerUnitDiscount = (localId, value) => {
     if (value === '') {
       setSaleData((prev) => ({
         ...prev,
         items: prev.items.map((item) =>
-          item.batchId === batchId ? { ...item, discount: '' } : item
+          item.localId === localId ? { ...item, discount: '' } : item
         )
       }));
       return;
@@ -484,7 +583,7 @@ const AddCashSale = () => {
     const numericValue = Number(value);
     if (isNaN(numericValue)) return;
 
-    const targetItem = saleData.items.find((item) => item.batchId === batchId);
+    const targetItem = saleData.items.find((item) => item.localId === localId);
     if (!targetItem) return;
 
     const qty = Number(targetItem.qty || 0);
@@ -499,7 +598,7 @@ const AddCashSale = () => {
     setSaleData((prev) => ({
       ...prev,
       items: prev.items.map((item) =>
-        item.batchId === batchId ? { ...item, discount: totalDiscountValue } : item
+        item.localId === localId ? { ...item, discount: totalDiscountValue } : item
       )
     }));
   };
@@ -521,7 +620,6 @@ const AddCashSale = () => {
       return;
     }
 
-    // Kirim/invoice QR kodi savdoda ishlamasin
     if (invoiceKey) {
       toast.error(
         "Bu QR kod hali tasdiqlanmagan kirimga tegishli. U faqat sanoq bo'limida ishlatiladi."
@@ -531,12 +629,9 @@ const AddCashSale = () => {
       return;
     }
 
-    // 1) Agar batchId bo'lsa - to'g'ridan batch topamiz
     if (batchKey) {
       const foundBatch = allBatches.find(
-        (b) =>
-          String(b.batchId) === batchKey &&
-          String(b.customId) === searchKey
+        (b) => String(b.batchId) === batchKey && String(b.customId) === searchKey
       );
 
       if (foundBatch) {
@@ -551,7 +646,6 @@ const AddCashSale = () => {
       return;
     }
 
-    // 2) Agar batchId bo'lmasa - customId bo'yicha mahsulotni topamiz
     const matchedBatches = allBatches.filter(
       (b) => String(b.customId) === searchKey && Number(b.quantity || 0) > 0
     );
@@ -563,7 +657,6 @@ const AddCashSale = () => {
       return;
     }
 
-    // Faqat bitta aktiv partiya bo'lsa avtomatik qo'shamiz
     if (matchedBatches.length === 1) {
       addBatchToCart(matchedBatches[0]);
       setProductTab('cart');
@@ -572,7 +665,6 @@ const AddCashSale = () => {
       return;
     }
 
-    // Bir nechta partiya bo'lsa tanlash oynasini ochamiz
     const matchedProduct = products.find((p) => String(p.customId) === searchKey);
 
     if (matchedProduct) {
@@ -667,16 +759,14 @@ const AddCashSale = () => {
         }))
       };
 
-      const requestUrl = `${API_URL}/api/orders/direct`;
+      const requestUrl = isEditMode
+        ? `${API_URL}/api/orders/${id}`
+        : `${API_URL}/api/orders/direct`;
 
-      console.log('========== CREATE CASH SALE DEBUG ==========');
-      console.log('API_URL:', API_URL);
-      console.log('REQUEST URL:', requestUrl);
-      console.log('REQUEST METHOD:', 'POST');
-      console.log('REQUEST PAYLOAD:', payload);
+      const requestMethod = isEditMode ? 'PUT' : 'POST';
 
       const res = await fetch(requestUrl, {
-        method: 'POST',
+        method: requestMethod,
         headers: getJsonAuthHeaders(),
         body: JSON.stringify(payload)
       });
@@ -690,13 +780,12 @@ const AddCashSale = () => {
         data = { rawText };
       }
 
-      console.log('RESPONSE STATUS:', res.status);
-      console.log('RESPONSE OK:', res.ok);
-      console.log('RESPONSE DATA:', data);
-      console.log('===========================================');
-
       if (res.ok) {
-        toast.success("Savdo jarayonda holatida saqlandi");
+        toast.success(
+          isEditMode
+            ? "Savdo muvaffaqiyatli tahrirlandi"
+            : "Savdo jarayonda holatida saqlandi"
+        );
         navigate('/savdo');
       } else {
         const backendMessage =
@@ -824,9 +913,13 @@ const AddCashSale = () => {
               <ArrowLeft size={16} />
             </button>
             <div className="min-w-0">
-              <h1 className="truncate text-base font-black text-slate-800">Naqd savdo yaratish</h1>
+              <h1 className="truncate text-base font-black text-slate-800">
+                {isEditMode ? 'Naqd savdoni tahrirlash' : 'Naqd savdo yaratish'}
+              </h1>
               <p className="text-[11px] font-medium text-slate-500">
-                Xaridor, mahsulot va yakuniy tasdiqlash
+                {isEditMode
+                  ? "Mavjud savdo ma'lumotlarini yangilang"
+                  : 'Xaridor, mahsulot va yakuniy tasdiqlash'}
               </p>
             </div>
           </div>
@@ -886,6 +979,7 @@ const AddCashSale = () => {
                     placeholder="Ism, familiya yoki pasport yozing..."
                     onSelect={(c) => setSaleData((prev) => ({ ...prev, mainCustomer: c }))}
                     customers={customers}
+                    selectedCustomer={saleData.mainCustomer}
                   />
                 </div>
               ) : (
@@ -1187,7 +1281,7 @@ const AddCashSale = () => {
                         {saleData.items.length > 0 ? (
                           saleData.items.map((item) => (
                             <div
-                              key={item.batchId}
+                              key={item.localId}
                               className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.04)]"
                             >
                               <div className="flex items-start justify-between gap-3">
@@ -1196,13 +1290,13 @@ const AddCashSale = () => {
                                     {item.name}
                                   </div>
                                   <div className="mt-1 text-[11px] text-slate-500">
-                                    Partiya: #{item.batchId} • Qoldiq: {item.quantity} ta
+                                    Partiya: #{item.batchId ?? '-'} • Qoldiq: {item.quantity} ta
                                   </div>
                                 </div>
 
                                 <button
                                   type="button"
-                                  onClick={() => removeItem(item.batchId)}
+                                  onClick={() => removeItem(item.localId)}
                                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"
                                 >
                                   <Trash2 size={13} />
@@ -1219,7 +1313,7 @@ const AddCashSale = () => {
                                       type="button"
                                       onClick={() =>
                                         updateCartItemQty(
-                                          item.batchId,
+                                          item.localId,
                                           Math.max(1, Number(item.qty || 1) - 1)
                                         )
                                       }
@@ -1231,7 +1325,7 @@ const AddCashSale = () => {
                                     <input
                                       value={item.qty}
                                       onChange={(e) =>
-                                        updateCartItemQty(item.batchId, e.target.value)
+                                        updateCartItemQty(item.localId, e.target.value)
                                       }
                                       className="h-8 flex-1 rounded-xl border border-slate-200 bg-white text-center text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100"
                                     />
@@ -1240,7 +1334,7 @@ const AddCashSale = () => {
                                       type="button"
                                       onClick={() =>
                                         updateCartItemQty(
-                                          item.batchId,
+                                          item.localId,
                                           Math.min(
                                             Number(item.quantity || 0),
                                             Number(item.qty || 0) + 1
@@ -1270,7 +1364,7 @@ const AddCashSale = () => {
                                   <input
                                     value={item.discount}
                                     onChange={(e) =>
-                                      updateItemTotalDiscount(item.batchId, e.target.value)
+                                      updateItemTotalDiscount(item.localId, e.target.value)
                                     }
                                     className="h-8 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-100"
                                     placeholder="0"
@@ -1285,9 +1379,13 @@ const AddCashSale = () => {
                                     1 dona uchun
                                   </label>
                                   <input
-                                    value={Number.isFinite(getPerUnitDiscount(item)) ? getPerUnitDiscount(item) : ''}
+                                    value={
+                                      Number.isFinite(getPerUnitDiscount(item))
+                                        ? getPerUnitDiscount(item)
+                                        : ''
+                                    }
                                     onChange={(e) =>
-                                      updateItemPerUnitDiscount(item.batchId, e.target.value)
+                                      updateItemPerUnitDiscount(item.localId, e.target.value)
                                     }
                                     className="h-8 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-100"
                                     placeholder="0"
@@ -1430,7 +1528,7 @@ const AddCashSale = () => {
 
                     <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
                       {saleData.items.map((item) => (
-                        <tr key={item.batchId}>
+                        <tr key={item.localId}>
                           <td className="py-3.5 font-semibold text-slate-800">{item.name}</td>
                           <td className="py-3.5 text-center">{item.qty}</td>
                           <td className="py-3.5 text-right">
