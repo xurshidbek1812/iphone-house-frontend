@@ -399,7 +399,7 @@ const Sklad = () => {
 
     const qrValue = buildBatchQr(printProduct.customId, selectedBatch.id);
     const qrCodeSvg = ReactDOMServer.renderToString(
-      <QRCode value={qrValue} size={160} level="H" />
+      <QRCode value={qrValue} size={220} level="H" />
     );
 
     const safeName = String(printProduct.name || '')
@@ -438,24 +438,21 @@ const Sklad = () => {
 
           body {
             width: 58mm;
-            padding: 0;
             margin: 0;
-            display: flex;
-            flex-wrap: wrap;
-            align-items: flex-start;
-            justify-content: flex-start;
+            padding: 0;
+            background: #fff;
           }
 
           .label-card {
             width: 58mm;
             height: 40mm;
-            padding: 2.1mm 2.2mm;
+            padding: 2mm;
             overflow: hidden;
             page-break-inside: avoid;
             break-inside: avoid;
             display: flex;
             flex-direction: column;
-            border: 0.2mm solid #d1d5db;
+            border: 0.3mm solid #000;
             background: #fff;
           }
 
@@ -468,36 +465,25 @@ const Sklad = () => {
           }
 
           .product-name {
-            flex: 1;
-            min-width: 0;
-            font-size: 2.8mm;
+            font-size: 3mm;
             line-height: 1.1;
             font-weight: 900;
-            color: #111827;
+            color: #000;
             text-transform: uppercase;
-            word-break: break-word;
-            overflow: hidden;
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            padding-right: 0.8mm;
           }
 
           .product-id {
-            flex-shrink: 0;
-            font-size: 2mm;
+            font-size: 2.2mm;
             line-height: 1;
             font-weight: 800;
-            color: #4b5563;
-            white-space: nowrap;
-            margin-top: 0.5mm;
+            color: #000;
           }
 
           .divider {
             width: 100%;
-            height: 0.35mm;
-            background: #d1d5db;
-            margin: 1.8mm 0 1.7mm 0;
+            height: 0.3mm;
+            background: #000;
+            margin: 1.5mm 0;
           }
 
           .bottom-row {
@@ -519,33 +505,37 @@ const Sklad = () => {
           }
 
           .price-label {
-            font-size: 1.95mm;
+            font-size: 2mm;
             line-height: 1;
             font-weight: 700;
-            color: #6b7280;
+            color: #000;
             text-transform: uppercase;
             margin-bottom: 1mm;
           }
 
           .price-value {
-            font-size: 4.1mm;
-            line-height: 1.02;
+            font-size: 4.3mm;
+            line-height: 1.05;
             font-weight: 900;
-            color: #111827;
-            word-break: break-word;
+            color: #000;
           }
 
           .qr-box {
-            width: 19.8mm;
-            min-width: 19.8mm;
-            height: 19.8mm;
+            width: 21mm;
+            height: 21mm;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 0.25mm solid #d1d5db;
-            border-radius: 1.2mm;
-            padding: 0.5mm;
+            border: 0.3mm solid #000;
+            padding: 0.4mm;
             background: #fff;
+          }
+
+          .qr-box svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+            shape-rendering: crispEdges;
           }
 
           .qr-box img {
