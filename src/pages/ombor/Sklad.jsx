@@ -588,7 +588,6 @@ const Sklad = () => {
             </div>
           </div>
         </div>
-        <div class="print-note">Print oynasi ochilmasa Ctrl+P bosing</div>
         <script>
           setTimeout(() => {
             window.focus();
