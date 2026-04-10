@@ -96,7 +96,7 @@ const ExpenseOutput = () => {
     };
   }, [isModalOpen, confirmModal.isOpen, detailModal.isOpen]);
 
-  const fetchData = useCallback(async (targetPage = page, targetSearch = appliedSearch) => {
+  const fetchData = useCallback(async (targetPage, targetSearch) => {
     try {
       setLoading(true);
 
@@ -128,11 +128,11 @@ const ExpenseOutput = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, appliedSearch, limit]);
+  }, [limit]);
 
   useEffect(() => {
-    fetchData(1, appliedSearch);
-  }, [appliedSearch, fetchData]);
+    fetchData(page, appliedSearch);
+  }, [page, appliedSearch, fetchData]);
 
   const resetForm = () => {
     setFormData({
@@ -221,7 +221,7 @@ const ExpenseOutput = () => {
       setConfirmModal({ isOpen: false, type: null, expenseId: null });
 
       const nextPage = expenses.length === 1 && page > 1 ? page - 1 : page;
-      await fetchData(nextPage, appliedSearch);
+      setPage(nextPage);
     } catch (error) {
       console.error(error);
       toast.error(error.message || "O'chirishda xatolik yuz berdi");
@@ -231,6 +231,7 @@ const ExpenseOutput = () => {
   };
 
   const handleSearchSubmit = () => {
+    setPage(1);
     setAppliedSearch(searchTerm.trim());
   };
 
@@ -429,7 +430,7 @@ const ExpenseOutput = () => {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => fetchData(page - 1, appliedSearch)}
+              onClick={() => setPage((prev) => prev - 1)}
               disabled={page <= 1 || loading}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
@@ -442,7 +443,7 @@ const ExpenseOutput = () => {
             </div>
 
             <button
-              onClick={() => fetchData(page + 1, appliedSearch)}
+              onClick={() => setPage((prev) => prev + 1)}
               disabled={page >= totalPages || loading || totalPages === 0}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
