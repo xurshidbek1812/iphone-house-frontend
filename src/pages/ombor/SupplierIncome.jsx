@@ -495,135 +495,158 @@ const SupplierIncome = () => {
               </div>
 
               <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-                <h3 className="font-semibold text-slate-700 mb-3 border-b border-slate-100 pb-2 text-sm">
-                  Tovarni tanlash va narxlash
-                </h3>
+  <h3 className="font-semibold text-slate-700 mb-3 border-b border-slate-100 pb-2 text-sm">
+    Tovarni tanlash va narxlash
+  </h3>
 
-                <div className="flex flex-col gap-4">
-                  <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_90px_110px_100px_110px_120px_auto] gap-3 items-start">
-                    <div className="relative min-w-0">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
-                        Tovar nomi / Kod
-                      </label>
-                      <input
-                        type="text"
-                        disabled={isSubmitting}
-                        className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium text-sm disabled:bg-gray-50"
-                        placeholder="Qidirish..."
-                        value={searchTerm}
-                        onChange={(e) => {
-                          setSearchTerm(e.target.value);
-                          setSelectedProduct(null);
-                        }}
-                      />
+  <div className="flex flex-col gap-4">
 
-                      {searchTerm && !selectedProduct && filteredProducts.length > 0 && (
-                        <ul className="absolute z-50 w-full bg-white border rounded-xl shadow-xl mt-1 max-h-60 overflow-y-auto">
-                          {filteredProducts.map((p) => (
-                            <li
-                              key={p.id}
-                              onClick={() => handleSelectProduct(p)}
-                              className="p-3 hover:bg-blue-50 cursor-pointer text-sm border-b transition-colors"
-                            >
-                              <div className="font-semibold text-gray-800">{p.name}</div>
-                              <div className="text-blue-600 font-mono font-semibold text-xs mt-1">
-                                ID: #{p.customId ?? '-'}
-                                {canSeeAmount && <> | {p.buyPrice} {p.buyCurrency}</>}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
+    {/* KATTA QIDIRUV QATORI */}
+    <div className="relative">
+      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+        Tovar nomi / Kod
+      </label>
 
-                    <div>
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
-                        Soni
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        disabled={isSubmitting}
-                        className="w-full p-3 border border-slate-200 rounded-xl outline-blue-500 text-center font-medium text-sm disabled:bg-gray-50"
-                        value={inputCount}
-                        onChange={(e) => setInputCount(e.target.value)}
-                      />
-                    </div>
+      <input
+        type="text"
+        disabled={isSubmitting}
+        className="w-full h-14 px-4 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium text-base"
+        placeholder="Tovar nomi yoki ID bo‘yicha qidiring..."
+        value={searchTerm}
+        onChange={(e) => {
+          setSearchTerm(e.target.value);
+          setSelectedProduct(null);
+        }}
+      />
 
-                    {canSeeAmount && (
-                      <div>
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
-                          Kirim narx
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          disabled={isSubmitting}
-                          className="w-full p-3 border border-slate-200 rounded-xl outline-blue-500 font-medium text-sm disabled:bg-gray-50"
-                          value={inputPrice}
-                          onChange={(e) => handlePriceChange(e.target.value)}
-                        />
-                      </div>
-                    )}
+      {searchTerm &&
+  !selectedProduct &&
+  filteredProducts.length > 0 && (
+    <ul className="absolute z-[9999] w-full bg-white border border-slate-200 rounded-xl shadow-2xl mt-2 max-h-[500px] overflow-y-auto">
 
-                    <div>
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
-                        Valyuta
-                      </label>
-                      <select
-                        disabled={isSubmitting}
-                        className="w-full p-3 border border-slate-200 rounded-xl outline-blue-500 text-sm font-medium bg-white disabled:bg-gray-50 cursor-pointer"
-                        value={inputCurrency}
-                        onChange={(e) => handleCurrencyChange(e.target.value)}
-                      >
-                        <option value="UZS">UZS</option>
-                        <option value="USD">USD</option>
-                      </select>
-                    </div>
+      {filteredProducts.map((p) => (
+        <li
+          key={p.id}
+          onClick={() => handleSelectProduct(p)}
+          className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-b-0 transition-colors flex items-center justify-between gap-3"
+        >
+          <div className="text-sm font-semibold text-slate-800 truncate">
+            {p.name}
+          </div>
 
-                    {canSeeAmount && (
-                      <div>
-                        <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 block">
-                          Ustama %
-                        </label>
-                        <input
-                          type="number"
-                          disabled={isSubmitting}
-                          className="w-full p-3 border border-amber-200 bg-amber-50 rounded-xl outline-amber-500 font-semibold text-amber-700 text-sm text-center disabled:opacity-50"
-                          placeholder="10"
-                          value={inputMarkup}
-                          onChange={(e) => handleMarkupChange(e.target.value)}
-                        />
-                      </div>
-                    )}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="text-xs font-mono text-blue-600">
+              #{p.customId ?? '-'}
+            </div>
 
-                    <div>
-                      <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 block">
-                        Sotuv narx
-                      </label>
-                      <input
-                        type="number"
-                        disabled={isSubmitting}
-                        className="w-full p-3 border border-emerald-200 bg-emerald-50 rounded-xl outline-emerald-500 font-semibold text-emerald-700 text-sm disabled:opacity-50"
-                        placeholder={canSeeAmount ? 'Avtomat' : 'Kiriting'}
-                        value={inputSalePrice}
-                        onChange={(e) => handleSalePriceChange(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="pt-6">
-                      <button
-                        type="button"
-                        disabled={isSubmitting}
-                        onClick={handleAddItem}
-                        className="w-full h-[46px] bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all flex justify-center items-center shadow-sm font-semibold gap-2 disabled:opacity-50 disabled:cursor-not-allowed px-4"
-                      >
-                        <Plus size={18} /> Qo'shish
-                      </button>
-                    </div>
-                  </div>
-                </div>
+            {canSeeAmount && (
+              <div className="text-xs text-slate-500">
+                {p.buyPrice || 0} {p.buyCurrency || 'UZS'}
               </div>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  )}
+    </div>
+
+    {/* INPUTLAR ALOHIDA ROW */}
+    <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+
+      <div>
+        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+          Soni
+        </label>
+
+        <input
+          type="number"
+          min="0"
+          disabled={isSubmitting}
+          className="w-full p-3 border border-slate-200 rounded-xl"
+          value={inputCount}
+          onChange={(e) => setInputCount(e.target.value)}
+        />
+      </div>
+
+      {canSeeAmount && (
+        <div>
+          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+            Kirim narx
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            disabled={isSubmitting}
+            className="w-full p-3 border border-slate-200 rounded-xl"
+            value={inputPrice}
+            onChange={(e) => handlePriceChange(e.target.value)}
+          />
+        </div>
+      )}
+
+      <div>
+        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+          Valyuta
+        </label>
+
+        <select
+          disabled={isSubmitting}
+          className="w-full p-3 border border-slate-200 rounded-xl"
+          value={inputCurrency}
+          onChange={(e) => handleCurrencyChange(e.target.value)}
+        >
+          <option value="UZS">UZS</option>
+          <option value="USD">USD</option>
+        </select>
+      </div>
+
+      {canSeeAmount && (
+        <div>
+          <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 block">
+            Ustama %
+          </label>
+
+          <input
+            type="number"
+            disabled={isSubmitting}
+            className="w-full p-3 border border-amber-200 bg-amber-50 rounded-xl"
+            value={inputMarkup}
+            onChange={(e) => handleMarkupChange(e.target.value)}
+          />
+        </div>
+      )}
+
+      <div>
+        <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 block">
+          Sotuv narx
+        </label>
+
+        <input
+          type="number"
+          disabled={isSubmitting}
+          className="w-full p-3 border border-emerald-200 bg-emerald-50 rounded-xl"
+          value={inputSalePrice}
+          onChange={(e) => handleSalePriceChange(e.target.value)}
+        />
+      </div>
+
+      <div className="flex items-end">
+        <button
+          type="button"
+          disabled={isSubmitting}
+          onClick={handleAddItem}
+          className="w-full h-[46px] bg-blue-600 text-white rounded-xl hover:bg-blue-700 flex justify-center items-center gap-2"
+        >
+          <Plus size={18} />
+          Qo‘shish
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
             </div>
 
             <div className="lg:col-span-3 flex flex-col gap-4">
