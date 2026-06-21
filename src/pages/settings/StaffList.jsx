@@ -75,7 +75,8 @@ const PERMISSION_GROUPS = [
     color: 'amber',
     items: [
       { key: 'inventory.view_amounts', label: "Kirim summasini ko'rish" },
-      { key: 'product.manage', label: "Mahsulot qo'shish va tahrirlash" }
+      { key: 'product.manage', label: "Mahsulot qo'shish va tahrirlash" },
+      { key: 'warehouse.manage', label: "Omborlarni boshqarish va o'tkazma qilish" }
     ]
   },
   {
@@ -90,6 +91,13 @@ const PERMISSION_GROUPS = [
     color: 'teal',
     items: [
       { key: 'supplier.manage', label: "Ta'minotchilarni boshqarish" }
+    ]
+  },
+  {
+    title: 'Faoliyat tarixi',
+    color: 'slate',
+    items: [
+      { key: 'audit.view', label: "Faoliyat tarixini ko'rish" }
     ]
   }
 ];
@@ -142,6 +150,12 @@ const groupColorClasses = {
     title: 'text-teal-700',
     checked: 'bg-teal-50 border-teal-300',
     unchecked: 'bg-white border-gray-200 hover:border-teal-200'
+  },
+  slate: {
+    box: 'border-slate-200 bg-slate-50/40',
+    title: 'text-slate-700',
+    checked: 'bg-slate-100 border-slate-300',
+    unchecked: 'bg-white border-gray-200 hover:border-slate-300'
   }
 };
 

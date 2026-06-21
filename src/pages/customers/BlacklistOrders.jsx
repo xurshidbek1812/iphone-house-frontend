@@ -288,7 +288,14 @@ const BlacklistOrders = () => {
                   </td>
 
                   <td className="p-4 text-gray-600 font-medium">{r.requesterName}</td>
-                  <td className="p-4 text-gray-600">{r.approverName || '-'}</td>
+                  <td className="p-4 text-gray-600">
+                    {r.approverName || '-'}
+                    {r.approverName && r.approvedAt && (
+                      <div className="text-[11px] text-gray-400 mt-0.5">
+                        {new Date(r.approvedAt).toLocaleDateString('ru-RU')}
+                      </div>
+                    )}
+                  </td>
                   <td className="p-4 text-xs text-gray-500 leading-relaxed">{r.reason}</td>
 
                   <td className="p-4 text-center">
@@ -305,6 +312,11 @@ const BlacklistOrders = () => {
                     >
                       {r.status}
                     </span>
+                    {r.cancelledAt && (
+                      <div className="text-[11px] text-gray-400 mt-1">
+                        Bekor qilindi: {new Date(r.cancelledAt).toLocaleDateString('ru-RU')}
+                      </div>
+                    )}
                   </td>
 
                   <td className="p-4 text-right">

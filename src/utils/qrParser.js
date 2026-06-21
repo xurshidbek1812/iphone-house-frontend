@@ -15,6 +15,7 @@ export const parseQrCode = (code) => {
   let id = raw;
   let invoiceId = '';
   let batchId = '';
+  let imei = '';
 
   if (raw.includes('|')) {
     const parts = raw.split('|').map((p) => p.trim());
@@ -24,13 +25,16 @@ export const parseQrCode = (code) => {
       parts.find((p) => p.startsWith('INV:'))?.replace('INV:', '').trim() || '';
     batchId =
       parts.find((p) => p.startsWith('BATCH:'))?.replace('BATCH:', '').trim() || '';
+    imei = parts.find((p) => p.startsWith('IMEI:'))?.replace('IMEI:', '').trim() || '';
   } else if (raw.startsWith('ID:')) {
     id = raw.replace('ID:', '').trim();
   }
 
   let type = 'PRODUCT';
 
-  if (invoiceId) {
+  if (imei) {
+    type = 'UNIT';
+  } else if (invoiceId) {
     type = 'INVOICE';
   } else if (batchId) {
     type = 'BATCH';
@@ -43,6 +47,7 @@ export const parseQrCode = (code) => {
     id,
     invoiceId,
     batchId,
+    imei,
     type,
     isValid: Boolean(id)
   };

@@ -77,7 +77,8 @@ const NotificationsTab = () => {
 
   const [notifications, setNotifications] = useState([]);
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(20);
+  const [limitInput, setLimitInput] = useState('20');
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
@@ -110,7 +111,17 @@ const NotificationsTab = () => {
 
   useEffect(() => {
     loadNotifications(1);
-  }, []);
+  }, [limit]);
+
+  const commitLimitChange = () => {
+    const parsed = Math.min(100, Math.max(1, Number(limitInput) || 20));
+    setLimitInput(String(parsed));
+    setLimit(parsed);
+  };
+
+  const handleLimitKeyDown = (e) => {
+    if (e.key === 'Enter') commitLimitChange();
+  };
 
   const handleReadOne = async (id) => {
     try {
@@ -363,7 +374,7 @@ const NotificationsTab = () => {
         {notifications.length === 0 ? (
           <div className="p-10 text-slate-400">Xabarlar topilmadi</div>
         ) : (
-          <div className="p-4 space-y-3">
+          <div className="max-h-[55vh] overflow-y-auto p-4 space-y-3">
             {notifications.map((item) => {
               const Icon = getTypeIcon(item.type);
               const styles = getTypeStyles(item.type);
@@ -434,10 +445,26 @@ const NotificationsTab = () => {
           </div>
         )}
 
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
-          <div className="text-sm font-bold text-slate-500">
-            Jami:{" "}
-            <span className="text-slate-800">{total} ta</span>
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className="text-sm font-bold text-slate-500">
+              Jami:{" "}
+              <span className="text-slate-800">{total} ta</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-bold text-slate-500">Sahifada:</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={limitInput}
+                onChange={(e) => setLimitInput(e.target.value)}
+                onBlur={commitLimitChange}
+                onKeyDown={handleLimitKeyDown}
+                className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-2">

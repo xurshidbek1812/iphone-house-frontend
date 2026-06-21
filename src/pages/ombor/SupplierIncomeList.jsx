@@ -16,7 +16,8 @@ import {
   Square,
   ChevronLeft,
   ChevronRight,
-  Pencil
+  Pencil,
+  Smartphone
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -39,7 +40,8 @@ const SupplierIncomeList = () => {
   const [isPrinting, setIsPrinting] = useState(false);
 
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(20);
+  const [limitInput, setLimitInput] = useState('20');
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
@@ -153,40 +155,16 @@ const SupplierIncomeList = () => {
     }
   };
 
-  const buildEditPayload = (invoice) => {
-    const items = Array.isArray(invoice?.items) ? invoice.items : [];
+  const commitLimitChange = () => {
+    const parsed = Math.min(500, Math.max(1, Number(limitInput) || 20));
+    setLimitInput(String(parsed));
+    setLimit(parsed);
+  };
 
-    return {
-      id: invoice.id,
-      invoiceNumber: invoice.invoiceNumber || '',
-      supplierName: invoice.supplierName || invoice.supplier || '',
-      supplier: invoice.supplier || invoice.supplierName || '',
-      supplierId: invoice.supplierId || null,
-      date: invoice.date || invoice.createdAt || '',
-      status: invoice.status || 'Jarayonda',
-      note: invoice.note || '',
-      userName: invoice.userName || '',
-      totalSum: Number(invoice.totalSum || 0),
-      items: items.map((item, index) => ({
-        localId: `${invoice.id}-${item.customId ?? item.id ?? index}`,
-        id: item.id ?? null,
-        customId: item.customId ?? '',
-        name: item.name || '',
-        count: Number(item.count || 0),
-        price: Number(item.price || 0),
-        salePrice: Number(item.salePrice || 0),
-        currency: item.currency || 'UZS',
-        barcode: item.barcode || '',
-        imei: item.imei || '',
-        serialNumber: item.serialNumber || '',
-        categoryId: item.categoryId || null,
-        brandId: item.brandId || null,
-        productId: item.productId || null,
-        color: item.color || '',
-        memory: item.memory || '',
-        model: item.model || ''
-      }))
-    };
+  const handleLimitKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      commitLimitChange();
+    }
   };
 
   const openEditPage = (invoice) => {
@@ -201,13 +179,7 @@ const SupplierIncomeList = () => {
     setActiveMenu(null);
     if (viewInvoice?.id === invoice.id) setViewInvoice(null);
 
-    navigate(`/ombor/taminotchi-kirim/tahrirlash/${invoice.id}`, {
-      state: {
-        mode: 'edit',
-        invoiceId: invoice.id,
-        invoiceData: buildEditPayload(invoice)
-      }
-    });
+    navigate(`/ombor/taminotchi-kirim/tahrirlash/${invoice.id}`);
   };
 
   const executeApprove = async (id) => {
@@ -324,6 +296,7 @@ const SupplierIncomeList = () => {
         name: item.name || "Noma'lum tovar",
         labelPrice: Number(item.salePrice || 0),
         copies: 1,
+        imeis: Array.isArray(item.imeis) && item.imeis.length ? item.imeis : null,
         isChecked: true
       }))
     );
@@ -375,17 +348,23 @@ const SupplierIncomeList = () => {
       let content = '';
 
       for (const item of itemsToPrint) {
-        const copies = Math.max(1, Number(item.copies) || 1);
         const qrValue = buildQrValue(item, invoiceToPrint.id);
         const qrDataUrl = await QRCode.toDataURL(qrValue, {
           width: 220,
           margin: 0
         });
 
+        const safeName = escapeHtml(item.name || '');
+        const safeCustomId = escapeHtml(item.customId ?? '-');
+        const safePrice = Number(item.labelPrice || 0).toLocaleString('uz-UZ');
+
+        const copies =
+          Array.isArray(item.imeis) && item.imeis.length > 0
+            ? item.imeis.length
+            : Math.max(1, Number(item.copies) || 1);
+
         for (let i = 0; i < copies; i++) {
-          const safeName = escapeHtml(item.name || '');
-          const safeCustomId = escapeHtml(item.customId ?? '-');
-          const safePrice = Number(item.labelPrice || 0).toLocaleString('uz-UZ');
+          const pair = Array.isArray(item.imeis) ? item.imeis[i] : null;
 
           content += `
             <div class="label-card">
@@ -393,6 +372,11 @@ const SupplierIncomeList = () => {
                 <div class="product-name">${safeName}</div>
                 <div class="product-id">ID: ${safeCustomId}</div>
               </div>
+              ${
+                pair
+                  ? `<div class="imei-row">IMEI 1: ${escapeHtml(pair.imei)}</div><div class="imei-row">IMEI 2: ${escapeHtml(pair.imei2)}</div>`
+                  : ''
+              }
               <div class="divider"></div>
               <div class="bottom-row">
                 <div class="price-box">
@@ -486,6 +470,15 @@ const SupplierIncomeList = () => {
                 color: #4b5563;
                 white-space: nowrap;
                 margin-top: 0.5mm;
+              }
+
+              .imei-row {
+                font-size: 1.9mm;
+                line-height: 1.2;
+                font-weight: 800;
+                color: #1f2937;
+                font-family: monospace;
+                margin-top: 0.6mm;
               }
 
               .divider {
@@ -745,6 +738,11 @@ const SupplierIncomeList = () => {
                         <div className="text-[15px] font-semibold text-slate-800 tracking-tight">
                           #{inv.invoiceNumber}
                         </div>
+                        {inv.userName && (
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            Yaratdi: {inv.userName}
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-4 py-3 align-middle">
@@ -849,9 +847,25 @@ const SupplierIncomeList = () => {
           </table>
         </div>
 
-        <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
-          <div className="text-sm text-slate-500">
-            Jami: <span className="font-medium text-slate-800">{total}</span>
+        <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-slate-500">
+              Jami: <span className="font-medium text-slate-800">{total}</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-slate-500">Sahifada:</label>
+              <input
+                type="number"
+                min="1"
+                max="500"
+                value={limitInput}
+                onChange={(e) => setLimitInput(e.target.value)}
+                onBlur={commitLimitChange}
+                onKeyDown={handleLimitKeyDown}
+                className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -969,19 +983,30 @@ const SupplierIncomeList = () => {
                         </td>
 
                         <td className="p-2">
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.copies}
-                            onChange={(e) =>
-                              updatePrintItem(
-                                item.rowId,
-                                'copies',
-                                Math.max(1, Number(e.target.value || 1))
-                              )
-                            }
-                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200"
-                          />
+                          {Array.isArray(item.imeis) && item.imeis.length > 0 ? (
+                            <div
+                              className="w-full rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-center text-sm font-semibold text-indigo-700"
+                              title={item.imeis
+                                .map((pair) => `${pair.imei} / ${pair.imei2}`)
+                                .join('\n')}
+                            >
+                              {item.imeis.length} ta (IMEI)
+                            </div>
+                          ) : (
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.copies}
+                              onChange={(e) =>
+                                updatePrintItem(
+                                  item.rowId,
+                                  'copies',
+                                  Math.max(1, Number(e.target.value || 1))
+                                )
+                              }
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200"
+                            />
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1044,53 +1069,90 @@ const SupplierIncomeList = () => {
             </div>
 
             <div className="p-5 max-h-[82vh] overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                    Faktura
-                  </div>
-                  <div className="text-sm font-semibold text-slate-800">
-                    #{viewInvoice.invoiceNumber}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                    Sana
-                  </div>
-                  <div className="text-sm font-semibold text-slate-800">
-                    {formatDateTime(viewInvoice.date || viewInvoice.createdAt)}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                    Ta'minotchi
-                  </div>
-                  <div className="text-sm font-semibold text-slate-800">
-                    {viewInvoice.supplierName || viewInvoice.supplier || '-'}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                    Holat
-                  </div>
+              <div className="mb-5 rounded-xl border border-slate-200 bg-white px-5 py-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Faktura</div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      #{viewInvoice.invoiceNumber}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Sana</div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {formatDateTime(viewInvoice.date || viewInvoice.createdAt)}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Ta'minotchi</div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {viewInvoice.supplierName || viewInvoice.supplier || '-'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Holat</div>
                     <span
-                      className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-[11px] font-normal leading-none ${
+                      className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-none ${
                         viewInvoice.status === 'Tasdiqlandi'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                          ? 'bg-emerald-50 text-emerald-700'
                           : viewInvoice.status === 'Yuborildi'
-                          ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                          ? 'bg-blue-50 text-blue-700'
                           : viewInvoice.status === 'Bekor qilindi'
-                          ? 'bg-rose-50 text-rose-700 border border-rose-100'
-                          : 'bg-amber-50 text-amber-700 border border-amber-100'
+                          ? 'bg-rose-50 text-rose-700'
+                          : 'bg-amber-50 text-amber-700'
                       }`}
                     >
                       {viewInvoice.status}
                     </span>
                   </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Yaratdi</div>
+                    <div className="text-sm font-medium text-slate-700">
+                      {viewInvoice.userName || "Noma'lum"}
+                    </div>
+                  </div>
+
+                  {viewInvoice.sentByName && (
+                    <div>
+                      <div className="text-[11px] text-slate-400 mb-1">Yubordi</div>
+                      <div className="text-sm font-medium text-blue-700">
+                        {viewInvoice.sentByName}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {formatDateTime(viewInvoice.sentAt)}
+                      </div>
+                    </div>
+                  )}
+
+                  {viewInvoice.approvedByName && (
+                    <div>
+                      <div className="text-[11px] text-slate-400 mb-1">Tasdiqladi</div>
+                      <div className="text-sm font-medium text-emerald-700">
+                        {viewInvoice.approvedByName}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {formatDateTime(viewInvoice.approvedAt)}
+                      </div>
+                    </div>
+                  )}
+
+                  {viewInvoice.cancelledByName && (
+                    <div>
+                      <div className="text-[11px] text-slate-400 mb-1">Bekor qildi</div>
+                      <div className="text-sm font-medium text-rose-700">
+                        {viewInvoice.cancelledByName}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {formatDateTime(viewInvoice.cancelledAt)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1127,6 +1189,17 @@ const SupplierIncomeList = () => {
                             </td>
                             <td className="p-4 text-[14px] font-medium text-slate-700">
                               {item.name}
+                              {Array.isArray(item.imeis) && item.imeis.length > 0 && (
+                                <span
+                                  className="inline-flex items-center gap-1 ml-2 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[11px] font-semibold align-middle"
+                                  title={item.imeis
+                                    .map((pair) => `${pair.imei} / ${pair.imei2}`)
+                                    .join('\n')}
+                                >
+                                  <Smartphone size={11} />
+                                  IMEI: {item.imeis.length} ta
+                                </span>
+                              )}
                             </td>
                             <td className="p-4 text-center text-[14px] font-medium text-slate-700">
                               {Number(item.count || 0)}

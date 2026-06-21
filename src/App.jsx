@@ -81,7 +81,7 @@ const SupplierReturn = lazy(() => import('./pages/ombor/SupplierReturn'));
 const UnfinishedSales = lazy(() => import('./pages/ombor/UnfinishedSales'));
 const CustomerIncome = lazy(() => import('./pages/ombor/CustomerIncome'));
 const Sklad = lazy(() => import('./pages/ombor/Sklad'));
-const AddSupplierReturn = lazy(() => import('./pages/ombor/AddSupplierReturn'));
+const WarehouseTransfer = lazy(() => import('./pages/ombor/WarehouseTransfer'));
 const InventoryCount = lazy(() => import('./pages/ombor/InventoryCount'));
 const InventoryHistory = lazy(() => import('./pages/ombor/InventoryHistory'));
 
@@ -136,8 +136,8 @@ const StaffList = lazy(() => import('./pages/settings/StaffList'));
 const ProfileSettings = lazy(() => import('./pages/settings/ProfileSettings'));
 const CategorySettings = lazy(() => import('./pages/settings/CategorySettings'));
 const ExpenseCategorySettings = lazy(() => import('./pages/settings/ExpenseCategorySettings'));
-
-const ComingSoon = lazy(() => import('./pages/System/ComingSoon'));
+const Warehouses = lazy(() => import('./pages/settings/Warehouses'));
+const ActivityHistory = lazy(() => import('./pages/settings/ActivityHistory'));
 
 // --- DEBUG COMPONENT ---
 const NotFound = () => {
@@ -158,11 +158,11 @@ const MainLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans">
+    <div className="flex h-screen bg-slate-50 font-sans">
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
 
       <div
-        className={`flex min-h-screen flex-1 flex-col transition-all duration-300 ${
+        className={`flex h-screen flex-1 flex-col transition-all duration-300 ${
           isSidebarOpen ? 'ml-64' : 'ml-20'
         }`}
       >
@@ -201,55 +201,11 @@ function App() {
               <Route element={<MainLayout />}>
                 <Route path="/" element={<Dashboard />} />
 
-                {/* AVTO */}
-                <Route path="/avto/shartnomalar" element={<ComingSoon />} />
-                <Route path="/avto" element={<ComingSoon />} />
-
-                {/* NAQDSIZ */}
-                <Route path="/naqdsiz/tushumlar" element={<ComingSoon />} />
-                <Route path="/naqdsiz" element={<ComingSoon />} />
-
                 {/* HISOBOTLAR */}
                 <Route path="/hisobotlar/royxat" element={<ReportsList />} />
-                <Route path="/hisobotlar" element={<ComingSoon />} />
-
-                {/* XARAJATLAR */}
-                <Route path="/xarajatlar/kassa" element={<ComingSoon />} />
 
                 {/* YORLIQ */}
-                <Route path="/yorliq/ozgargan" element={<ComingSoon />} />
                 <Route path="/yorliq/chop-etish" element={<PrintPriceTag />} />
-                <Route path="/yorliq/shablonlar" element={<ComingSoon />} />
-
-                {/* NARXLAR */}
-                <Route path="/narxlar/ozgargan" element={<ComingSoon />} />
-                <Route path="/narxlar/ozgargan-narxlar" element={<ComingSoon />} />
-                <Route path="/narxlar/kirim" element={<ComingSoon />} />
-                <Route path="/narxlar/kirim-narxi-ozgarishlari" element={<ComingSoon />} />
-                <Route path="/narxlar/umumiy" element={<ComingSoon />} />
-                <Route path="/narxlar/umumiy-ustama" element={<ComingSoon />} />
-                <Route path="/narxlar/umumiy-ustama-belgilash" element={<ComingSoon />} />
-                <Route path="/narxlar/kategoriya" element={<ComingSoon />} />
-                <Route path="/narxlar/kategoriya-ustama" element={<ComingSoon />} />
-                <Route path="/narxlar/kategoriya-uchun-ustama" element={<ComingSoon />} />
-                <Route path="/narxlar/tovar" element={<ComingSoon />} />
-                <Route path="/narxlar/tovar-ustama" element={<ComingSoon />} />
-                <Route path="/narxlar/tovarlar-uchun-ustama" element={<ComingSoon />} />
-
-                {/* HISOB RAQAM */}
-                <Route path="/hisobraqam/bonus" element={<ComingSoon />} />
-                <Route path="/hisobraqam/tolov" element={<ComingSoon />} />
-                <Route path="/hisobraqam/tovar" element={<ComingSoon />} />
-                <Route path="/hisobraqam/tarix" element={<ComingSoon />} />
-                <Route path="/hisobraqam/qoldiq" element={<ComingSoon />} />
-                <Route path="/hisobraqam/amaliyot" element={<ComingSoon />} />
-                <Route path="/hisobraqam/qaytarish" element={<ComingSoon />} />
-                <Route path="/hisobraqam/hisob-tarix" element={<ComingSoon />} />
-
-                {/* CHIQIM */}
-                <Route path="/chiqim/faktura" element={<ComingSoon />} />
-                <Route path="/chiqim/yetkazish" element={<ComingSoon />} />
-                <Route path="/chiqim/olib-ketish" element={<ComingSoon />} />
 
                 {/* MIJOZLAR */}
                 <Route path="/mijozlar" element={<CustomerList />} />
@@ -259,9 +215,7 @@ function App() {
                 <Route path="/mijozlar/qora-buyurtma" element={<BlacklistOrders />} />
 
                 {/* HISOB-KITOBLAR */}
-                <Route path="/hisob/akt" element={<ComingSoon />} />
                 <Route path="/hisob/taminotchi" element={<SupplierAccounts />} />
-                <Route path="/hisob/limit" element={<ComingSoon />} />
                 <Route
                   path="/hisob/taminotchilar-royxati"
                   element={
@@ -272,9 +226,14 @@ function App() {
                 />
 
                 {/* OMBOR */}
-                <Route path="/ombor/amaliyotlar" element={<ComingSoon />} />
-                <Route path="/ombor/boshqa-kirim" element={<ComingSoon />} />
-                <Route path="/ombor/boshqa-chiqim" element={<ComingSoon />} />
+                <Route
+                  path="/ombor/amaliyotlar"
+                  element={
+                    <PermissionRoute permission={PERMISSIONS.WAREHOUSE_MANAGE}>
+                      <WarehouseTransfer />
+                    </PermissionRoute>
+                  }
+                />
                 <Route path="/ombor/taminotchi-kirim" element={<SupplierIncomeList />} />
                 <Route path="/ombor/taminotchi-kirim/qoshish" element={<SupplierIncome />} />
                 <Route
@@ -286,18 +245,7 @@ function App() {
                   }
                 />
                 <Route path="/naqd-savdo/tahrirlash/:id" element={<AddCashSale />} />
-                <Route path="/ombor/taminotchi-qaytarish" element={<ComingSoon />} />
-                <Route path="/ombor/yakunlanmagan" element={<ComingSoon />} />
-                <Route path="/ombor/mijoz-kirim" element={<ComingSoon />} />
                 <Route path="/ombor/qoldiq" element={<Sklad />} />
-                <Route
-                  path="/ombor/taminotchi-qaytarish/qoshish"
-                  element={
-                    <PermissionRoute permission={PERMISSIONS.PRODUCT_MANAGE}>
-                      <AddSupplierReturn />
-                    </PermissionRoute>
-                  }
-                />
                 <Route
                   path="/ombor/taminotchilar"
                   element={
@@ -309,43 +257,22 @@ function App() {
                 <Route path="/ombor/sanoq" element={<InventoryCount />} />
                 <Route path="/ombor/sanoq-tarixi" element={<InventoryHistory />} />
 
-                {/* UNDIRUV */}
-                <Route path="/undiruv" element={<ComingSoon />} />
-                <Route path="/undiruv/barcha" element={<ComingSoon />} />
-                <Route path="/undiruv/mijozlar" element={<ComingSoon />} />
-                <Route path="/undiruv/xat" element={<ComingSoon />} />
-                <Route path="/undiruv/xat-shablon" element={<ComingSoon />} />
-                <Route path="/undiruv/biriktirish" element={<ComingSoon />} />
-                <Route path="/undiruv/mfy" element={<ComingSoon />} />
-                <Route path="/undiruv/ish-joyi" element={<ComingSoon />} />
-                <Route path="/undiruv/izoh" element={<ComingSoon />} />
-
                 {/* SHARTNOMA */}
                 <Route path="/shartnoma" element={<ContractList />} />
-                <Route path="/shartnoma/buyurtmalar" element={<ComingSoon />} />
                 <Route path="/shartnoma/chegirmalar" element={<Discounts />} />
-                <Route path="/shartnoma/qaytarish" element={<ComingSoon />} />
-                <Route path="/shartnoma/yopilgan" element={<ComingSoon />} />
                 <Route path="/shartnoma/qoshish" element={<AddContract />} />
                 <Route path="/shartnoma/tahrirlash/:id" element={<AddContract />} />
 
                 {/* NAQD SAVDO */}
                 <Route path="/savdo" element={<CashSales />} />
                 <Route path="/naqd-savdo/qoshish" element={<AddCashSale />} />
-                <Route path="/savdo/qaytarish" element={<ComingSoon />} />
-                <Route path="/savdo/chegirmalar" element={<ComingSoon />} />
 
                 {/* KASSA */}
                 <Route path="/kassa" element={<Finance />} />
                 <Route path="/kassa/shartnoma-tolov" element={<ContractPayment />} />
-                <Route path="/kassa/oldindan-tolov" element={<ComingSoon />} />
                 <Route path="/kassa/naqd-tolov" element={<CashSalesPayment />} />
-                <Route path="/kassa/boshqa-kirim" element={<ComingSoon />} />
-                <Route path="/kassa/boshqa-chiqim" element={<ComingSoon />} />
-                <Route path="/kassa/xarajat-kirim" element={<ComingSoon />} />
                 <Route path="/kassa/xarajat-chiqim" element={<ExpenseOutput />} />
                 <Route path="/kassa/amaliyotlar" element={<AllCashOperations />} />
-                <Route path="/kassa/buyurtmalar" element={<ComingSoon />} />
                 <Route
                   path="/kassa/boshqarish"
                   element={
@@ -355,16 +282,18 @@ function App() {
                   }
                 />
                 <Route path="/kassa/qoldiq" element={<CashBalance />} />
-                <Route path="/kassa/mening-kassam" element={<ComingSoon />} />
-                <Route path="/kassa/tushumlar" element={<ComingSoon />} />
-                <Route path="/kassa/buyurtmalar-royxati" element={<ComingSoon />} />
-                <Route path="/kassa/valyuta" element={<ComingSoon />} />
 
                 {/* SOZLAMALAR */}
                 <Route path="/sozlamalar/xodimlar" element={<StaffList />} />
-                <Route path="/xarajatlar" element={<ComingSoon />} />
+                <Route
+                  path="/sozlamalar/faoliyat-tarixi"
+                  element={
+                    <PermissionRoute permission={PERMISSIONS.AUDIT_VIEW}>
+                      <ActivityHistory />
+                    </PermissionRoute>
+                  }
+                />
                 <Route path="/sozlamalar/profil" element={<ProfileSettings />} />
-                <Route path="/sms/mijozlar" element={<ComingSoon />} />
                 <Route
                   path="/sozlamalar/kategoriyalar"
                   element={
@@ -378,6 +307,14 @@ function App() {
                   element={
                     <PermissionRoute permission={PERMISSIONS.EXPENSE_CATEGORY_MANAGE}>
                       <ExpenseCategorySettings />
+                    </PermissionRoute>
+                  }
+                />
+                <Route
+                  path="/sozlamalar/omborlar"
+                  element={
+                    <PermissionRoute permission={PERMISSIONS.WAREHOUSE_MANAGE}>
+                      <Warehouses />
                     </PermissionRoute>
                   }
                 />

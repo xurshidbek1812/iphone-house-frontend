@@ -7,19 +7,13 @@ import {
   Wallet,
   FileText,
   ShoppingCart,
-  RefreshCcw,
   Calculator,
   Users,
-  Truck,
-  CreditCard,
   Tag,
-  MessageSquare,
   BarChart2,
   Settings,
   ChevronDown,
   Menu,
-  Percent,
-  Car,
   LogOut,
   UserCircle,
   DollarSign,
@@ -176,9 +170,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         return;
       }
 
-      const data = await apiFetch('/api/notifications');
+      const data = await apiFetch('/api/notifications?limit=50');
 
-      const list = Array.isArray(data) ? data : [];
+      const list = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
       const unread = list.filter((n) => !n.isRead).length;
 
       setNotifications(list.slice(0, 8));
@@ -243,7 +237,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       return;
     }
 
-    navigate('/dashboard/notifications');
+    navigate('/');
   };
 
   const menus = [
@@ -258,24 +252,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       icon: <Wallet size={20} />,
       submenu: [
         { title: "Shartnomaga to'lov olish", path: '/kassa/shartnoma-tolov' },
-        { title: "Oldindan to'lov", path: '/kassa/oldindan-tolov' },
         { title: "Naqd savdoga to'lov olish", path: '/kassa/naqd-tolov' },
-
-        {
-          title: 'Boshqa kassadan kirim',
-          path: '/kassa/boshqa-kirim',
-          permissions: [PERMISSIONS.CASHBOX_MANAGE]
-        },
-        {
-          title: "Boshqa kassaga chiqim",
-          path: '/kassa/boshqa-chiqim',
-          permissions: [PERMISSIONS.CASHBOX_MANAGE]
-        },
-
-        { title: "Xarajatdan pul kirim", path: '/kassa/xarajat-kirim' },
         { title: "Xarajatga pul chiqim", path: '/kassa/xarajat-chiqim' },
         { title: 'Barcha kassa amaliyotlari', path: '/kassa/amaliyotlar' },
-        { title: 'Barcha kassa buyurtmalari', path: '/kassa/buyurtmalar' },
 
         {
           title: 'Kassalarni boshqarish',
@@ -283,11 +262,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           permissions: [PERMISSIONS.CASHBOX_MANAGE]
         },
 
-        { title: "Kassalar qoldig'i", path: '/kassa/qoldiq' },
-        { title: 'Mening kassalarim', path: '/kassa/mening-kassam' },
-        { title: 'Barcha tushumlar', path: '/kassa/tushumlar' },
-        { title: "Buyurtmalar ro'yxati", path: '/kassa/buyurtmalar-royxati' },
-        { title: 'Valyuta ayirboshlash', path: '/kassa/valyuta' }
+        { title: "Kassalar qoldig'i", path: '/kassa/qoldiq' }
       ]
     },
 
@@ -296,53 +271,29 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       icon: <FileText size={20} />,
       submenu: [
         { title: "Shartnoma ro'yxati", path: '/shartnoma' },
-        { title: "Buyurtmalar ro'yxati", path: '/shartnoma/buyurtmalar' },
-        { title: 'Berilgan chegirmalar', path: '/shartnoma/chegirmalar' },
-        { title: 'Tovar qaytarish', path: '/shartnoma/qaytarish' },
-        { title: 'Yopilgan shartnomalar', path: '/shartnoma/yopilgan' }
+        { title: 'Berilgan chegirmalar', path: '/shartnoma/chegirmalar' }
       ]
     },
 
     {
       title: 'Naqd savdo',
       icon: <ShoppingCart size={20} />,
-      submenu: [
-        { title: "Naqd savdolar ro'yxati", path: '/savdo' },
-        { title: 'Tovar qaytarish', path: '/savdo/qaytarish' },
-        { title: 'Berilgan chegirmalar', path: '/savdo/chegirmalar' }
-      ]
-    },
-
-    {
-      title: 'Undiruv',
-      icon: <RefreshCcw size={20} />,
-      submenu: [
-        { title: 'Biriktirilgan shartnomalar', path: '/undiruv' },
-        { title: 'Barcha shartnomalar', path: '/undiruv/barcha' },
-        { title: 'Barcha mijozlar', path: '/undiruv/mijozlar' },
-        { title: 'Ogohlantirish xati', path: '/undiruv/xat' },
-        { title: 'Ogohlantirish xati shablonlari', path: '/undiruv/xat-shablon' },
-        { title: "Mas'ul biriktirish", path: '/undiruv/biriktirish' },
-        { title: 'MFY larni biriktirish', path: '/undiruv/mfy' },
-        { title: 'Ish joylarini biriktirish', path: '/undiruv/ish-joyi' },
-        { title: 'Izoh turlari', path: '/undiruv/izoh' }
-      ]
+      submenu: [{ title: "Naqd savdolar ro'yxati", path: '/savdo' }]
     },
 
     {
       title: 'Ombor',
       icon: <Package size={20} />,
       submenu: [
-        { title: 'Barcha ombor amaliyotlari', path: '/ombor/amaliyotlar' },
-        { title: 'Boshqa ombordan kirim', path: '/ombor/boshqa-kirim' },
-        { title: 'Boshqa omborga chiqim', path: '/ombor/boshqa-chiqim' },
+        {
+          title: "Omborlar o'tkazmasi",
+          path: '/ombor/amaliyotlar',
+          permissions: [PERMISSIONS.WAREHOUSE_MANAGE]
+        },
         {
           title: "Ta'minotchidan tovar kirim",
           path: '/ombor/taminotchi-kirim',
         },
-        { title: "Ta'minotchiga tovar qaytarish", path: '/ombor/taminotchi-qaytarish' },
-        { title: 'Savdosi yakunlanmaganlar', path: '/ombor/yakunlanmagan' },
-        { title: 'Mijozdan tovar kirimi', path: '/ombor/mijoz-kirim' },
         { title: 'Sanoq aktlari (Tarix)', path: '/ombor/sanoq-tarixi' },
         {
           title: "Tovarlar qoldig'i",
@@ -357,7 +308,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       icon: <Calculator size={20} />,
       permissions: [PERMISSIONS.SUPPLIER_MANAGE, PERMISSIONS.INVENTORY_VIEW_AMOUNTS],
       submenu: [
-        { title: "Ta'minotchi akt-sverkasi", path: '/hisob/akt' },
         {
           title: "Ta'minotchilar ro'yxati",
           path: '/hisob/taminotchilar-royxati',
@@ -367,8 +317,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           title: "Ta'minotchilar hisob-kitobi",
           path: '/hisob/taminotchi',
           permissions: [PERMISSIONS.INVENTORY_VIEW_AMOUNTS]
-        },
-        { title: "Ta'minotchi limiti", path: '/hisob/limit' }
+        }
       ]
     },
 
@@ -383,80 +332,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     },
 
     {
-      title: 'Mijozga tovar chiqimi',
-      icon: <Truck size={20} />,
-      submenu: [
-        { title: 'Chiqim fakturalar', path: '/chiqim/faktura' },
-        { title: 'Yetkazib berish', path: '/chiqim/yetkazish' },
-        { title: 'Olib ketish', path: '/chiqim/olib-ketish' }
-      ]
-    },
-
-    {
-      title: 'Mijoz hisob raqami',
-      icon: <CreditCard size={20} />,
-      submenu: [
-        { title: 'Bonus buyurtmalari', path: '/hisobraqam/bonus' },
-        { title: "Bonus farqi uchun to'lov", path: '/hisobraqam/tolov' },
-        { title: "Bonusga olingan tovarlar", path: '/hisobraqam/tovar' },
-        { title: 'Bonus hisob raqami tarixi', path: '/hisobraqam/tarix' },
-        { title: 'Hisob raqam qoldiqlari', path: '/hisobraqam/qoldiq' },
-        { title: 'Hisob raqam amaliyotlari', path: '/hisobraqam/amaliyot' },
-        { title: 'Bonus tovarini qaytarish', path: '/hisobraqam/qaytarish' },
-        { title: 'Hisob raqam tarixi', path: '/hisobraqam/hisob-tarix' }
-      ]
-    },
-
-    {
-      title: 'Narxlarni boshqarish',
-      icon: <Tag size={20} />,
-      submenu: [
-        { title: "O'zgargan narxlar", path: '/narxlar/ozgargan' },
-        { title: "Kirim narxi o'zgarishlari", path: '/narxlar/kirim' },
-        { title: 'Umumiy ustama belgilash', path: '/narxlar/umumiy' },
-        { title: 'Kategoriya uchun ustama', path: '/narxlar/kategoriya' },
-        { title: 'Tovarlar uchun ustama', path: '/narxlar/tovar' }
-      ]
-    },
-
-    {
-      title: 'SMS yuborish',
-      icon: <MessageSquare size={20} />,
-      submenu: [{ title: 'Mijozlarga sms yuborish', path: '/sms/mijozlar' }]
-    },
-
-    {
       title: "Narx yorlig'i",
       icon: <Tag size={20} />,
-      submenu: [
-        { title: "Narxi o'zgargan tovarlar", path: '/yorliq/ozgargan' },
-        { title: "Narx yorlig'ini chop etish", path: '/yorliq/chop-etish' },
-        { title: "Narx yorlig'i shablonlari", path: '/yorliq/shablonlar' }
-      ]
-    },
-
-    {
-      title: 'Xarajatlar',
-      icon: <Percent size={20} />,
-      submenu: [{ title: 'Kassadan xarajatlar', path: '/xarajatlar/kassa' }]
+      submenu: [{ title: "Narx yorlig'ini chop etish", path: '/yorliq/chop-etish' }]
     },
 
     {
       title: 'Hisobotlar',
       icon: <BarChart2 size={20} />,
       submenu: [{ title: "Hisobotlar ro'yxati", path: '/hisobotlar/royxat' }]
-    },
-
-    {
-      title: "Naqdsiz pullar hisobi",
-      icon: <CreditCard size={20} />,
-      submenu: [{ title: 'Mijozdan tushumlar', path: '/naqdsiz/tushumlar' }]
-    },
-
-    {
-      title: "Avtoto'lov",
-      icon: <Car size={20} />,
-      submenu: [{ title: "Shartnomalar ro'yxati", path: '/avto/shartnomalar' }]
     },
 
     {
@@ -475,9 +359,19 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           permissions: [PERMISSIONS.EXPENSE_CATEGORY_MANAGE]
         },
         {
+          title: 'Omborlar',
+          path: '/sozlamalar/omborlar',
+          permissions: [PERMISSIONS.WAREHOUSE_MANAGE]
+        },
+        {
           title: "Xodimlar boshqaruvi",
           path: '/sozlamalar/xodimlar',
           permissions: ['users.manage']
+        },
+        {
+          title: 'Faoliyat tarixi',
+          path: '/sozlamalar/faoliyat-tarixi',
+          permissions: [PERMISSIONS.AUDIT_VIEW]
         }
       ]
     }
@@ -804,7 +698,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                     <button
                       onClick={() => {
                         setIsNotificationsOpen(false);
-                        navigate('/dashboard/notifications');
+                        navigate('/');
                       }}
                       className="w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-black hover:bg-blue-700 transition-colors"
                     >

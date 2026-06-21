@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-const ITEMS_PER_PAGE = 10;
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('uz-UZ');
 
@@ -172,6 +171,8 @@ const AllCashOperations = () => {
   const [loading, setLoading] = useState(true);
   const [selectedOperation, setSelectedOperation] = useState(null);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [limitInput, setLimitInput] = useState('20');
 
   const token = sessionStorage.getItem('token');
 
@@ -252,15 +253,26 @@ const AllCashOperations = () => {
     setPage(1);
   }, [appliedSearch]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredOperations.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredOperations.length / limit));
 
   const paginatedOperations = useMemo(() => {
-    const start = (page - 1) * ITEMS_PER_PAGE;
-    return filteredOperations.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredOperations, page]);
+    const start = (page - 1) * limit;
+    return filteredOperations.slice(start, start + limit);
+  }, [filteredOperations, page, limit]);
 
   const handleSearchSubmit = () => {
     setAppliedSearch(searchTerm.trim());
+  };
+
+  const commitLimitChange = () => {
+    const parsed = Math.min(200, Math.max(1, Number(limitInput) || 20));
+    setLimitInput(String(parsed));
+    setLimit(parsed);
+    setPage(1);
+  };
+
+  const handleLimitKeyDown = (e) => {
+    if (e.key === 'Enter') commitLimitChange();
   };
 
   const handleSearchKeyDown = (e) => {
@@ -415,9 +427,25 @@ const AllCashOperations = () => {
           </table>
         </div>
 
-        <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
-          <div className="text-sm text-slate-500">
-            Jami: <span className="font-semibold text-slate-800">{filteredOperations.length} ta</span>
+        <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-slate-500">
+              Jami: <span className="font-semibold text-slate-800">{filteredOperations.length} ta</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-slate-500">Sahifada:</label>
+              <input
+                type="number"
+                min="1"
+                max="200"
+                value={limitInput}
+                onChange={(e) => setLimitInput(e.target.value)}
+                onBlur={commitLimitChange}
+                onKeyDown={handleLimitKeyDown}
+                className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-2">

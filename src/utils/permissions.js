@@ -9,6 +9,8 @@ export const PERMISSIONS = {
   EXPENSE_CREATE: 'expense.create',
   EXPENSE_APPROVE: 'expense.approve',
   EXPENSE_CATEGORY_MANAGE: 'expense_category.manage',
+  AUDIT_VIEW: 'audit.view',
+  WAREHOUSE_MANAGE: 'warehouse.manage',
 };
 
 export const hasPermission = (permission) => {

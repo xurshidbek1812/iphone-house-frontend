@@ -12,14 +12,19 @@ import {
   Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import DateRangePicker from '../../components/DateRangePicker';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+const todayIso = new Date().toISOString().split('T')[0];
 
 const ReportsList = () => {
   const token = sessionStorage.getItem('token');
 
   const [activeTab, setActiveTab] = useState('Ombor');
-  const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
+  const [reportDate, setReportDate] = useState(todayIso);
+  const [incomeRange, setIncomeRange] = useState({ start: todayIso, end: todayIso });
+  const [expenseRange, setExpenseRange] = useState({ start: todayIso, end: todayIso });
   const [downloadingReportId, setDownloadingReportId] = useState(null);
 
   const tabs = [
@@ -54,20 +59,22 @@ const ReportsList = () => {
       ],
       Xarajat: [
         {
-          id: 'R0201',
-          title: 'Xarajat hisobotlari',
-          description: 'Tez orada qo‘shiladi.',
-          requiresDate: false,
-          enabled: false
+          id: 'R0003',
+          title: 'R0003 - Xarajatlar',
+          description:
+            "Tanlangan sana (yoki davr) bo'yicha tasdiqlangan barcha xarajatlarni Excel formatida yuklab oladi.",
+          requiresDateRange: true,
+          enabled: true
         }
       ],
       Kassa: [
         {
-          id: 'R0301',
-          title: 'Kassa hisobotlari',
-          description: 'Tez orada qo‘shiladi.',
-          requiresDate: false,
-          enabled: false
+          id: 'R0002',
+          title: 'R0002 - Barcha tushumlar',
+          description:
+            "Tanlangan sana (yoki davr) bo'yicha barcha tushumlarni (shartnoma va naqd savdo) Excel formatida yuklab oladi.",
+          requiresDateRange: true,
+          enabled: true
         }
       ],
       Savdo: [
@@ -94,6 +101,43 @@ const ReportsList = () => {
 
   const currentReports = reportsByTab[activeTab] || [];
 
+  const downloadReportFile = async (url, fallbackFileName) => {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      let errorText = "Hisobotni yuklab bo'lmadi";
+      try {
+        const errorData = await response.json();
+        errorText = errorData?.error || errorText;
+      } catch {
+        //
+      }
+      throw new Error(errorText);
+    }
+
+    const disposition = response.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename="(.+)"/);
+    const fileName = match?.[1] || fallbackFileName;
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+
+    toast.success('Excel fayl yuklab olindi');
+  };
+
   const handleDownloadWarehouseStock = async () => {
     if (!reportDate) {
       toast.error('Sanani tanlang');
@@ -103,40 +147,54 @@ const ReportsList = () => {
     setDownloadingReportId('R0001');
 
     try {
-      const url = `${API_URL}/api/reports/warehouse-stock?date=${reportDate}&format=xlsx`;
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        let errorText = "Hisobotni yuklab bo'lmadi";
-        try {
-          const errorData = await response.json();
-          errorText = errorData?.error || errorText;
-        } catch {
-          //
-        }
-        throw new Error(errorText);
-      }
-
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `tovarlar-qoldigi-${reportDate}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-
-      toast.success("Excel fayl yuklab olindi");
+      await downloadReportFile(
+        `${API_URL}/api/reports/warehouse-stock?date=${reportDate}&format=xlsx`,
+        `tovarlar-qoldigi-${reportDate}.xlsx`
+      );
     } catch (error) {
       console.error('Warehouse stock report download error:', error);
+      toast.error(error.message || "Hisobotni yuklashda xatolik yuz berdi");
+    } finally {
+      setDownloadingReportId(null);
+    }
+  };
+
+  const handleDownloadCashIncome = async () => {
+    if (!incomeRange.start || !incomeRange.end) {
+      toast.error('Sanani tanlang');
+      return;
+    }
+
+    setDownloadingReportId('R0002');
+
+    try {
+      await downloadReportFile(
+        `${API_URL}/api/reports/cash-income?from=${incomeRange.start}&to=${incomeRange.end}&format=xlsx`,
+        `R0002-${incomeRange.start}-${incomeRange.end}.xlsx`
+      );
+    } catch (error) {
+      console.error('Cash income report download error:', error);
+      toast.error(error.message || "Hisobotni yuklashda xatolik yuz berdi");
+    } finally {
+      setDownloadingReportId(null);
+    }
+  };
+
+  const handleDownloadExpenses = async () => {
+    if (!expenseRange.start || !expenseRange.end) {
+      toast.error('Sanani tanlang');
+      return;
+    }
+
+    setDownloadingReportId('R0003');
+
+    try {
+      await downloadReportFile(
+        `${API_URL}/api/reports/expenses?from=${expenseRange.start}&to=${expenseRange.end}&format=xlsx`,
+        `R0003-${expenseRange.start}-${expenseRange.end}.xlsx`
+      );
+    } catch (error) {
+      console.error('Expenses report download error:', error);
       toast.error(error.message || "Hisobotni yuklashda xatolik yuz berdi");
     } finally {
       setDownloadingReportId(null);
@@ -151,6 +209,10 @@ const ReportsList = () => {
 
     if (report.id === 'R0001') {
       await handleDownloadWarehouseStock();
+    } else if (report.id === 'R0002') {
+      await handleDownloadCashIncome();
+    } else if (report.id === 'R0003') {
+      await handleDownloadExpenses();
     }
   };
 
@@ -194,8 +256,8 @@ const ReportsList = () => {
         <div className="border-b border-slate-100 px-5 py-4">
           <h2 className="text-base font-semibold text-slate-800">{activeTab} hisobotlari</h2>
           <p className="mt-1 text-sm text-slate-500">
-            {activeTab === 'Ombor'
-              ? "Omborga oid hisobotlarni Excel formatida yuklab oling"
+            {activeTab === 'Ombor' || activeTab === 'Kassa' || activeTab === 'Xarajat'
+              ? "Hisobotlarni Excel formatida yuklab oling"
               : "Bu bo‘lim uchun hisobotlar keyingi bosqichda qo‘shiladi"}
           </p>
         </div>
@@ -245,6 +307,22 @@ const ReportsList = () => {
                           className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                         />
                       </div>
+                    )}
+
+                    {report.requiresDateRange && (
+                      <DateRangePicker
+                        startDate={
+                          report.id === 'R0002' ? incomeRange.start : expenseRange.start
+                        }
+                        endDate={report.id === 'R0002' ? incomeRange.end : expenseRange.end}
+                        onChange={(start, end) => {
+                          if (report.id === 'R0002') {
+                            setIncomeRange({ start, end });
+                          } else {
+                            setExpenseRange({ start, end });
+                          }
+                        }}
+                      />
                     )}
 
                     <button

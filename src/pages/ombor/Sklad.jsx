@@ -17,7 +17,8 @@ import {
   Edit2,
   Loader2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Smartphone
 } from 'lucide-react';
 import ReactDOMServer from 'react-dom/server';
 import QRCode from 'react-qr-code';
@@ -26,7 +27,8 @@ import toast from 'react-hot-toast';
 import usePermission from '../../hooks/usePermission';
 import { PERMISSIONS } from '../../utils/permissions';
 import { apiFetch } from '../../utils/api';
-import { buildBatchQr } from '../../utils/qrBuilder';
+import { buildBatchQr, buildUnitQr } from '../../utils/qrBuilder';
+import { fuzzyMatchProduct } from '../../utils/fuzzyMatch';
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('uz-UZ');
 
@@ -38,6 +40,8 @@ const Sklad = () => {
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
   const [loading, setLoading] = useState(true);
@@ -93,28 +97,44 @@ const Sklad = () => {
   });
 
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const [limit, setLimit] = useState(20);
+  const [limitInput, setLimitInput] = useState('20');
+
+  const commitLimitChange = () => {
+    const parsed = Math.min(200, Math.max(1, Number(limitInput) || 20));
+    setLimitInput(String(parsed));
+    setLimit(parsed);
+    setPage(1);
+  };
+
+  const handleLimitKeyDown = (e) => {
+    if (e.key === 'Enter') commitLimitChange();
+  };
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
 
-      const [productsData, categoriesData] = await Promise.all([
+      const [productsData, categoriesData, warehousesData] = await Promise.all([
         apiFetch('/api/products'),
-        apiFetch('/api/categories')
+        apiFetch('/api/categories'),
+        apiFetch('/api/warehouses')
       ]);
 
       const safeProducts = Array.isArray(productsData) ? productsData : [];
       const safeCategories = Array.isArray(categoriesData) ? categoriesData : [];
+      const safeWarehouses = Array.isArray(warehousesData) ? warehousesData : [];
 
       setProducts(safeProducts);
       setCategories(safeCategories);
+      setWarehouses(safeWarehouses);
       sessionStorage.setItem('categoryList', JSON.stringify(safeCategories));
     } catch (error) {
       console.error(error);
       toast.error(error.message || "Tarmoq xatosi yuz berdi!");
       setProducts([]);
       setCategories([]);
+      setWarehouses([]);
     } finally {
       setLoading(false);
     }
@@ -397,11 +417,6 @@ const Sklad = () => {
       return;
     }
 
-    const qrValue = buildBatchQr(printProduct.customId, selectedBatch.id);
-    const qrCodeSvg = ReactDOMServer.renderToString(
-      <QRCode value={qrValue} size={220} level="H" />
-    );
-
     const safeName = String(printProduct.name || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -410,6 +425,48 @@ const Sklad = () => {
     const safePrice = Number(
       selectedBatch.salePrice || printProduct.salePrice || 0
     ).toLocaleString('uz-UZ');
+
+    const inStockUnits = (selectedBatch.units || []).filter((u) => u.status === 'IN_STOCK');
+
+    const renderLabelCard = (qrValue, imei, imei2) => {
+      const qrCodeSvg = ReactDOMServer.renderToString(
+        <QRCode value={qrValue} size={220} level="H" />
+      );
+
+      return `
+          <div class="label-card">
+            <div class="header-row">
+              <div class="product-name">${safeName}</div>
+              <div class="product-id">ID: ${printProduct.customId}</div>
+            </div>
+            ${imei ? `<div class="imei-row">IMEI 1: ${imei}</div>` : ''}
+            ${imei2 ? `<div class="imei-row">IMEI 2: ${imei2}</div>` : ''}
+            <div class="divider"></div>
+            <div class="bottom-row">
+              <div class="price-box">
+                <div class="price-label">Narxi</div>
+                <div class="price-value">${safePrice} so'm</div>
+              </div>
+              <div class="qr-box">
+                ${qrCodeSvg}
+              </div>
+            </div>
+          </div>
+      `;
+    };
+
+    const labelsHtml =
+      inStockUnits.length > 0
+        ? inStockUnits
+            .map((unit) =>
+              renderLabelCard(
+                buildUnitQr(printProduct.customId, selectedBatch.id, unit.imei),
+                unit.imei,
+                unit.imei2
+              )
+            )
+            .join('')
+        : renderLabelCard(buildBatchQr(printProduct.customId, selectedBatch.id), null, null);
 
     const html = `
     <!DOCTYPE html>
@@ -441,6 +498,10 @@ const Sklad = () => {
             margin: 0;
             padding: 0;
             background: #fff;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: flex-start;
           }
 
           .label-card {
@@ -477,6 +538,15 @@ const Sklad = () => {
             line-height: 1;
             font-weight: 800;
             color: #000;
+          }
+
+          .imei-row {
+            font-size: 2.1mm;
+            line-height: 1.2;
+            font-weight: 800;
+            color: #000;
+            font-family: monospace;
+            margin-top: 0.8mm;
           }
 
           .divider {
@@ -560,24 +630,7 @@ const Sklad = () => {
         </style>
       </head>
       <body>
-        <div class="page">
-          <div class="label-card">
-            <div class="header-row">
-              <div class="product-name">${safeName}</div>
-              <div class="product-id">ID: ${printProduct.customId}</div>
-            </div>
-            <div class="divider"></div>
-            <div class="bottom-row">
-              <div class="price-box">
-                <div class="price-label">Narxi</div>
-                <div class="price-value">${safePrice} so'm</div>
-              </div>
-              <div class="qr-box">
-                ${qrCodeSvg}
-              </div>
-            </div>
-          </div>
-        </div>
+        ${labelsHtml}
         <script>
           setTimeout(() => {
             window.focus();
@@ -599,12 +652,20 @@ const Sklad = () => {
     setSelectedBatch(null);
   };
 
+  const getDisplayQuantity = useCallback(
+    (p) => {
+      if (!selectedWarehouseId) return Number(p.quantity || 0);
+
+      return (p.batches || [])
+        .filter((b) => !b.isArchived && String(b.warehouseId) === String(selectedWarehouseId))
+        .reduce((sum, b) => sum + Number(b.quantity || 0), 0);
+    },
+    [selectedWarehouseId]
+  );
+
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
-      const search = searchTerm.trim().toLowerCase();
-      const matchesSearch =
-        (p.name || '').toLowerCase().includes(search) ||
-        (p.customId != null && String(p.customId).includes(search));
+      const matchesSearch = fuzzyMatchProduct(searchTerm, p);
 
       const matchesId = filterValues.id
         ? String(p.customId || '').includes(filterValues.id)
@@ -614,9 +675,16 @@ const Sklad = () => {
         ? p.category === filterValues.category
         : true;
 
+      const matchesWarehouse = selectedWarehouseId
+        ? (p.batches || []).some(
+            (b) => !b.isArchived && String(b.warehouseId) === String(selectedWarehouseId)
+          )
+        : true;
+
+      const displayQty = getDisplayQuantity(p);
       let matchesStock = true;
-      if (filterValues.stockStatus === 'available') matchesStock = Number(p.quantity || 0) > 0;
-      if (filterValues.stockStatus === 'unavailable') matchesStock = Number(p.quantity || 0) <= 0;
+      if (filterValues.stockStatus === 'available') matchesStock = displayQty > 0;
+      if (filterValues.stockStatus === 'unavailable') matchesStock = displayQty <= 0;
 
       const buyFrom = filterValues.buyPriceFrom ? Number(filterValues.buyPriceFrom) : null;
       const buyTo = filterValues.buyPriceTo ? Number(filterValues.buyPriceTo) : null;
@@ -634,12 +702,13 @@ const Sklad = () => {
         matchesSearch &&
         matchesId &&
         matchesCategory &&
+        matchesWarehouse &&
         matchesStock &&
         matchesBuyPrice &&
         matchesSalePrice
       );
     });
-  }, [products, searchTerm, filterValues]);
+  }, [products, searchTerm, filterValues, selectedWarehouseId, getDisplayQuantity]);
 
   const totalFiltered = filteredProducts.length;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / limit));
@@ -647,11 +716,11 @@ const Sklad = () => {
   const paginatedProducts = useMemo(() => {
     const start = (page - 1) * limit;
     return filteredProducts.slice(start, start + limit);
-  }, [filteredProducts, page]);
+  }, [filteredProducts, page, limit]);
 
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, filterValues]);
+  }, [searchTerm, filterValues, selectedWarehouseId]);
 
   useEffect(() => {
     if (page > totalPages) {
@@ -694,6 +763,23 @@ const Sklad = () => {
             className="w-full outline-none text-slate-700 font-medium"
           />
         </div>
+
+        <select
+          value={selectedWarehouseId}
+          onChange={(e) => setSelectedWarehouseId(e.target.value)}
+          className={`px-4 rounded-2xl border font-bold text-sm outline-none transition-all cursor-pointer ${
+            selectedWarehouseId
+              ? 'bg-blue-50 border-blue-200 text-blue-600'
+              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          <option value="">Barcha omborlar</option>
+          {warehouses.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+            </option>
+          ))}
+        </select>
 
         <button
           onClick={() => setIsFilterOpen(true)}
@@ -760,15 +846,15 @@ const Sklad = () => {
 
                     <td
                       className={`p-5 text-center ${
-                        Number(p.quantity || 0) <= 0 ? 'text-rose-500' : 'text-slate-700'
+                        getDisplayQuantity(p) <= 0 ? 'text-rose-500' : 'text-slate-700'
                       }`}
                     >
                       <span
                         className={`px-3 py-1 rounded-lg ${
-                          Number(p.quantity || 0) <= 0 ? 'bg-rose-50' : 'bg-slate-100'
+                          getDisplayQuantity(p) <= 0 ? 'bg-rose-50' : 'bg-slate-100'
                         }`}
                       >
-                        {Number(p.quantity || 0)}
+                        {getDisplayQuantity(p)}
                       </span>
                     </td>
 
@@ -840,9 +926,25 @@ const Sklad = () => {
           </table>
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
-          <div className="text-sm font-bold text-slate-500">
-            Filtrlangan: <span className="text-slate-800">{totalFiltered} ta</span>
+        <div className="shrink-0 px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className="text-sm font-bold text-slate-500">
+              Filtrlangan: <span className="text-slate-800">{totalFiltered} ta</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-bold text-slate-500">Sahifada:</label>
+              <input
+                type="number"
+                min="1"
+                max="200"
+                value={limitInput}
+                onChange={(e) => setLimitInput(e.target.value)}
+                onBlur={commitLimitChange}
+                onKeyDown={handleLimitKeyDown}
+                className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1149,6 +1251,7 @@ const Sklad = () => {
                         <th className="p-4 text-right text-amber-600">Kirim Narxi</th>
                       )}
                       <th className="p-4 text-right text-emerald-600">Sotuv Narxi</th>
+                      <th className="p-4 text-center">IMEI</th>
                       {canManageProducts && <th className="p-4 text-center">Amal</th>}
                     </tr>
                   </thead>
@@ -1174,6 +1277,11 @@ const Sklad = () => {
                                   ? `Faktura: #${batch.invoiceNumber}`
                                   : `Partiya ID: P-${batch.id}`}
                               </div>
+                              {batch.warehouse?.name && (
+                                <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[10px] font-bold uppercase tracking-wide">
+                                  {batch.warehouse.name}
+                                </span>
+                              )}
                             </td>
 
                             <td className="p-4 text-center text-slate-400">
@@ -1253,6 +1361,23 @@ const Sklad = () => {
                               )}
                             </td>
 
+                            <td className="p-4 text-center">
+                              {Array.isArray(batch.units) && batch.units.length > 0 ? (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 text-indigo-600 text-[11px] font-black uppercase tracking-tighter cursor-default"
+                                  title={batch.units
+                                    .filter((u) => u.status === 'IN_STOCK')
+                                    .map((u) => `${u.imei}${u.imei2 ? ' / ' + u.imei2 : ''}`)
+                                    .join('\n')}
+                                >
+                                  <Smartphone size={12} />
+                                  {batch.units.filter((u) => u.status === 'IN_STOCK').length} ta
+                                </span>
+                              ) : (
+                                <span className="text-slate-300">-</span>
+                              )}
+                            </td>
+
                             {canManageProducts && (
                               <td className="p-4 text-center">
                                 <button
@@ -1272,7 +1397,7 @@ const Sklad = () => {
                     ) : (
                       <tr>
                         <td
-                          colSpan={canViewAmounts && canManageProducts ? 7 : canViewAmounts || canManageProducts ? 6 : 5}
+                          colSpan={canViewAmounts && canManageProducts ? 8 : canViewAmounts || canManageProducts ? 7 : 6}
                           className="p-10 text-center text-slate-300 uppercase font-black text-xs"
                         >
                           Aktiv partiyalar yo'q

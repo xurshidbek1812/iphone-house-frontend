@@ -11,6 +11,7 @@ import {
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
 import { apiFetch } from '../../utils/api';
+import { fuzzyMatch } from '../../utils/fuzzyMatch';
 
 const PrintPriceTag = () => {
   const [allProducts, setAllProducts] = useState([]);
@@ -82,11 +83,11 @@ const PrintPriceTag = () => {
       setSearchName(value);
       setSearchId('');
 
-      const cleanValue = value.trim().toLowerCase();
+      const cleanValue = value.trim();
 
       if (cleanValue) {
         setFilteredSuggestions(
-          allProducts.filter((p) => (p.name || '').toLowerCase().includes(cleanValue))
+          allProducts.filter((p) => fuzzyMatch(cleanValue, p.name))
         );
         setShowSuggestions(true);
       } else {

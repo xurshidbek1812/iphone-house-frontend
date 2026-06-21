@@ -1,272 +1,287 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Save,
   Plus,
   Trash2,
+  Save,
   ArrowLeft,
-  CheckCircle,
   Loader2,
   Package,
-  Boxes
+  Lock,
+  Smartphone,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-
-const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
-
-const parseJsonSafe = async (response) => {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-};
-
-const normalizeInvoiceForEdit = (invoice) => {
-  const items = Array.isArray(invoice?.items) ? invoice.items : [];
-
-  return {
-    date: invoice?.date
-      ? new Date(invoice.date).toISOString().split('T')[0]
-      : invoice?.createdAt
-      ? new Date(invoice.createdAt).toISOString().split('T')[0]
-      : '',
-    supplierName: invoice?.supplierName || invoice?.supplier || '',
-    invoiceNumber: invoice?.invoiceNumber || '',
-    exchangeRate: String(invoice?.exchangeRate || '12500'),
-    status: invoice?.status || 'Jarayonda',
-    items: items.map((item, index) => ({
-      localId: `${invoice?.id || 'inv'}-${item?.id ?? item?.productId ?? item?.customId ?? index}`,
-      id: item?.id ?? null,
-      productId: item?.productId ?? null,
-      customId: item?.customId ?? '',
-      name: item?.name || '',
-      unit: item?.unit || 'Dona',
-      count: Number(item?.count || 1),
-      price: Number(item?.price || 0),
-      markup: Number(item?.markup || 0),
-      salePrice: Number(item?.salePrice || 0),
-      currency: item?.currency || 'UZS',
-      total:
-        Number(item?.total || 0) ||
-        Number(item?.count || 0) * Number(item?.price || 0),
-      categoryId: item?.categoryId || null,
-      brandId: item?.brandId || null,
-      color: item?.color || '',
-      memory: item?.memory || '',
-      model: item?.model || ''
-    }))
-  };
-};
-
-const createEmptyItem = () => ({
-  localId: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-  id: null,
-  productId: null,
-  customId: '',
-  name: '',
-  unit: 'Dona',
-  count: 1,
-  price: 0,
-  markup: 0,
-  salePrice: 0,
-  currency: 'UZS',
-  total: 0,
-  categoryId: null,
-  brandId: null,
-  color: '',
-  memory: '',
-  model: ''
-});
+import { hasPermission, PERMISSIONS } from '../../utils/permissions';
+import { apiFetch } from '../../utils/api';
+import { fuzzyMatchProduct } from '../../utils/fuzzyMatch';
 
 const EditSupplierIncome = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { id } = useParams();
 
-  const token = sessionStorage.getItem('token');
-  const currentUserName = sessionStorage.getItem('userName') || 'Hodim';
+  const canSeeAmount = hasPermission(PERMISSIONS.INVENTORY_VIEW_AMOUNTS);
+
+  const [allProducts, setAllProducts] = useState([]);
+  const [suppliersList, setSuppliersList] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [date, setDate] = useState('');
   const [supplierName, setSupplierName] = useState('');
+  const [warehouseId, setWarehouseId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [exchangeRate, setExchangeRate] = useState('12500');
+  const [currencyRate, setCurrencyRate] = useState('12500');
   const [status, setStatus] = useState('Jarayonda');
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-
-  const [suppliersList, setSuppliersList] = useState([]);
-  const [allProducts, setAllProducts] = useState([]);
-  const [selectedItems, setSelectedItems] = useState([]);
+  const [invoiceItems, setInvoiceItems] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [activeTab, setActiveTab] = useState('invoice');
-
-  const getAuthHeaders = useCallback(
-    () => ({
-      Authorization: `Bearer ${token}`
-    }),
-    [token]
-  );
-
-  const getJsonAuthHeaders = useCallback(
-    () => ({
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }),
-    [token]
-  );
-
-  const getCostInUZS = useCallback(
-    (price, currency) => {
-      const numPrice = Number(price) || 0;
-      const numRate = Number(exchangeRate) || 12500;
-      return currency === 'USD' ? numPrice * numRate : numPrice;
-    },
-    [exchangeRate]
-  );
-
-  const getSaleFromMarkup = useCallback(
-    (price, currency, markup) => {
-      const costUZS = getCostInUZS(price, currency);
-      return Math.round(costUZS + (costUZS * (Number(markup) || 0)) / 100);
-    },
-    [getCostInUZS]
-  );
-
-  const getMarkupFromSale = useCallback(
-    (price, currency, salePrice) => {
-      const costUZS = getCostInUZS(price, currency);
-      if (costUZS <= 0) return 0;
-      return Number(((((Number(salePrice) || 0) - costUZS) / costUZS) * 100).toFixed(2));
-    },
-    [getCostInUZS]
-  );
-
-  const isSameProduct = useCallback((a, b) => {
-    const aCustom = String(a?.customId || '').trim();
-    const bCustom = String(b?.customId || '').trim();
-
-    if (aCustom && bCustom) return aCustom === bCustom;
-
-    const aProductId = String(a?.productId || '').trim();
-    const bProductId = String(b?.productId || '').trim();
-
-    if (aProductId && bProductId) return aProductId === bProductId;
-
-    return String(a?.name || '').trim().toLowerCase() === String(b?.name || '').trim().toLowerCase();
-  }, []);
-
-  const applyInvoiceToForm = useCallback((invoice) => {
-    const normalized = normalizeInvoiceForEdit(invoice);
-    setDate(normalized.date);
-    setSupplierName(normalized.supplierName);
-    setInvoiceNumber(normalized.invoiceNumber);
-    setExchangeRate(normalized.exchangeRate);
-    setStatus(normalized.status);
-    setSelectedItems(normalized.items.length ? normalized.items : [createEmptyItem()]);
-  }, []);
-
-  const fetchBaseLists = useCallback(async (signal = undefined) => {
-    const [prodRes, suppRes] = await Promise.allSettled([
-      fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal }),
-      fetch(`${API_URL}/api/suppliers`, { headers: getAuthHeaders(), signal })
-    ]);
-
-    if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
-      const productsData = await parseJsonSafe(prodRes.value);
-      if (Array.isArray(productsData)) setAllProducts(productsData);
-    }
-
-    if (suppRes.status === 'fulfilled' && suppRes.value.ok) {
-      const suppliersData = await parseJsonSafe(suppRes.value);
-      if (Array.isArray(suppliersData)) setSuppliersList(suppliersData);
-    } else {
-      const savedSuppliers = JSON.parse(sessionStorage.getItem('suppliersList') || '[]');
-      setSuppliersList(savedSuppliers);
-    }
-  }, [getAuthHeaders]);
-
-  const fetchInvoice = useCallback(async (signal = undefined) => {
-    const stateInvoice = location.state?.invoiceData;
-
-    try {
-      setLoading(true);
-      await fetchBaseLists(signal);
-
-      if (stateInvoice) {
-        applyInvoiceToForm(stateInvoice);
-        return;
-      }
-
-      const directRes = await fetch(`${API_URL}/api/invoices/${id}`, {
-        headers: getAuthHeaders(),
-        signal
-      });
-
-      if (directRes.ok) {
-        const invoiceData = await parseJsonSafe(directRes);
-        if (invoiceData) {
-          applyInvoiceToForm(invoiceData);
-          return;
-        }
-      }
-
-      const listRes = await fetch(`${API_URL}/api/invoices`, {
-        headers: getAuthHeaders(),
-        signal
-      });
-
-      const listData = await parseJsonSafe(listRes);
-
-      const invoices = Array.isArray(listData?.items)
-        ? listData.items
-        : Array.isArray(listData)
-        ? listData
-        : [];
-
-      const foundInvoice = invoices.find((inv) => String(inv.id) === String(id));
-
-      if (!foundInvoice) {
-        toast.error('Faktura topilmadi!');
-        navigate('/ombor/taminotchi-kirim');
-        return;
-      }
-
-      applyInvoiceToForm(foundInvoice);
-    } catch (error) {
-      if (error.name !== 'AbortError') {
-        console.error("Yuklashda xato", error);
-        toast.error("Ma'lumotlarni yuklab bo'lmadi");
-      }
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }, [location.state, id, navigate, getAuthHeaders, fetchBaseLists, applyInvoiceToForm]);
+  const [inputCount, setInputCount] = useState('');
+  const [inputPrice, setInputPrice] = useState('');
+  const [inputMarkup, setInputMarkup] = useState('');
+  const [inputSalePrice, setInputSalePrice] = useState('');
+  const [inputCurrency, setInputCurrency] = useState('UZS');
+  const [wantsImei, setWantsImei] = useState(false);
+  const [imeiInputs, setImeiInputs] = useState([]);
+  const [expandedImeiId, setExpandedImeiId] = useState(null);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchInvoice(controller.signal);
-    return () => controller.abort();
-  }, [fetchInvoice]);
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    };
+  }, []);
 
-  const filteredProducts = useMemo(() => {
-    if (!searchTerm) return [];
-    const clean = searchTerm.trim().toLowerCase();
+  const fetchData = useCallback(
+    async (invoiceId) => {
+      try {
+        setLoading(true);
 
-    return allProducts.filter(
-      (p) =>
-        (p.name || '').toLowerCase().includes(clean) ||
-        String(p.customId || '').toLowerCase().includes(clean)
-    );
-  }, [allProducts, searchTerm]);
+        const [productsData, suppliersData, warehousesData] = await Promise.all([
+          apiFetch('/api/products'),
+          apiFetch('/api/suppliers'),
+          apiFetch('/api/warehouses?active=true')
+        ]);
+
+        const products = Array.isArray(productsData) ? productsData : [];
+        setAllProducts(products);
+        setSuppliersList(Array.isArray(suppliersData) ? suppliersData : []);
+        setWarehouses(Array.isArray(warehousesData) ? warehousesData : []);
+
+        let invoice = null;
+
+        try {
+          invoice = await apiFetch(`/api/invoices/${invoiceId}`);
+        } catch {
+          const listData = await apiFetch('/api/invoices');
+          const invoices = Array.isArray(listData?.items)
+            ? listData.items
+            : Array.isArray(listData)
+            ? listData
+            : [];
+          invoice = invoices.find((inv) => String(inv.id) === String(invoiceId)) || null;
+        }
+
+        if (!invoice) {
+          toast.error('Faktura topilmadi!');
+          navigate('/ombor/taminotchi-kirim');
+          return;
+        }
+
+        if (invoice.status !== 'Jarayonda') {
+          toast.error("Faqat 'Jarayonda' turgan kirimni tahrirlash mumkin!");
+          navigate('/ombor/taminotchi-kirim');
+          return;
+        }
+
+        setDate(
+          invoice.date
+            ? new Date(invoice.date).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0]
+        );
+        setSupplierName(invoice.supplierName || invoice.supplier || '');
+        setInvoiceNumber(invoice.invoiceNumber || '');
+        setCurrencyRate(String(invoice.exchangeRate || '12500'));
+        setStatus(invoice.status || 'Jarayonda');
+        setWarehouseId(invoice.warehouseId ? String(invoice.warehouseId) : '');
+
+        const items = Array.isArray(invoice.items) ? invoice.items : [];
+        setInvoiceItems(
+          items.map((item) => {
+            const product = products.find((p) => p.id === item.productId);
+            return {
+              id: item.productId,
+              customId: item.customId ?? product?.customId ?? '',
+              name: item.name || product?.name || '',
+              unit: product?.unit || 'Dona',
+              count: Number(item.count || 0),
+              price: Number(item.price || 0),
+              markup: Number(item.markup || 0),
+              salePrice: Number(item.salePrice || 0),
+              currency: item.currency || 'UZS',
+              total:
+                Number(item.total || 0) ||
+                Number(item.count || 0) * Number(item.price || 0),
+              imeis:
+                Array.isArray(item.imeis) && item.imeis.length
+                  ? item.imeis.map((pair) =>
+                      typeof pair === 'string' ? { imei: pair, imei2: '' } : pair
+                    )
+                  : null
+            };
+          })
+        );
+      } catch (error) {
+        console.error('Yuklashda xato', error);
+        toast.error(error.message || "Ma'lumotlarni yuklashda xatolik yuz berdi");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [navigate]
+  );
+
+  useEffect(() => {
+    fetchData(id);
+  }, [fetchData, id]);
+
+  const getCostInUZS = (price, currency, rate) => {
+    const numPrice = Number(price) || 0;
+    const numRate = Number(rate) || 12500;
+    return currency === 'USD' ? numPrice * numRate : numPrice;
+  };
+
+  const handlePriceChange = (val) => {
+    setInputPrice(val);
+
+    if (!canSeeAmount) return;
+
+    const costUZS = getCostInUZS(val, inputCurrency, currencyRate);
+    if (inputMarkup && val) {
+      const sale = costUZS + costUZS * (Number(inputMarkup) / 100);
+      setInputSalePrice(String(Math.round(sale)));
+    }
+  };
+
+  const handleMarkupChange = (val) => {
+    setInputMarkup(val);
+
+    if (!canSeeAmount) return;
+
+    const costUZS = getCostInUZS(inputPrice, inputCurrency, currencyRate);
+
+    if (inputPrice && val) {
+      const sale = costUZS + costUZS * (Number(val) / 100);
+      setInputSalePrice(String(Math.round(sale)));
+    } else if (!val) {
+      setInputSalePrice('');
+    }
+  };
+
+  const handleSalePriceChange = (val) => {
+    setInputSalePrice(val);
+
+    if (!canSeeAmount) return;
+
+    const costUZS = getCostInUZS(inputPrice, inputCurrency, currencyRate);
+    if (inputPrice && val && costUZS > 0) {
+      const markup = ((Number(val) - costUZS) / costUZS) * 100;
+      setInputMarkup(markup.toFixed(2));
+    } else if (!val) {
+      setInputMarkup('');
+    }
+  };
+
+  const handleCurrencyChange = (val) => {
+    setInputCurrency(val);
+
+    if (!canSeeAmount) return;
+
+    const costUZS = getCostInUZS(inputPrice, val, currencyRate);
+    if (inputPrice && inputMarkup) {
+      const sale = costUZS + costUZS * (Number(inputMarkup) / 100);
+      setInputSalePrice(String(Math.round(sale)));
+    }
+  };
 
   const handleSelectProduct = (prod) => {
     setSelectedProduct(prod);
     setSearchTerm(prod.name || '');
+    setInputCurrency(prod.buyCurrency || 'UZS');
+
+    if (canSeeAmount) {
+      setInputPrice(prod.buyPrice != null ? String(prod.buyPrice) : '');
+
+      const costUZS = getCostInUZS(
+        prod.buyPrice,
+        prod.buyCurrency || 'UZS',
+        currencyRate
+      );
+
+      if (costUZS > 0 && prod.salePrice) {
+        setInputSalePrice(String(prod.salePrice));
+        const markup = ((prod.salePrice - costUZS) / costUZS) * 100;
+        setInputMarkup(markup.toFixed(2));
+      } else {
+        setInputSalePrice('');
+        setInputMarkup('');
+      }
+    } else {
+      setInputPrice('');
+      setInputMarkup('');
+      setInputSalePrice('');
+    }
+  };
+
+  const resetItemInputs = () => {
+    setSelectedProduct(null);
+    setSearchTerm('');
+    setInputCount('');
+    setInputPrice('');
+    setInputMarkup('');
+    setInputSalePrice('');
+    setInputCurrency('UZS');
+    setWantsImei(false);
+    setImeiInputs([]);
+  };
+
+  const handleCountChange = (val) => {
+    setInputCount(val);
+
+    if (!wantsImei) return;
+
+    const qty = Math.max(0, Math.floor(Number(val) || 0));
+    setImeiInputs((prev) => {
+      const next = prev.slice(0, qty);
+      while (next.length < qty) next.push({ imei: '', imei2: '' });
+      return next;
+    });
+  };
+
+  const handleToggleImei = () => {
+    if (wantsImei) {
+      setWantsImei(false);
+      setImeiInputs([]);
+      return;
+    }
+
+    const qty = Math.floor(Number(inputCount) || 0);
+    if (!qty || qty <= 0 || !Number.isInteger(Number(inputCount))) {
+      return toast.error("Avval sonini butun musbat son qilib kiriting!");
+    }
+
+    setWantsImei(true);
+    setImeiInputs(Array.from({ length: qty }, () => ({ imei: '', imei2: '' })));
+  };
+
+  const handleImeiInputChange = (index, field, val) => {
+    setImeiInputs((prev) =>
+      prev.map((pair, i) => (i === index ? { ...pair, [field]: val } : pair))
+    );
   };
 
   const handleAddItem = () => {
@@ -277,7 +292,7 @@ const EditSupplierIncome = () => {
       productToAdd = allProducts.find(
         (p) =>
           (p.name || '').toLowerCase() === cleanSearch ||
-          String(p.customId || '').toLowerCase() === cleanSearch
+          String(p.customId || '') === cleanSearch
       );
     }
 
@@ -285,193 +300,245 @@ const EditSupplierIncome = () => {
       return toast.error("Bazada topilmadi! To'g'ri tanlang.");
     }
 
-    const candidateItem = {
-      productId: productToAdd.id,
-      customId: productToAdd.customId,
-      name: productToAdd.name
-    };
-
-    if (selectedItems.some((item) => isSameProduct(item, candidateItem))) {
-      return toast.error("Bu mahsulot allaqachon qo'shilgan!");
+    if (invoiceItems.some((item) => item.id === productToAdd.id)) {
+      return toast.error("Bu tovar allaqachon qo'shilgan!");
     }
 
-    const defaultCurrency = productToAdd.buyCurrency || 'UZS';
-    const defaultPrice = Number(productToAdd.buyPrice || 0);
-    const defaultSalePrice = Number(productToAdd.salePrice || 0);
-    const defaultMarkup = defaultSalePrice
-      ? getMarkupFromSale(defaultPrice, defaultCurrency, defaultSalePrice)
-      : 0;
+    const qty = Number(inputCount);
+    const price = canSeeAmount ? Number(inputPrice) : 0;
+    const sale = Number(inputSalePrice);
+
+    if (!qty || qty <= 0) {
+      return toast.error("Sonini to'g'ri kiriting!");
+    }
+
+    if (productToAdd.unit === 'Dona' && !Number.isInteger(qty)) {
+      return toast.error("Dona o'lchov birligi uchun miqdor butun son bo'lishi shart!");
+    }
+
+    if (canSeeAmount) {
+      if (!price || price <= 0) {
+        return toast.error("Kirim narxini to'g'ri kiriting!");
+      }
+    }
+
+    if (!sale || sale <= 0) {
+      return toast.error("Sotuv narxini to'g'ri kiriting!");
+    }
+
+    let imeis = null;
+
+    if (wantsImei) {
+      const trimmed = imeiInputs.map((pair) => ({
+        imei: pair.imei.trim(),
+        imei2: pair.imei2.trim()
+      }));
+
+      if (trimmed.length !== qty) {
+        return toast.error("Barcha telefonlar uchun IMEI kiritilishi shart!");
+      }
+
+      const flatCodes = trimmed.flatMap((pair) => [pair.imei, pair.imei2]);
+
+      if (flatCodes.some((code) => !code)) {
+        return toast.error("Har bir telefon uchun ikkita IMEI ham kiritilishi shart!");
+      }
+
+      if (new Set(flatCodes).size !== flatCodes.length) {
+        return toast.error("IMEI raqamlari orasida takrorlanish bor!");
+      }
+
+      const usedElsewhere = invoiceItems.some(
+        (item) =>
+          Array.isArray(item.imeis) &&
+          item.imeis.some(
+            (pair) => flatCodes.includes(pair.imei) || flatCodes.includes(pair.imei2)
+          )
+      );
+
+      if (usedElsewhere) {
+        return toast.error("Bu IMEI raqami fakturada boshqa qatorda allaqachon ishlatilgan!");
+      }
+
+      imeis = trimmed;
+    }
 
     const newItem = {
-      localId: `added-${Date.now()}-${productToAdd.id}`,
-      id: null,
-      productId: productToAdd.id,
+      id: productToAdd.id,
       customId: productToAdd.customId,
       name: productToAdd.name,
       unit: productToAdd.unit || 'Dona',
-      count: 1,
-      price: defaultPrice,
-      markup: defaultMarkup,
-      salePrice: defaultSalePrice,
-      currency: defaultCurrency,
-      total: defaultPrice,
-      categoryId: productToAdd.categoryId || null,
-      brandId: productToAdd.brandId || null,
-      color: productToAdd.color || '',
-      memory: productToAdd.memory || '',
-      model: productToAdd.model || ''
+      count: qty,
+      price,
+      markup: canSeeAmount ? Number(inputMarkup) || 0 : 0,
+      salePrice: sale,
+      currency: inputCurrency || 'UZS',
+      total: canSeeAmount ? qty * price : 0,
+      imeis
     };
 
-    setSelectedItems((prev) => [...prev, newItem]);
-    setSelectedProduct(null);
-    setSearchTerm('');
-    toast.success("Mahsulot qo'shildi");
+    setInvoiceItems((prev) => [...prev, newItem]);
+    resetItemInputs();
   };
 
-  const updateItem = (localId, field, value) => {
-    setSelectedItems((prev) =>
-      prev.map((item) => {
-        if (item.localId !== localId) return item;
+  const removeFromInvoice = (itemId) => {
+    setInvoiceItems((prev) => prev.filter((item) => item.id !== itemId));
+    setExpandedImeiId((prev) => (prev === itemId ? null : prev));
+  };
 
-        const updated = { ...item, [field]: value };
+  const toggleImeiExpand = (itemId) => {
+    setExpandedImeiId((prev) => (prev === itemId ? null : itemId));
+  };
 
-        const count = Number(field === 'count' ? value : updated.count) || 0;
-        const price = Number(field === 'price' ? value : updated.price) || 0;
-        const currency = field === 'currency' ? value : updated.currency;
-        const markup = Number(field === 'markup' ? value : updated.markup) || 0;
-        const salePrice = Number(field === 'salePrice' ? value : updated.salePrice) || 0;
-
-        updated.total = count * price;
-
-        if (field === 'price' || field === 'currency' || field === 'markup') {
-          updated.salePrice = getSaleFromMarkup(price, currency, markup);
-        }
-
-        if (field === 'salePrice') {
-          updated.markup = getMarkupFromSale(price, currency, salePrice);
-        }
-
-        return updated;
-      })
+  const updateInvoiceItemImei = (itemId, index, field, value) => {
+    setInvoiceItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              imeis: item.imeis.map((pair, i) =>
+                i === index ? { ...pair, [field]: value } : pair
+              )
+            }
+          : item
+      )
     );
   };
 
-  const handleRemoveItem = (localId) => {
-    setSelectedItems((prev) => prev.filter((item) => item.localId !== localId));
+  const closeImeiExpand = (item) => {
+    const trimmed = (item.imeis || []).map((pair) => ({
+      imei: pair.imei.trim(),
+      imei2: pair.imei2.trim()
+    }));
+
+    const flatCodes = trimmed.flatMap((pair) => [pair.imei, pair.imei2]);
+
+    if (flatCodes.some((code) => !code)) {
+      return toast.error("Har bir telefon uchun ikkita IMEI ham kiritilishi shart!");
+    }
+
+    if (new Set(flatCodes).size !== flatCodes.length) {
+      return toast.error("IMEI raqamlari orasida takrorlanish bor!");
+    }
+
+    const usedElsewhere = invoiceItems.some(
+      (other) =>
+        other.id !== item.id &&
+        Array.isArray(other.imeis) &&
+        other.imeis.some(
+          (pair) => flatCodes.includes(pair.imei) || flatCodes.includes(pair.imei2)
+        )
+    );
+
+    if (usedElsewhere) {
+      return toast.error("Bu IMEI raqami boshqa qatorda allaqachon ishlatilgan!");
+    }
+
+    setInvoiceItems((prev) =>
+      prev.map((it) => (it.id === item.id ? { ...it, imeis: trimmed } : it))
+    );
+    setExpandedImeiId(null);
   };
 
-  const { grandTotalUZS, totalCount } = useMemo(() => {
+  const { grandTotalUZS, totalUZS, totalUSD } = useMemo(() => {
     let totalUZS = 0;
     let totalUSD = 0;
-    let qty = 0;
 
-    selectedItems.forEach((item) => {
-      const rowTotal = (Number(item.count) || 0) * (Number(item.price) || 0);
-      qty += Number(item.count || 0);
-
-      if (item.currency === 'USD') totalUSD += rowTotal;
-      else totalUZS += rowTotal;
+    invoiceItems.forEach((item) => {
+      if (item.currency === 'USD') {
+        totalUSD += Number(item.total) || 0;
+      } else {
+        totalUZS += Number(item.total) || 0;
+      }
     });
 
-    const rate = Number(exchangeRate) || 12500;
+    const rate = Number(currencyRate) || 12500;
+    return { grandTotalUZS: totalUZS + totalUSD * rate, totalUZS, totalUSD };
+  }, [invoiceItems, currencyRate]);
 
-    return {
-      grandTotalUZS: totalUZS + totalUSD * rate,
-      totalCount: qty
-    };
-  }, [selectedItems, exchangeRate]);
+  const filteredProducts = useMemo(() => {
+    if (!searchTerm || selectedProduct) return [];
 
-  const handlePreSave = () => {
+    return allProducts.filter((p) => fuzzyMatchProduct(searchTerm, p));
+  }, [allProducts, searchTerm, selectedProduct]);
+
+  const handleSave = async () => {
     const cleanSupplier = supplierName.trim();
 
-    if (!cleanSupplier) return toast.error("Ta'minotchi nomini tanlang!");
-    if (!invoiceNumber.trim()) return toast.error("Faktura raqami bo'sh bo'lmasin");
-    if (!Number(exchangeRate) || Number(exchangeRate) <= 0) {
+    if (!cleanSupplier) {
+      return toast.error("Ta'minotchi nomini tanlang!");
+    }
+
+    if (!warehouseId) {
+      return toast.error("Omborni tanlang!");
+    }
+
+    if (invoiceItems.length === 0) {
+      return toast.error("Fakturaga tovar qo'shing!");
+    }
+
+    if (!Number(currencyRate) || Number(currencyRate) <= 0) {
       return toast.error("Valyuta kursini to'g'ri kiriting!");
     }
-    if (selectedItems.length === 0) return toast.error("Kamida bitta mahsulot qo'shing!");
 
-    const invalidItem = selectedItems.find((item) => {
-      const qty = Number(item.count);
-      const price = Number(item.price);
-      const sale = Number(item.salePrice);
-
-      if (!qty || qty <= 0) return true;
-      if (!Number.isFinite(price) || price <= 0) return true;
-      if (!Number.isFinite(sale) || sale <= 0) return true;
-      if ((item.unit || 'Dona') === 'Dona' && !Number.isInteger(qty)) return true;
-      return false;
-    });
-
-    if (invalidItem) {
-      return toast.error(`Xato: ${invalidItem.name} uchun ma'lumot noto'g'ri`);
+    if (canSeeAmount) {
+      const hasInvalidPrice = invoiceItems.some(
+        (item) => !Number(item.price) || Number(item.price) <= 0
+      );
+      if (hasInvalidPrice) {
+        return toast.error("Kirim narxlarida xatolik bor!");
+      }
     }
 
-    setShowConfirmModal(true);
-  };
+    const hasInvalidSalePrice = invoiceItems.some(
+      (item) => !Number(item.salePrice) || Number(item.salePrice) <= 0
+    );
 
-  const handleSaveInvoice = async () => {
+    if (hasInvalidSalePrice) {
+      return toast.error("Sotuv narxlarida xatolik bor!");
+    }
+
     setIsSubmitting(true);
 
     try {
+      const finalExchangeRate = Number(currencyRate);
+
       const payload = {
         date,
-        supplier: supplierName.trim(),
-        supplierName: supplierName.trim(),
+        supplier: cleanSupplier,
         invoiceNumber: invoiceNumber.trim(),
-        exchangeRate: Number(exchangeRate) || 12500,
-        totalSum: grandTotalUZS,
+        exchangeRate: finalExchangeRate,
+        totalSum: canSeeAmount ? grandTotalUZS : 0,
         status,
-        userName: currentUserName,
-        items: selectedItems.map((item) => ({
-          id: item.id,
-          productId: item.productId || item.id,
+        warehouseId: Number(warehouseId),
+        items: invoiceItems.map((item) => ({
+          productId: item.id,
           customId: Number(item.customId) || 0,
           name: item.name,
           count: Number(item.count),
-          price: Number(item.price),
-          markup: Number(item.markup) || 0,
+          price: canSeeAmount ? Number(item.price) : 0,
+          markup: canSeeAmount ? Number(item.markup) || 0 : 0,
           salePrice: Number(item.salePrice) || 0,
           currency: item.currency || 'UZS',
-          total: (Number(item.count) || 0) * (Number(item.price) || 0),
-          categoryId: item.categoryId || null,
-          brandId: item.brandId || null,
-          color: item.color || '',
-          memory: item.memory || '',
-          model: item.model || ''
+          total: canSeeAmount ? Number(item.total) : 0,
+          imeis: item.imeis || null
         }))
       };
 
-      const res = await fetch(`${API_URL}/api/invoices/${id}`, {
+      await apiFetch(`/api/invoices/${id}`, {
         method: 'PUT',
-        headers: getJsonAuthHeaders(),
         body: JSON.stringify(payload)
       });
 
-      const data = await parseJsonSafe(res);
-
-      if (res.ok) {
-        toast.success('Faktura muvaffaqiyatli yangilandi!');
-        navigate('/ombor/taminotchi-kirim');
-      } else {
-        toast.error(data?.error || `Yangilashda xatolik yuz berdi (${res.status})`);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("Server bilan aloqa yo'q!");
+      toast.success('Faktura muvaffaqiyatli yangilandi!');
+      navigate('/ombor/taminotchi-kirim');
+    } catch (error) {
+      console.error(error);
+      toast.error(error.message || "Saqlashda xatolik yuz berdi");
     } finally {
       setIsSubmitting(false);
-      setShowConfirmModal(false);
     }
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="animate-spin text-amber-500" size={36} />
-      </div>
-    );
-  }
 
   return (
     <div className="h-full min-h-0 flex flex-col bg-slate-50">
@@ -484,451 +551,608 @@ const EditSupplierIncome = () => {
           >
             <ArrowLeft size={16} />
           </button>
-
           <div>
-            <h1 className="text-xl font-medium text-slate-900">Kirimni tahrirlash</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Ma'lumotlarni yangilang</p>
+            <h1 className="text-xl font-semibold text-slate-900">Kirimni tahrirlash</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Ta'minotchi fakturasini tahrirlash</p>
           </div>
         </div>
 
-        <button
-          disabled={isSubmitting || selectedItems.length === 0}
-          onClick={handlePreSave}
-          className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
-        >
-          {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          Saqlash
-        </button>
-      </div>
-
-      <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <button
-            onClick={() => setActiveTab('invoice')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
-              activeTab === 'invoice'
-                ? 'bg-amber-600 text-white'
-                : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-            }`}
+            disabled={isSubmitting}
+            onClick={() => navigate('/ombor/taminotchi-kirim')}
+            className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
           >
-            Faktura
+            Bekor qilish
           </button>
 
           <button
-            onClick={() => setActiveTab('products')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
-              activeTab === 'products'
-                ? 'bg-amber-600 text-white'
-                : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-            }`}
+            onClick={handleSave}
+            disabled={isSubmitting || invoiceItems.length === 0}
+            className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Mahsulotlar
+            {isSubmitting ? (
+              <>
+                <Loader2 size={16} className="animate-spin" /> Saqlanmoqda...
+              </>
+            ) : (
+              <>
+                <Save size={16} /> Saqlash
+              </>
+            )}
           </button>
         </div>
       </div>
 
-      {activeTab === 'invoice' && (
-        <div className="grid grid-cols-1 xl:grid-cols-[220px_1fr] gap-3 flex-1 min-h-0">
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-              <h3 className="font-semibold text-slate-700 mb-2 border-b border-slate-100 pb-2 text-sm">
-                Faktura
-              </h3>
+      {!canSeeAmount && (
+        <div className="bg-white mb-3 p-3 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-3 text-slate-500">
+          <Lock size={16} className="text-slate-400 shrink-0" />
+          <span className="font-medium text-sm">
+            Siz kirim summalarini ko‘rmaysiz. Shu sabab kirim narxi va jami summa yashirilgan.
+          </span>
+        </div>
+      )}
 
-              <div className="space-y-2.5">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                    Raqam
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={invoiceNumber}
-                    className="w-full p-2.5 border rounded-xl border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700"
-                  />
-                </div>
+      {loading ? (
+        <div className="flex-1 min-h-0 bg-white rounded-3xl shadow-sm border border-slate-200 flex items-center justify-center">
+          <Loader2 size={30} className="animate-spin text-slate-400" />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
+            <div className="lg:col-span-9 flex flex-col gap-4">
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                <h3 className="font-semibold text-slate-700 mb-3 border-b border-slate-100 pb-2 text-sm">
+                  Asosiy ma'lumotlar
+                </h3>
 
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                    Ta'minotchi
-                  </label>
-                  <select
-                    disabled={isSubmitting}
-                    value={supplierName}
-                    onChange={(e) => setSupplierName(e.target.value)}
-                    className="w-full p-2.5 border rounded-xl border-slate-200 bg-white text-sm font-medium text-slate-700 outline-amber-500"
-                  >
-                    <option value="" disabled>Tanlang</option>
-                    {suppliersList.map((s) => (
-                      <option key={s.id || s.name} value={s.name}>
-                        {s.name}
-                      </option>
-                    ))}
-                    {supplierName &&
-                      !suppliersList.find((s) => s.name === supplierName) && (
-                        <option value={supplierName}>{supplierName}</option>
-                      )}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                    Sana
-                  </label>
-                  <input
-                    type="date"
-                    disabled={isSubmitting}
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full p-2.5 border rounded-xl border-slate-200 bg-white text-sm font-medium text-slate-700 outline-amber-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                    Kurs
-                  </label>
-                  <input
-                    type="number"
-                    disabled={isSubmitting}
-                    value={exchangeRate}
-                    onChange={(e) => setExchangeRate(e.target.value)}
-                    className="w-full p-2.5 border rounded-xl border-amber-300 bg-amber-50 text-sm font-semibold text-amber-700 outline-amber-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-slate-900 p-3 text-white shadow-sm">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                Umumiy
-              </div>
-
-              <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Mahsulot:</span>
-                  <span className="font-semibold">{selectedItems.length} ta</span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Soni:</span>
-                  <span className="font-semibold">{totalCount} ta</span>
-                </div>
-
-                <div className="pt-2.5 border-t border-slate-700/50">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                    Jami
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                      Faktura Raqami
+                    </label>
+                    <input
+                      type="number"
+                      disabled={isSubmitting}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono font-semibold text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      value={invoiceNumber}
+                      onChange={(e) => setInvoiceNumber(e.target.value)}
+                      placeholder="123456"
+                    />
                   </div>
-                  <div className="text-xl font-semibold text-emerald-400">
-                    {grandTotalUZS.toLocaleString()}
-                    <span className="text-xs ml-1 text-emerald-500">UZS</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col min-h-0">
-            <div className="px-3 py-2.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-700 text-sm">Mahsulot qo'shish</h3>
-              <div className="text-xs text-slate-400">Avval mahsulot tanlanadi</div>
-            </div>
-
-            <div className="p-3 space-y-3 overflow-auto">
-              <div className="relative">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 block">
-                  Tovar nomi yoki kod
-                </label>
-
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    disabled={isSubmitting}
-                    value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      setSelectedProduct(null);
-                    }}
-                    className="flex-1 p-2.5 border border-slate-200 rounded-xl outline-amber-500 text-sm font-medium text-slate-700"
-                    placeholder="Qidirish..."
-                  />
-
-                  <button
-                    disabled={isSubmitting}
-                    onClick={handleAddItem}
-                    className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
-                  >
-                    <Plus size={15} />
-                    Qo'shish
-                  </button>
-                </div>
-
-                {filteredProducts.length > 0 && (
-                  <ul className="absolute z-50 w-full bg-white border border-slate-200 rounded-xl shadow-xl mt-1 max-h-64 overflow-y-auto">
-                    {filteredProducts.map((p) => (
-                      <li
-                        key={p.id}
-                        onClick={() => handleSelectProduct(p)}
-                        className="p-3 hover:bg-amber-50 cursor-pointer border-b last:border-b-0"
-                      >
-                        <div className="font-semibold text-slate-800 text-sm">{p.name}</div>
-                        <div className="text-xs text-amber-600 mt-1 font-mono">
-                          ID: #{p.customId ?? '-'} | kirim: {p.buyPrice || 0} {p.buyCurrency || 'UZS'} | sotuv: {p.salePrice || 0}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 overflow-hidden">
-                <div className="px-3 py-2.5 border-b border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700">
-                  Qo'shilgan mahsulotlar
-                </div>
-
-                <div className="p-3">
-                  {selectedItems.length === 0 ? (
-                    <div className="py-10 text-center text-slate-400">
-                      Mahsulot tanlanmagan
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                      {selectedItems.map((item) => (
-                        <div
-                          key={item.localId}
-                          className="rounded-2xl border border-slate-200 bg-white p-3"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="text-sm font-semibold text-slate-800 break-words">
-                                {item.name}
-                              </div>
-                              <div className="text-xs text-slate-400 mt-1">
-                                ID: #{item.customId || '-'}
-                              </div>
-                            </div>
-
-                            <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
-                              <Package size={15} />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
-                            <div>
-                              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                Soni
-                              </div>
-                              <div className="mt-1 font-semibold text-blue-600">
-                                {Number(item.count || 0)} {item.unit || 'Dona'}
-                              </div>
-                            </div>
-
-                            <div className="text-right">
-                              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                Jami
-                              </div>
-                              <div className="mt-1 font-semibold text-slate-800">
-                                {(Number(item.count || 0) * Number(item.price || 0)).toLocaleString()}
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                Kirim
-                              </div>
-                              <div className="mt-1 font-semibold text-slate-700">
-                                {Number(item.price || 0).toLocaleString()} {item.currency}
-                              </div>
-                            </div>
-
-                            <div className="text-right">
-                              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                Sotuv
-                              </div>
-                              <div className="mt-1 font-semibold text-emerald-600">
-                                {Number(item.salePrice || 0).toLocaleString()} UZS
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
-                            <button
-                              disabled={isSubmitting}
-                              onClick={() => handleRemoveItem(item.localId)}
-                              className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-40"
-                            >
-                              <Trash2 size={14} />
-                              O'chirish
-                            </button>
-                          </div>
-                        </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                      Ta'minotchi <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      disabled={isSubmitting}
+                      className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium text-slate-800 transition-all disabled:opacity-50 cursor-pointer"
+                      value={supplierName}
+                      onChange={(e) => setSupplierName(e.target.value)}
+                    >
+                      <option value="">Tanlang...</option>
+                      {suppliersList.map((s, i) => (
+                        <option key={s.id || i} value={s.name}>
+                          {s.name}
+                        </option>
                       ))}
+                      {supplierName &&
+                        !suppliersList.find((s) => s.name === supplierName) && (
+                          <option value={supplierName}>{supplierName}</option>
+                        )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                      Ombor <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      disabled={isSubmitting}
+                      className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium text-slate-800 transition-all disabled:opacity-50 cursor-pointer"
+                      value={warehouseId}
+                      onChange={(e) => setWarehouseId(e.target.value)}
+                    >
+                      <option value="">Tanlang...</option>
+                      {warehouses.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                      Sana
+                    </label>
+                    <input
+                      type="date"
+                      disabled={isSubmitting}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                    />
+                  </div>
+
+                  {canSeeAmount && (
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                        Valyuta kursi
+                      </label>
+                      <input
+                        type="number"
+                        disabled={isSubmitting}
+                        className="w-full p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm font-semibold text-amber-700 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-50"
+                        value={currencyRate}
+                        onChange={(e) => setCurrencyRate(e.target.value)}
+                      />
                     </div>
                   )}
                 </div>
               </div>
+
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                <h3 className="font-semibold text-slate-700 mb-3 border-b border-slate-100 pb-2 text-sm">
+                  Tovarni tanlash va narxlash
+                </h3>
+
+                <div className="flex flex-col gap-4">
+                  <div className="relative">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+                      Tovar nomi / Kod
+                    </label>
+
+                    <input
+                      type="text"
+                      disabled={isSubmitting}
+                      className="w-full h-14 px-4 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium text-base"
+                      placeholder="Tovar nomi yoki ID bo‘yicha qidiring..."
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setSelectedProduct(null);
+                      }}
+                    />
+
+                    {searchTerm && !selectedProduct && filteredProducts.length > 0 && (
+                      <ul className="absolute z-[9999] w-full bg-white border border-slate-200 rounded-xl shadow-2xl mt-2 max-h-[500px] overflow-y-auto">
+                        {filteredProducts.map((p) => (
+                          <li
+                            key={p.id}
+                            onClick={() => handleSelectProduct(p)}
+                            className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-b-0 transition-colors flex items-center justify-between gap-3"
+                          >
+                            <div className="text-sm font-semibold text-slate-800 truncate">
+                              {p.name}
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="text-xs font-mono text-blue-600">
+                                #{p.customId ?? '-'}
+                              </div>
+
+                              {canSeeAmount && (
+                                <div className="text-xs text-slate-500">
+                                  {p.buyPrice || 0} {p.buyCurrency || 'UZS'}
+                                </div>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+                        Soni
+                      </label>
+
+                      <input
+                        type="number"
+                        min="0"
+                        disabled={isSubmitting}
+                        className="w-full p-3 border border-slate-200 rounded-xl"
+                        value={inputCount}
+                        onChange={(e) => handleCountChange(e.target.value)}
+                      />
+                    </div>
+
+                    {canSeeAmount && (
+                      <div>
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+                          Kirim narx
+                        </label>
+
+                        <input
+                          type="number"
+                          min="0"
+                          disabled={isSubmitting}
+                          className="w-full p-3 border border-slate-200 rounded-xl"
+                          value={inputPrice}
+                          onChange={(e) => handlePriceChange(e.target.value)}
+                        />
+
+                        {inputCurrency === 'USD' && inputPrice && (
+                          <div className="text-[11px] font-semibold text-slate-400 mt-1">
+                            ≈ {Math.round(
+                              getCostInUZS(inputPrice, inputCurrency, currencyRate)
+                            ).toLocaleString('uz-UZ')} so'm
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+                        Valyuta
+                      </label>
+
+                      <select
+                        disabled={isSubmitting}
+                        className="w-full p-3 border border-slate-200 rounded-xl"
+                        value={inputCurrency}
+                        onChange={(e) => handleCurrencyChange(e.target.value)}
+                      >
+                        <option value="UZS">UZS</option>
+                        <option value="USD">USD</option>
+                      </select>
+                    </div>
+
+                    {canSeeAmount && (
+                      <div>
+                        <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 block">
+                          Ustama %
+                        </label>
+
+                        <input
+                          type="number"
+                          disabled={isSubmitting}
+                          className="w-full p-3 border border-amber-200 bg-amber-50 rounded-xl"
+                          value={inputMarkup}
+                          onChange={(e) => handleMarkupChange(e.target.value)}
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 block">
+                        Sotuv narx
+                      </label>
+
+                      <input
+                        type="number"
+                        disabled={isSubmitting}
+                        className="w-full p-3 border border-emerald-200 bg-emerald-50 rounded-xl"
+                        value={inputSalePrice}
+                        onChange={(e) => handleSalePriceChange(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={handleAddItem}
+                        className="w-full h-[46px] bg-blue-600 text-white rounded-xl hover:bg-blue-700 flex justify-center items-center gap-2"
+                      >
+                        <Plus size={18} />
+                        Qo‘shish
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-3">
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={handleToggleImei}
+                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+                        wantsImei
+                          ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Smartphone size={16} />
+                      IMEI raqamlarini kiritish{wantsImei ? `: ${imeiInputs.length} ta` : '?'}
+                    </button>
+
+                    {wantsImei && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+                        {imeiInputs.map((pair, index) => (
+                          <div
+                            key={index}
+                            className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-2.5"
+                          >
+                            <div className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2">
+                              Telefon #{index + 1}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">
+                                  IMEI 1
+                                </label>
+                                <input
+                                  type="text"
+                                  disabled={isSubmitting}
+                                  className="w-full p-2 border border-indigo-200 bg-white rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400"
+                                  value={pair.imei}
+                                  onChange={(e) =>
+                                    handleImeiInputChange(index, 'imei', e.target.value)
+                                  }
+                                  placeholder="15 raqamli IMEI"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">
+                                  IMEI 2
+                                </label>
+                                <input
+                                  type="text"
+                                  disabled={isSubmitting}
+                                  className="w-full p-2 border border-indigo-200 bg-white rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400"
+                                  value={pair.imei2}
+                                  onChange={(e) =>
+                                    handleImeiInputChange(index, 'imei2', e.target.value)
+                                  }
+                                  placeholder="15 raqamli IMEI"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-3 flex flex-col gap-4">
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">
+                  Pozitsiyalar
+                </div>
+                <div className="text-3xl font-black text-blue-600">
+                  {invoiceItems.length}
+                  <span className="text-sm text-slate-400 font-semibold ml-1">xil</span>
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Jami soni
+                  </span>
+                  <span className="text-sm font-bold text-slate-700">
+                    {invoiceItems.reduce((sum, item) => sum + Number(item.count || 0), 0)} dona
+                  </span>
+                </div>
+              </div>
+
+              {canSeeAmount && (
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                  <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">
+                    Jami summa
+                  </div>
+
+                  {(totalUSD > 0 || totalUZS > 0) && (
+                    <div className="flex flex-col gap-0.5 mb-2 pb-2 border-b border-slate-100">
+                      {totalUSD > 0 && (
+                        <div className="text-base font-bold text-blue-600 truncate">
+                          {totalUSD.toLocaleString('en-US')}
+                          <span className="text-xs text-blue-400 font-semibold ml-1">USD</span>
+                        </div>
+                      )}
+                      {totalUZS > 0 && (
+                        <div className="text-base font-bold text-slate-700 truncate">
+                          {totalUZS.toLocaleString('uz-UZ')}
+                          <span className="text-xs text-slate-400 font-semibold ml-1">UZS</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div
+                    className="text-2xl font-black text-emerald-500 truncate"
+                    title={`${grandTotalUZS.toLocaleString('uz-UZ')} UZS`}
+                  >
+                    {grandTotalUZS.toLocaleString('uz-UZ')}
+                    <span className="text-sm text-emerald-600/60 font-semibold ml-1">UZS</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
 
-      {activeTab === 'products' && (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
-          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
-            <Boxes size={16} className="text-blue-600" />
-            <h3 className="text-sm font-semibold text-slate-700">
-              Mahsulot parametrlarini kiriting
-            </h3>
-          </div>
-
-          <div className="flex-1 min-h-0 overflow-auto">
-            {selectedItems.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-slate-400">
-                Avval Faktura bo‘limida mahsulot qo‘shing
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
+              <h3 className="font-semibold text-slate-700 flex items-center gap-2 text-sm">
+                <Package size={16} className="text-blue-500" /> Qo'shilgan tovarlar
+              </h3>
+              <div className="text-sm text-slate-400 font-medium">
+                {invoiceItems.length} ta qator
               </div>
-            ) : (
-              <div className="p-4">
-                <div className="overflow-auto border border-slate-200 rounded-2xl">
-                  <table className="w-full min-w-[1040px] text-sm">
-                    <thead className="sticky top-0 bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">
+            </div>
+
+            <div className="p-5">
+              {invoiceItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-slate-400 py-10 border-2 border-dashed border-slate-200 rounded-2xl">
+                  <Package size={42} className="mb-3 text-slate-300" />
+                  <p className="font-medium text-sm">
+                    Faktura bo'sh. Yuqoridan mahsulot qo'shing.
+                  </p>
+                </div>
+              ) : (
+                <div className="max-h-[55vh] overflow-auto border border-slate-200 rounded-xl">
+                  <table className="w-full min-w-[880px] text-left whitespace-nowrap">
+                    <thead className="sticky top-0 bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-wider border-b border-slate-200">
                       <tr>
-                        <th className="p-3 text-left">Kod</th>
-                        <th className="p-3 text-left">Nomi</th>
-                        <th className="p-3 text-center w-[90px]">Soni</th>
-                        <th className="p-3 text-right w-[150px]">Kirim narx</th>
-                        <th className="p-3 text-center w-[130px]">Valyuta</th>
-                        <th className="p-3 text-center w-[140px]">Ustama %</th>
-                        <th className="p-3 text-right w-[170px]">Sotuv narx</th>
-                        <th className="p-3 text-right w-[150px]">Jami</th>
-                        <th className="p-3 text-center w-[80px]">Amal</th>
+                        <th className="p-4">ID</th>
+                        <th className="p-4">Nomi</th>
+                        <th className="p-4 w-24 text-center">Soni</th>
+                        {canSeeAmount && <th className="p-4 w-32 text-right">Kirim</th>}
+                        {canSeeAmount && <th className="p-4 w-24 text-center">Valyuta</th>}
+                        {canSeeAmount && (
+                          <th className="p-4 w-24 text-center text-amber-600">Ustama %</th>
+                        )}
+                        <th className="p-4 w-36 text-right text-emerald-600">Sotuv</th>
+                        {canSeeAmount && <th className="p-4 w-32 text-right">Jami</th>}
+                        <th className="p-4 w-16 text-center">X</th>
                       </tr>
                     </thead>
 
-                    <tbody className="text-slate-700">
-                      {selectedItems.map((item) => (
-                        <tr key={item.localId} className="border-b border-slate-100">
-                          <td className="p-2">
-                            <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-semibold text-slate-700 text-center">
+                    <tbody className="divide-y divide-slate-100 text-sm font-semibold">
+                      {invoiceItems.map((item) => (
+                        <React.Fragment key={item.id}>
+                          <tr className="hover:bg-blue-50/20 transition-colors">
+                            <td className="p-4 font-mono text-slate-400">
                               #{item.customId ?? '-'}
-                            </div>
-                          </td>
-
-                          <td className="p-2 min-w-[260px]">
-                            <div className="w-full p-2.5 border border-slate-200 rounded-lg bg-slate-50 text-sm font-semibold text-slate-700">
+                            </td>
+                            <td className="p-4 text-slate-800">
                               {item.name}
-                            </div>
-                          </td>
+                              {Array.isArray(item.imeis) && item.imeis.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleImeiExpand(item.id)}
+                                  title={item.imeis
+                                    .map((pair) => `${pair.imei} / ${pair.imei2}`)
+                                    .join('\n')}
+                                  className="inline-flex items-center gap-1 ml-2 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[11px] font-semibold align-middle hover:bg-indigo-100"
+                                >
+                                  <Smartphone size={11} />
+                                  IMEI: {item.imeis.length} ta
+                                  {expandedImeiId === item.id ? (
+                                    <ChevronUp size={11} />
+                                  ) : (
+                                    <ChevronDown size={11} />
+                                  )}
+                                </button>
+                              )}
+                            </td>
+                            <td className="p-4 text-center text-blue-600">
+                              {item.count} {item.unit}
+                            </td>
 
-                          <td className="p-2">
-                            <input
-                              type="number"
-                              disabled={isSubmitting}
-                              step={(item.unit || 'Dona') === 'Dona' ? '1' : '0.01'}
-                              value={item.count}
-                              onChange={(e) => updateItem(item.localId, 'count', e.target.value)}
-                              className="w-full p-2.5 border border-slate-200 rounded-lg outline-amber-500 text-sm text-center font-medium text-slate-700"
-                            />
-                          </td>
+                            {canSeeAmount && (
+                              <td className="p-4 text-right">
+                                {Number(item.price || 0).toLocaleString('uz-UZ')}
+                                {item.currency === 'USD' && (
+                                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">
+                                    ≈ {Math.round(
+                                      getCostInUZS(item.price, item.currency, currencyRate)
+                                    ).toLocaleString('uz-UZ')} so'm
+                                  </div>
+                                )}
+                              </td>
+                            )}
 
-                          <td className="p-2">
-                            <input
-                              type="number"
-                              disabled={isSubmitting}
-                              value={item.price}
-                              onChange={(e) => updateItem(item.localId, 'price', e.target.value)}
-                              className="w-full p-2.5 border border-slate-200 rounded-lg outline-amber-500 text-sm text-right font-medium text-slate-700"
-                            />
-                          </td>
+                            {canSeeAmount && (
+                              <td className="p-4 text-center text-slate-400">{item.currency}</td>
+                            )}
 
-                          <td className="p-2">
-                            <select
-                              disabled={isSubmitting}
-                              value={item.currency}
-                              onChange={(e) => updateItem(item.localId, 'currency', e.target.value)}
-                              className="w-full p-2.5 border border-slate-200 rounded-lg outline-amber-500 text-sm font-medium text-slate-700 bg-white"
-                            >
-                              <option value="UZS">UZS</option>
-                              <option value="USD">USD</option>
-                            </select>
-                          </td>
+                            {canSeeAmount && (
+                              <td className="p-4 text-center text-amber-600">{item.markup}%</td>
+                            )}
 
-                          <td className="p-2">
-                            <input
-                              type="number"
-                              disabled={isSubmitting}
-                              value={item.markup}
-                              onChange={(e) => updateItem(item.localId, 'markup', e.target.value)}
-                              className="w-full p-2.5 border border-amber-200 bg-amber-50 rounded-lg outline-amber-500 text-sm text-center font-semibold text-amber-700"
-                            />
-                          </td>
+                            <td className="p-4 text-right text-emerald-600">
+                              {Number(item.salePrice || 0).toLocaleString('uz-UZ')}
+                            </td>
 
-                          <td className="p-2">
-                            <input
-                              type="number"
-                              disabled={isSubmitting}
-                              value={item.salePrice}
-                              onChange={(e) => updateItem(item.localId, 'salePrice', e.target.value)}
-                              className="w-full p-2.5 border border-emerald-200 bg-emerald-50 rounded-lg outline-emerald-500 text-sm text-right font-semibold text-emerald-700"
-                            />
-                          </td>
+                            {canSeeAmount && (
+                              <td className="p-4 text-right font-bold text-slate-800">
+                                {Number(item.total || 0).toLocaleString('uz-UZ')}
+                              </td>
+                            )}
 
-                          <td className="p-2">
-                            <div className="px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm text-right font-semibold text-slate-800">
-                              {(Number(item.count || 0) * Number(item.price || 0)).toLocaleString()}
-                            </div>
-                          </td>
+                            <td className="p-4 text-center">
+                              <button
+                                disabled={isSubmitting}
+                                onClick={() => removeFromInvoice(item.id)}
+                                className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50"
+                                title="O'chirish"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </td>
+                          </tr>
 
-                          <td className="p-2 text-center">
-                            <button
-                              disabled={isSubmitting}
-                              onClick={() => handleRemoveItem(item.localId)}
-                              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 disabled:opacity-40"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </td>
-                        </tr>
+                          {expandedImeiId === item.id && Array.isArray(item.imeis) && (
+                            <tr className="bg-indigo-50/30">
+                              <td colSpan={canSeeAmount ? 9 : 5} className="p-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  {item.imeis.map((pair, index) => (
+                                    <div
+                                      key={index}
+                                      className="rounded-xl border border-indigo-200 bg-white p-2.5"
+                                    >
+                                      <div className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2">
+                                        Telefon #{index + 1}
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                          <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">
+                                            IMEI 1
+                                          </label>
+                                          <input
+                                            type="text"
+                                            disabled={isSubmitting}
+                                            value={pair.imei}
+                                            onChange={(e) =>
+                                              updateInvoiceItemImei(
+                                                item.id,
+                                                index,
+                                                'imei',
+                                                e.target.value
+                                              )
+                                            }
+                                            className="w-full p-2 border border-indigo-200 bg-indigo-50/30 rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">
+                                            IMEI 2
+                                          </label>
+                                          <input
+                                            type="text"
+                                            disabled={isSubmitting}
+                                            value={pair.imei2}
+                                            onChange={(e) =>
+                                              updateInvoiceItemImei(
+                                                item.id,
+                                                index,
+                                                'imei2',
+                                                e.target.value
+                                              )
+                                            }
+                                            className="w-full p-2 border border-indigo-200 bg-indigo-50/30 rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400"
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <div className="flex justify-end mt-3">
+                                  <button
+                                    type="button"
+                                    disabled={isSubmitting}
+                                    onClick={() => closeImeiExpand(item)}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                                  >
+                                    Saqlash
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 text-center">
-            <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-amber-500">
-              <CheckCircle size={30} />
-            </div>
-
-            <h3 className="text-lg font-medium text-slate-800 mb-2">
-              O'zgarishlarni saqlaysizmi?
-            </h3>
-
-            <p className="text-sm text-slate-500 mb-6 leading-6">
-              Faktura ma'lumotlari yangilanadi.
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                disabled={isSubmitting}
-                onClick={() => setShowConfirmModal(false)}
-                className="flex-1 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200"
-              >
-                Bekor qilish
-              </button>
-
-              <button
-                disabled={isSubmitting}
-                onClick={handleSaveInvoice}
-                className="flex-1 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50 inline-flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : 'Saqlash'}
-              </button>
+              )}
             </div>
           </div>
         </div>

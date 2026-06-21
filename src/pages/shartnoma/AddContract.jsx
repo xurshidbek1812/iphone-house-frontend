@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../../utils/api';
+import { fuzzyMatchProduct } from '../../utils/fuzzyMatch';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -542,13 +543,7 @@ const debtAmount = useMemo(() => {
   const filteredProducts = useMemo(() => {
     if (!productSearch) return products;
 
-    const search = productSearch.trim().toLowerCase();
-
-    return products.filter(
-      (p) =>
-        (p.name || '').toLowerCase().includes(search) ||
-        (p.customId != null && String(p.customId).includes(search))
-    );
+    return products.filter((p) => fuzzyMatchProduct(productSearch, p));
   }, [products, productSearch]);
 
   if (dataLoading) {

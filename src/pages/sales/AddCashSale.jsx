@@ -14,10 +14,15 @@ import {
   Loader2,
   Package,
   ChevronLeft,
-  Minus
+  Minus,
+  Smartphone,
+  Edit2,
+  Check,
+  Warehouse as WarehouseIcon
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { parseQrCode } from '../../utils/qrParser';
+import { fuzzyMatchProduct } from '../../utils/fuzzyMatch';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const PRODUCTS_PER_PAGE = 8;
@@ -35,7 +40,7 @@ const normalizeSaleForEdit = (sale) => {
     isAnonymous: !sale?.customer,
     mainCustomer: sale?.customer || null,
     otherName: sale?.customer ? '' : sale?.otherName || '',
-    otherPhone: sale?.customer ? '+998 ' : sale?.otherPhone || '+998 ',
+    otherPhone: sale?.customer ? '+998' : sale?.otherPhone || '+998',
     note: sale?.note || '',
     items: (sale?.items || []).map((item, index) => {
       const allocation = item.allocations?.[0];
@@ -171,13 +176,17 @@ const AddCashSale = () => {
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   const [allBatches, setAllBatches] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
   const [selectedProductForBatches, setSelectedProductForBatches] = useState(null);
+  const [imeiPickerBatch, setImeiPickerBatch] = useState(null);
+  const [imeiPickerSelected, setImeiPickerSelected] = useState([]);
 
   const [saleData, setSaleData] = useState({
     isAnonymous: false,
     mainCustomer: null,
     otherName: '',
-    otherPhone: '+998 ',
+    otherPhone: '+998',
     items: [],
     note: ''
   });
@@ -233,14 +242,27 @@ const AddCashSale = () => {
     async (signal = undefined) => {
       if (!token) return;
 
-      const [custRes, prodRes] = await Promise.allSettled([
+      const [custRes, prodRes, whRes] = await Promise.allSettled([
         fetch(`${API_URL}/api/customers`, { headers: getAuthHeaders(), signal }),
-        fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal })
+        fetch(`${API_URL}/api/products`, { headers: getAuthHeaders(), signal }),
+        fetch(`${API_URL}/api/warehouses?active=true`, { headers: getAuthHeaders(), signal })
       ]);
 
       if (custRes.status === 'fulfilled' && custRes.value.ok) {
         const cData = await parseJsonSafe(custRes.value);
         if (Array.isArray(cData)) setCustomers(cData);
+      }
+
+      if (whRes.status === 'fulfilled' && whRes.value.ok) {
+        const wData = await parseJsonSafe(whRes.value);
+
+        if (Array.isArray(wData)) {
+          setWarehouses(wData);
+
+          if (wData.length === 1) {
+            setSelectedWarehouseId(String(wData[0].id));
+          }
+        }
       }
 
       if (prodRes.status === 'fulfilled' && prodRes.value.ok) {
@@ -270,6 +292,7 @@ const AddCashSale = () => {
                   extractedBatches.push({
                     id: prod.id,
                     batchId: batch.id,
+                    warehouseId: batch.warehouseId,
                     customId: prod.customId,
                     name: prod.name,
                     quantity: Number(batch.quantity || 0),
@@ -277,7 +300,8 @@ const AddCashSale = () => {
                     salePrice: productSalePrice,
                     buyCurrency: batch.buyCurrency,
                     unit: prod.unit || 'Dona',
-                    scanType: 'BATCH'
+                    scanType: 'BATCH',
+                    units: Array.isArray(batch.units) ? batch.units : []
                   });
                 }
               });
@@ -308,6 +332,9 @@ const AddCashSale = () => {
       }
 
       setSaleData(normalizeSaleForEdit(data));
+      if (data?.warehouseId) {
+        setSelectedWarehouseId(String(data.warehouseId));
+      }
       setSaleLoaded(true);
     },
     [isEditMode, id, getAuthHeaders]
@@ -391,16 +418,20 @@ const AddCashSale = () => {
     }));
   }, [isEditMode, saleLoaded, allBatches, saleData.items]);
 
-  const filteredProducts = useMemo(() => {
-    if (!productSearch.trim()) return products;
-    const search = productSearch.trim().toLowerCase();
+  const availableBatches = useMemo(() => {
+    if (!selectedWarehouseId) return [];
+    return allBatches.filter((b) => String(b.warehouseId) === String(selectedWarehouseId));
+  }, [allBatches, selectedWarehouseId]);
 
-    return products.filter(
-      (p) =>
-        (p.name || '').toLowerCase().includes(search) ||
-        (p.customId != null && String(p.customId).includes(search))
-    );
-  }, [products, productSearch]);
+  const filteredProducts = useMemo(() => {
+    if (!selectedWarehouseId) return [];
+
+    const base = products.filter((p) => availableBatches.some((b) => b.id === p.id));
+
+    if (!productSearch.trim()) return base;
+
+    return base.filter((p) => fuzzyMatchProduct(productSearch, p));
+  }, [products, productSearch, selectedWarehouseId, availableBatches]);
 
   useEffect(() => {
     setCatalogPage(1);
@@ -425,9 +456,109 @@ const AddCashSale = () => {
     return saleData.items.reduce((sum, item) => sum + getItemTotal(item), 0);
   }, [saleData.items, getItemTotal]);
 
+  const openImeiPicker = (batch) => {
+    const existingItem = saleData.items.find((i) => i.batchId === batch.batchId);
+    setImeiPickerBatch(batch);
+    setImeiPickerSelected(
+      Array.isArray(existingItem?.selectedImeis) ? [...existingItem.selectedImeis] : []
+    );
+  };
+
+  const closeImeiPicker = () => {
+    setImeiPickerBatch(null);
+    setImeiPickerSelected([]);
+  };
+
+  const toggleImeiSelection = (imei) => {
+    setImeiPickerSelected((prev) =>
+      prev.includes(imei) ? prev.filter((x) => x !== imei) : [...prev, imei]
+    );
+  };
+
+  const confirmImeiPicker = () => {
+    if (imeiPickerSelected.length === 0) {
+      return toast.error('Kamida bitta IMEI tanlang!');
+    }
+
+    const batch = imeiPickerBatch;
+    const existingItem = saleData.items.find((i) => i.batchId === batch.batchId);
+    const chosen = [...imeiPickerSelected];
+
+    setSaleData((prev) => ({
+      ...prev,
+      items: existingItem
+        ? prev.items.map((item) =>
+            item.batchId === batch.batchId
+              ? { ...item, qty: chosen.length, selectedImeis: chosen }
+              : item
+          )
+        : [
+            ...prev.items,
+            {
+              ...batch,
+              localId: `batch-${batch.batchId}`,
+              qty: chosen.length,
+              discount: 0,
+              scanType: 'BATCH',
+              selectedImeis: chosen
+            }
+          ]
+    }));
+
+    toast.success(existingItem ? "IMEI ro'yxati yangilandi" : "Savatga qo'shildi");
+    closeImeiPicker();
+    setProductTab('cart');
+  };
+
+  const addImeiToCart = (batch, imei) => {
+    const existingItem = saleData.items.find((i) => i.batchId === batch.batchId);
+
+    if (existingItem) {
+      if (Array.isArray(existingItem.selectedImeis) && existingItem.selectedImeis.includes(imei)) {
+        toast.error('Bu IMEI allaqachon savatda!');
+        return;
+      }
+
+      setSaleData((prev) => ({
+        ...prev,
+        items: prev.items.map((item) =>
+          item.batchId === batch.batchId
+            ? {
+                ...item,
+                qty: Number(item.qty || 0) + 1,
+                selectedImeis: [...(item.selectedImeis || []), imei]
+              }
+            : item
+        )
+      }));
+    } else {
+      setSaleData((prev) => ({
+        ...prev,
+        items: [
+          ...prev.items,
+          {
+            ...batch,
+            localId: `batch-${batch.batchId}`,
+            qty: 1,
+            discount: 0,
+            scanType: 'BATCH',
+            selectedImeis: [imei]
+          }
+        ]
+      }));
+    }
+
+    toast.success(`Qo'shildi: ${imei}`);
+  };
+
   const addBatchToCart = (batch) => {
     if (Number(batch.quantity || 0) <= 0) {
       return toast.error("Ushbu partiyada qoldiq yo'q!");
+    }
+
+    if (Array.isArray(batch.units) && batch.units.length > 0) {
+      openImeiPicker(batch);
+      return;
     }
 
     const existingItem = saleData.items.find((i) => i.batchId === batch.batchId);
@@ -472,7 +603,7 @@ const AddCashSale = () => {
   };
 
   const handleProductClick = (product) => {
-    const productBatches = allBatches.filter((b) => b.id === product.id);
+    const productBatches = availableBatches.filter((b) => b.id === product.id);
 
     if (productBatches.length === 1) {
       addBatchToCart(productBatches[0]);
@@ -606,12 +737,19 @@ const AddCashSale = () => {
   const handleBarcodeScan = (e) => {
     if (e.key !== 'Enter' || !e.target.value.trim()) return;
 
+    if (!selectedWarehouseId) {
+      toast.error("Avval omborni tanlang!");
+      e.target.value = '';
+      return;
+    }
+
     const code = e.target.value.trim();
     const parsed = parseQrCode(code);
 
     const searchKey = String(parsed.id || '').trim();
     const batchKey = parsed.batchId ? String(parsed.batchId) : null;
     const invoiceKey = parsed.invoiceId ? String(parsed.invoiceId) : null;
+    const imeiKey = parsed.imei ? String(parsed.imei).trim() : null;
 
     if (!parsed.isValid || !searchKey) {
       toast.error("QR kod noto'g'ri yoki o'qilmadi");
@@ -629,8 +767,38 @@ const AddCashSale = () => {
       return;
     }
 
+    if (imeiKey) {
+      const matchesImei = (u) => u.imei === imeiKey || u.imei2 === imeiKey;
+
+      const foundBatch = availableBatches.find(
+        (b) => Array.isArray(b.units) && b.units.some(matchesImei)
+      );
+
+      if (!foundBatch) {
+        toast.error("Bu IMEI bo'yicha tovar topilmadi");
+        e.target.value = '';
+        barcodeInputRef.current?.focus();
+        return;
+      }
+
+      const unit = foundBatch.units.find(matchesImei);
+
+      if (unit.status !== 'IN_STOCK') {
+        toast.error(`Bu telefon (${imeiKey}) allaqachon band yoki sotilgan!`);
+        e.target.value = '';
+        barcodeInputRef.current?.focus();
+        return;
+      }
+
+      addImeiToCart(foundBatch, unit.imei);
+      setProductTab('cart');
+      e.target.value = '';
+      barcodeInputRef.current?.focus();
+      return;
+    }
+
     if (batchKey) {
-      const foundBatch = allBatches.find(
+      const foundBatch = availableBatches.find(
         (b) => String(b.batchId) === batchKey && String(b.customId) === searchKey
       );
 
@@ -646,7 +814,7 @@ const AddCashSale = () => {
       return;
     }
 
-    const matchedBatches = allBatches.filter(
+    const matchedBatches = availableBatches.filter(
       (b) => String(b.customId) === searchKey && Number(b.quantity || 0) > 0
     );
 
@@ -678,6 +846,27 @@ const AddCashSale = () => {
     barcodeInputRef.current?.focus();
   };
 
+  const handleSkipCustomer = () => {
+    setSaleData((prev) => ({
+      ...prev,
+      isAnonymous: true,
+      mainCustomer: null,
+      otherName: '',
+      otherPhone: ''
+    }));
+    setStep(2);
+    setTimeout(() => barcodeInputRef.current?.focus(), 100);
+  };
+
+  const handlePhoneChange = (value) => {
+    const digitsOnly = value.replace(/\D/g, '').replace(/^998/, '');
+    const limited = digitsOnly.slice(0, 9);
+    setSaleData((prev) => ({
+      ...prev,
+      otherPhone: limited ? `+998${limited}` : '+998'
+    }));
+  };
+
   const handleNext = () => {
     if (step === 1 && !saleData.isAnonymous && !saleData.mainCustomer) {
       return toast.error("Mijozni tanlang yoki 'Boshqa shaxs' ni tanlang");
@@ -706,6 +895,10 @@ const AddCashSale = () => {
   };
 
   const submitSale = async () => {
+    if (!selectedWarehouseId) {
+      return toast.error("Omborni tanlang!");
+    }
+
     const invalidQtyItem = saleData.items.find(
       (item) =>
         !Number(item.qty) ||
@@ -749,13 +942,17 @@ const AddCashSale = () => {
         otherName: saleData.isAnonymous ? saleData.otherName.trim() : null,
         otherPhone: saleData.isAnonymous ? saleData.otherPhone.trim() : null,
         note: saleData.note.trim() || null,
+        warehouseId: Number(selectedWarehouseId),
         items: saleData.items.map((item) => ({
           productId: item.id,
           quantity: Number(item.qty),
           unitPrice: Number(item.salePrice),
           discountAmount: Number(item.discount || 0),
           batchId: Number(item.batchId),
-          scanType: item.scanType || 'BATCH'
+          scanType: item.scanType || 'BATCH',
+          imeis: Array.isArray(item.selectedImeis) && item.selectedImeis.length
+            ? item.selectedImeis
+            : undefined
         }))
       };
 
@@ -847,7 +1044,7 @@ const AddCashSale = () => {
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto p-4">
-              {allBatches
+              {availableBatches
                 .filter((b) => b.id === selectedProductForBatches.id)
                 .map((batch) => {
                   const qtyInCart =
@@ -892,11 +1089,106 @@ const AddCashSale = () => {
                   );
                 })}
 
-              {allBatches.filter((b) => b.id === selectedProductForBatches.id).length === 0 && (
+              {availableBatches.filter((b) => b.id === selectedProductForBatches.id).length === 0 && (
                 <div className="py-10 text-center font-medium text-slate-400">
                   Ushbu tovar uchun faol partiya topilmadi
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {imeiPickerBatch && (
+        <div
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeImeiPicker();
+          }}
+        >
+          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-4">
+              <div>
+                <div className="text-xs font-black uppercase tracking-widest text-indigo-600">
+                  IMEI tanlash
+                </div>
+                <div className="mt-1 text-base font-black text-slate-800">
+                  {imeiPickerBatch.name}
+                </div>
+                <div className="mt-0.5 text-xs text-slate-500">
+                  Partiya P-{imeiPickerBatch.batchId} • Tanlangan: {imeiPickerSelected.length} ta
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeImeiPicker}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-white"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-2 overflow-y-auto p-4">
+              {(imeiPickerBatch.units || [])
+                .filter((u) => u.status === 'IN_STOCK')
+                .map((unit) => {
+                  const isSelected = imeiPickerSelected.includes(unit.imei);
+
+                  return (
+                    <button
+                      key={unit.id}
+                      type="button"
+                      onClick={() => toggleImeiSelection(unit.imei)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left transition-all ${
+                        isSelected
+                          ? 'border-indigo-400 bg-indigo-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Smartphone
+                          size={16}
+                          className={isSelected ? 'text-indigo-600' : 'text-slate-400'}
+                        />
+                        <div className="flex flex-col">
+                          <span className="font-mono text-sm font-semibold text-slate-800">
+                            IMEI 1: {unit.imei}
+                          </span>
+                          {unit.imei2 && (
+                            <span className="font-mono text-xs font-medium text-slate-500">
+                              IMEI 2: {unit.imei2}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {isSelected && <Check size={16} className="text-indigo-600" />}
+                    </button>
+                  );
+                })}
+
+              {(imeiPickerBatch.units || []).filter((u) => u.status === 'IN_STOCK').length ===
+                0 && (
+                <div className="py-10 text-center font-medium text-slate-400">
+                  Bu partiyada sotilmagan IMEI qolmadi
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
+              <div className="text-sm font-semibold text-slate-600">
+                {imeiPickerSelected.length} ta tanlandi
+              </div>
+
+              <button
+                type="button"
+                onClick={confirmImeiPicker}
+                disabled={imeiPickerSelected.length === 0}
+                className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Tasdiqlash
+              </button>
             </div>
           </div>
         </div>
@@ -924,13 +1216,32 @@ const AddCashSale = () => {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="hidden h-9 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 sm:inline-flex"
-          >
-            Bekor qilish
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <WarehouseIcon size={15} className="text-slate-400" />
+              <select
+                disabled={isEditMode}
+                value={selectedWarehouseId}
+                onChange={(e) => setSelectedWarehouseId(e.target.value)}
+                className="bg-transparent text-sm font-bold text-slate-700 outline-none disabled:opacity-60"
+              >
+                <option value="">Ombor tanlang...</option>
+                {warehouses.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="hidden h-9 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 sm:inline-flex"
+            >
+              Bekor qilish
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1005,12 +1316,11 @@ const AddCashSale = () => {
                     </label>
                     <input
                       type="text"
+                      inputMode="numeric"
                       value={saleData.otherPhone}
-                      onChange={(e) =>
-                        setSaleData((prev) => ({ ...prev, otherPhone: e.target.value }))
-                      }
+                      onChange={(e) => handlePhoneChange(e.target.value)}
                       className="w-full rounded-2xl border border-slate-200 p-3 font-mono font-medium text-slate-700 outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
-                      placeholder="+998"
+                      placeholder="+998901234567"
                     />
                   </div>
                 </div>
@@ -1047,9 +1357,11 @@ const AddCashSale = () => {
                   {saleData.isAnonymous ? (
                     <>
                       <h3 className="mb-1 text-base font-semibold tracking-tight text-slate-800">
-                        {saleData.otherName || 'Kiritilmagan'}
+                        {saleData.otherName || 'Anonim xaridor'}
                       </h3>
-                      <p className="text-sm font-medium text-slate-500">{saleData.otherPhone}</p>
+                      {saleData.otherPhone && saleData.otherPhone !== '+998' && (
+                        <p className="text-sm font-medium text-slate-500">{saleData.otherPhone}</p>
+                      )}
                     </>
                   ) : saleData.mainCustomer ? (
                     <>
@@ -1201,7 +1513,7 @@ const AddCashSale = () => {
                       <div className="min-h-0 flex-1 overflow-auto pr-1">
                         <div className="grid auto-rows-max grid-cols-1 gap-3 xl:grid-cols-2">
                           {paginatedProducts.map((product) => {
-                            const productBatches = allBatches.filter((b) => b.id === product.id);
+                            const productBatches = availableBatches.filter((b) => b.id === product.id);
                             const totalQty = productBatches.reduce(
                               (sum, b) => sum + Number(b.quantity || 0),
                               0
@@ -1268,7 +1580,9 @@ const AddCashSale = () => {
 
                         {paginatedProducts.length === 0 && (
                           <div className="py-12 text-center font-medium text-slate-400">
-                            Mahsulot topilmadi
+                            {!selectedWarehouseId
+                              ? "Avval omborni tanlang"
+                              : 'Mahsulot topilmadi'}
                           </div>
                         )}
                       </div>
@@ -1292,6 +1606,41 @@ const AddCashSale = () => {
                                   <div className="mt-1 text-[11px] text-slate-500">
                                     Partiya: #{item.batchId ?? '-'} • Qoldiq: {item.quantity} ta
                                   </div>
+
+                                  {Array.isArray(item.selectedImeis) && item.selectedImeis.length > 0 && (
+                                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                      {item.selectedImeis.map((imei) => {
+                                        const unit = allBatches
+                                          .find((b) => b.batchId === item.batchId)
+                                          ?.units?.find((u) => u.imei === imei);
+
+                                        return (
+                                          <span
+                                            key={imei}
+                                            title={unit?.imei2 ? `IMEI 2: ${unit.imei2}` : undefined}
+                                            className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-700"
+                                          >
+                                            <Smartphone size={11} />
+                                            {imei}
+                                          </span>
+                                        );
+                                      })}
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const batch = allBatches.find(
+                                            (b) => b.batchId === item.batchId
+                                          );
+                                          if (batch) openImeiPicker(batch);
+                                        }}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-2 py-1 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50"
+                                      >
+                                        <Edit2 size={11} />
+                                        O'zgartirish
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
 
                                 <button
@@ -1308,44 +1657,50 @@ const AddCashSale = () => {
                                   <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
                                     Soni
                                   </label>
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        updateCartItemQty(
-                                          item.localId,
-                                          Math.max(1, Number(item.qty || 1) - 1)
-                                        )
-                                      }
-                                      className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600"
-                                    >
-                                      <Minus size={12} />
-                                    </button>
-
-                                    <input
-                                      value={item.qty}
-                                      onChange={(e) =>
-                                        updateCartItemQty(item.localId, e.target.value)
-                                      }
-                                      className="h-8 flex-1 rounded-xl border border-slate-200 bg-white text-center text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100"
-                                    />
-
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        updateCartItemQty(
-                                          item.localId,
-                                          Math.min(
-                                            Number(item.quantity || 0),
-                                            Number(item.qty || 0) + 1
+                                  {Array.isArray(item.selectedImeis) && item.selectedImeis.length > 0 ? (
+                                    <div className="flex h-8 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-700">
+                                      {item.qty} ta (IMEI bo'yicha)
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCartItemQty(
+                                            item.localId,
+                                            Math.max(1, Number(item.qty || 1) - 1)
                                           )
-                                        )
-                                      }
-                                      className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600"
-                                    >
-                                      <Plus size={12} />
-                                    </button>
-                                  </div>
+                                        }
+                                        className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600"
+                                      >
+                                        <Minus size={12} />
+                                      </button>
+
+                                      <input
+                                        value={item.qty}
+                                        onChange={(e) =>
+                                          updateCartItemQty(item.localId, e.target.value)
+                                        }
+                                        className="h-8 flex-1 rounded-xl border border-slate-200 bg-white text-center text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100"
+                                      />
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCartItemQty(
+                                            item.localId,
+                                            Math.min(
+                                              Number(item.quantity || 0),
+                                              Number(item.qty || 0) + 1
+                                            )
+                                          )
+                                        }
+                                        className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600"
+                                      >
+                                        <Plus size={12} />
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div>
@@ -1648,6 +2003,16 @@ const AddCashSale = () => {
             <div className="mx-auto max-w-7xl px-4 pb-3 sm:px-6">
               <div className="flex justify-end">
                 <div className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
+                  <button
+                    type="button"
+                    onClick={handleSkipCustomer}
+                    disabled={isLoading}
+                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                    title="Mijoz ma'lumotlarisiz davom etish"
+                  >
+                    O'tkazib yuborish
+                  </button>
+
                   <button
                     type="button"
                     onClick={handleNext}

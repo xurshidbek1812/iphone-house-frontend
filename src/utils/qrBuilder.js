@@ -9,3 +9,7 @@ export const buildInvoiceQr = (customId, invoiceId) => {
 export const buildBatchQr = (customId, batchId) => {
   return `ID:${customId}|BATCH:${batchId}`;
 };
+
+export const buildUnitQr = (customId, batchId, imei) => {
+  return `ID:${customId}|BATCH:${batchId}|IMEI:${imei}`;
+};

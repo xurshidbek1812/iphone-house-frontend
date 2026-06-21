@@ -12,8 +12,7 @@ import {
   ChevronRight,
   Receipt,
   Wallet,
-  CalendarDays,
-  User2
+  CalendarDays
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../../utils/api';
@@ -54,7 +53,8 @@ const ExpenseOutput = () => {
   const [appliedSearch, setAppliedSearch] = useState('');
 
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(20);
+  const [limitInput, setLimitInput] = useState('20');
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
@@ -241,6 +241,17 @@ const ExpenseOutput = () => {
     }
   };
 
+  const commitLimitChange = () => {
+    const parsed = Math.min(100, Math.max(1, Number(limitInput) || 20));
+    setLimitInput(String(parsed));
+    setLimit(parsed);
+    setPage(1);
+  };
+
+  const handleLimitKeyDown = (e) => {
+    if (e.key === 'Enter') commitLimitChange();
+  };
+
   return (
     <div className="h-full min-h-0 flex flex-col bg-slate-50">
       <div className="mb-3 flex items-start justify-between gap-3 flex-wrap">
@@ -364,7 +375,7 @@ const ExpenseOutput = () => {
                       </td>
 
                       <td className="px-4 py-3 whitespace-nowrap text-[13px] font-medium text-slate-600">
-                        {item.createdByName || '-'}
+                        {item.createdBy?.fullName || item.createdBy?.username || item.createdByName || '-'}
                       </td>
 
                       <td className="px-4 py-3">
@@ -423,9 +434,25 @@ const ExpenseOutput = () => {
           </table>
         </div>
 
-        <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
-          <div className="text-sm text-slate-500">
-            Jami: <span className="font-semibold text-slate-800">{total} ta</span>
+        <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-slate-500">
+              Jami: <span className="font-semibold text-slate-800">{total} ta</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-slate-500">Sahifada:</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={limitInput}
+                onChange={(e) => setLimitInput(e.target.value)}
+                onBlur={commitLimitChange}
+                onKeyDown={handleLimitKeyDown}
+                className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -603,88 +630,106 @@ const ExpenseOutput = () => {
             </div>
 
             <div className="p-5 space-y-4 max-h-[80vh] overflow-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
-                    <Wallet size={14} />
-                    Kassa
+              <div className="rounded-xl border border-slate-200 bg-white px-5 py-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1">
+                      <Wallet size={12} />
+                      Kassa
+                    </div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {detailModal.expense.cashbox?.name || '-'}
+                    </div>
                   </div>
-                  <div className="text-sm font-semibold text-slate-800">
-                    {detailModal.expense.cashbox?.name || '-'}
+
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1">
+                      <Receipt size={12} />
+                      Xarajat moddasi
+                    </div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {detailModal.expense.expenseCategory?.group?.name
+                        ? `${detailModal.expense.expenseCategory.group.name} / ${detailModal.expense.expenseCategory.name}`
+                        : detailModal.expense.expenseCategory?.name || '-'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Summa</div>
+                    <div className="text-sm font-semibold text-rose-600">
+                      {formatMoney(detailModal.expense.amount)} UZS
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Holati</div>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(
+                        detailModal.expense.status
+                      )}`}
+                    >
+                      {detailModal.expense.status || 'Jarayonda'}
+                    </span>
+                  </div>
+
+                  <div className="col-span-2">
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1">
+                      <CalendarDays size={12} />
+                      Sana
+                    </div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {formatDateTime(detailModal.expense.createdAt)}
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
-                    <Receipt size={14} />
-                    Xarajat moddasi
+                <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Yaratdi</div>
+                    <div className="text-sm font-medium text-slate-700">
+                      {detailModal.expense.createdBy?.fullName ||
+                        detailModal.expense.createdBy?.username ||
+                        detailModal.expense.createdByName ||
+                        "Noma'lum"}
+                    </div>
                   </div>
-                  <div className="text-sm font-semibold text-slate-800">
-                    {detailModal.expense.expenseCategory?.group?.name
-                      ? `${detailModal.expense.expenseCategory.group.name} / ${detailModal.expense.expenseCategory.name}`
-                      : detailModal.expense.expenseCategory?.name || '-'}
-                  </div>
+
+                  {(detailModal.expense.approvedBy?.fullName ||
+                    detailModal.expense.approvedBy?.username ||
+                    detailModal.expense.approvedByName) && (
+                    <div>
+                      <div className="text-[11px] text-slate-400 mb-1">Tasdiqladi</div>
+                      <div className="text-sm font-medium text-emerald-700">
+                        {detailModal.expense.approvedBy?.fullName ||
+                          detailModal.expense.approvedBy?.username ||
+                          detailModal.expense.approvedByName}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {formatDateTime(detailModal.expense.approvedAt)}
+                      </div>
+                    </div>
+                  )}
+
+                  {(detailModal.expense.cancelledBy?.fullName ||
+                    detailModal.expense.cancelledBy?.username) && (
+                    <div>
+                      <div className="text-[11px] text-slate-400 mb-1">Bekor qildi</div>
+                      <div className="text-sm font-medium text-rose-700">
+                        {detailModal.expense.cancelledBy?.fullName ||
+                          detailModal.expense.cancelledBy?.username}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {formatDateTime(detailModal.expense.cancelledAt)}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
-                  <div className="text-[10px] uppercase tracking-widest text-rose-500 font-black mb-2">
-                    Summa
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <div className="text-[11px] text-slate-400 mb-1">Izoh</div>
+                  <div className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-6">
+                    {detailModal.expense.note || '-'}
                   </div>
-                  <div className="text-xl font-semibold text-rose-600">
-                    {formatMoney(detailModal.expense.amount)} UZS
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-2">
-                    Holati
-                  </div>
-                  <span
-                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${getStatusClasses(
-                      detailModal.expense.status
-                    )}`}
-                  >
-                    {detailModal.expense.status || 'Jarayonda'}
-                  </span>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
-                    <User2 size={14} />
-                    Yaratgan
-                  </div>
-                  <div className="text-sm font-semibold text-slate-800">
-                    {detailModal.expense.createdByName || '-'}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
-                    <CheckCircle size={14} />
-                    Tasdiqlagan
-                  </div>
-                  <div className="text-sm font-semibold text-slate-800">
-                    {detailModal.expense.approvedByName || '-'}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:col-span-2">
-                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">
-                    <CalendarDays size={14} />
-                    Sana
-                  </div>
-                  <div className="text-sm font-semibold text-slate-800">
-                    {formatDateTime(detailModal.expense.createdAt)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-2">
-                  Izoh
-                </div>
-                <div className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-6">
-                  {detailModal.expense.note || '-'}
                 </div>
               </div>
             </div>

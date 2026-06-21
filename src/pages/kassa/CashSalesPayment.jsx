@@ -450,41 +450,46 @@ const CashSalesPayment = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 md:px-5 py-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200">
-            <div className="flex items-center gap-2 text-blue-500 mb-2">
-              <Calendar size={16} />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+        <div className="rounded-xl border border-slate-200 bg-white px-5 py-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1">
+                <Calendar size={12} />
                 Sanasi
-              </span>
+              </div>
+              <div className="text-sm font-semibold text-slate-800">
+                {formatOnlyDate(selectedSale.createdAt)}
+              </div>
             </div>
-            <div className="text-lg font-black text-slate-800">
-              {formatOnlyDate(selectedSale.createdAt)}
-            </div>
-          </div>
 
-          <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200">
-            <div className="flex items-center gap-2 text-indigo-500 mb-2">
-              <Briefcase size={16} />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <div>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1">
+                <Briefcase size={12} />
                 Savdo raqami
-              </span>
+              </div>
+              <div className="text-sm font-semibold text-slate-800">
+                {selectedSale.orderNumber || selectedSale.id}
+              </div>
             </div>
-            <div className="text-lg font-black text-slate-800">
-              {selectedSale.orderNumber || selectedSale.id}
-            </div>
-          </div>
 
-          <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200">
-            <div className="flex items-center gap-2 text-purple-500 mb-2">
-              <User size={16} />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <div>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1">
+                <User size={12} />
                 Mijoz
-              </span>
+              </div>
+              <div className="text-sm font-semibold text-slate-800 truncate" title={customerName}>
+                {customerName}
+              </div>
             </div>
-            <div className="text-sm font-black text-slate-800 uppercase truncate" title={customerName}>
-              {customerName}
-            </div>
+
+            {(selectedSale.user?.fullName || selectedSale.user?.username) && (
+              <div>
+                <div className="text-[11px] text-slate-400 mb-1">Yaratdi</div>
+                <div className="text-sm font-medium text-slate-700">
+                  {selectedSale.user?.fullName || selectedSale.user?.username}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -528,13 +533,14 @@ const CashSalesPayment = () => {
                   <th className="p-4">Sanasi</th>
                   <th className="p-4 text-right">Summasi</th>
                   <th className="p-4 text-center">Kassa</th>
+                  <th className="p-4">Qabul qildi</th>
                   <th className="p-4">Izoh</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-sm font-semibold text-slate-700">
                 {!selectedSale.payments || selectedSale.payments.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="p-10 text-center text-slate-400 font-medium">
+                    <td colSpan="6" className="p-10 text-center text-slate-400 font-medium">
                       Hali hech qanday to'lov olinmagan
                     </td>
                   </tr>
@@ -552,6 +558,9 @@ const CashSalesPayment = () => {
                         <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[10px] uppercase tracking-wider font-bold">
                           {p.cashbox?.name || p.method || '-'}
                         </span>
+                      </td>
+                      <td className="p-4 text-slate-700">
+                        {p.user?.fullName || p.user?.username || "Noma'lum"}
                       </td>
                       <td className="p-4 text-slate-500 max-w-[260px] truncate" title={p.note}>
                         {p.note || '-'}

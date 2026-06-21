@@ -372,6 +372,11 @@ const getScheduleStatusText = (status) => {
                     <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
                       <td className="p-4 font-bold text-blue-600">
                         {item.contractNumber}
+                        {(item.user?.fullName || item.user?.username) && (
+                          <div className="text-[11px] font-normal text-slate-400 mt-0.5">
+                            Yaratdi: {item.user?.fullName || item.user?.username}
+                          </div>
+                        )}
                       </td>
 
                       <td className="p-4 text-gray-600">
@@ -557,86 +562,117 @@ const getScheduleStatusText = (status) => {
                 )}
 
               {/* SHARTNOMA MA'LUMOTLARI */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="bg-white rounded-2xl p-4 border border-slate-200">
-                  <div className="text-xs text-slate-400 font-bold uppercase mb-1">
-                    Sanasi
+              <div className="mb-5 rounded-xl border border-slate-200 bg-white px-5 py-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Sanasi</div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {formatDate(detailModal.contract.createdAt)}
+                    </div>
                   </div>
-                  <div className="font-bold text-slate-800">
-                    {formatDate(detailModal.contract.createdAt)}
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Muddat</div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {detailModal.contract.durationMonths} oy
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">To'lov kuni</div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      Har oyning {detailModal.contract.paymentDay || "-"}-sanasi
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Jami summa</div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {Number(detailModal.contract.totalAmount || 0).toLocaleString()} UZS
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Chegirma</div>
+                    <div className="text-sm font-semibold text-amber-600">
+                      {Number(detailModal.contract.discountAmount || 0).toLocaleString()} UZS
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Oldindan to'lov</div>
+                    <div className="text-sm font-semibold text-emerald-600">
+                      {Number(detailModal.contract.prepayment || 0).toLocaleString()} UZS
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Qolgan qarz</div>
+                    <div className="text-sm font-semibold text-rose-600">
+                      {Number(detailModal.contract.debtAmount || 0).toLocaleString()} UZS
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Oylik to'lov</div>
+                    <div className="text-sm font-semibold text-blue-600">
+                      {Number(detailModal.contract.monthlyPayment || 0).toLocaleString()} UZS
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Tashkilot / Kassa</div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {detailModal.contract.cashbox?.name || "-"}
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-2xl p-4 border border-slate-200">
-                  <div className="text-xs text-slate-400 font-bold uppercase mb-1">
-                    Muddat
+                <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Yaratdi</div>
+                    <div className="text-sm font-medium text-slate-700">
+                      {detailModal.contract.user?.fullName ||
+                        detailModal.contract.user?.username ||
+                        "Noma'lum"}
+                    </div>
                   </div>
-                  <div className="font-bold text-slate-800">
-                    {detailModal.contract.durationMonths} oy
-                  </div>
-                </div>
 
-                <div className="bg-white rounded-2xl p-4 border border-slate-200">
-                  <div className="text-xs text-slate-400 font-bold uppercase mb-1">
-                    To'lov kuni
-                  </div>
-                  <div className="font-bold text-slate-800">
-                    Har oyning {detailModal.contract.paymentDay || "-"}-sanasi
-                  </div>
-                </div>
+                  {detailModal.contract.confirmedByName && (
+                    <div>
+                      <div className="text-[11px] text-slate-400 mb-1">Tasdiqladi</div>
+                      <div className="text-sm font-medium text-blue-700">
+                        {detailModal.contract.confirmedByName}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {formatDate(detailModal.contract.confirmedAt)}
+                      </div>
+                    </div>
+                  )}
 
-                <div className="bg-white rounded-2xl p-4 border border-slate-200">
-                  <div className="text-xs text-slate-400 font-bold uppercase mb-1">
-                    Jami summa
-                  </div>
-                  <div className="font-bold text-slate-800">
-                    {Number(detailModal.contract.totalAmount || 0).toLocaleString()} UZS
-                  </div>
-                </div>
+                  {detailModal.contract.completedByName && (
+                    <div>
+                      <div className="text-[11px] text-slate-400 mb-1">Yakunladi</div>
+                      <div className="text-sm font-medium text-emerald-700">
+                        {detailModal.contract.completedByName}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {formatDate(detailModal.contract.completedAt)}
+                      </div>
+                    </div>
+                  )}
 
-                <div className="bg-white rounded-2xl p-4 border border-slate-200">
-                  <div className="text-xs text-slate-400 font-bold uppercase mb-1">
-                    Chegirma
-                  </div>
-                  <div className="font-bold text-amber-600">
-                    {Number(detailModal.contract.discountAmount || 0).toLocaleString()} UZS
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl p-4 border border-slate-200">
-                  <div className="text-xs text-slate-400 font-bold uppercase mb-1">
-                    Oldindan to'lov
-                  </div>
-                  <div className="font-bold text-emerald-600">
-                    {Number(detailModal.contract.prepayment || 0).toLocaleString()} UZS
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl p-4 border border-slate-200">
-                  <div className="text-xs text-slate-400 font-bold uppercase mb-1">
-                    Qolgan qarz
-                  </div>
-                  <div className="font-bold text-rose-600">
-                    {Number(detailModal.contract.debtAmount || 0).toLocaleString()} UZS
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl p-4 border border-slate-200">
-                  <div className="text-xs text-slate-400 font-bold uppercase mb-1">
-                    Oylik to'lov
-                  </div>
-                  <div className="font-bold text-blue-600">
-                    {Number(detailModal.contract.monthlyPayment || 0).toLocaleString()} UZS
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl p-4 border border-slate-200">
-                  <div className="text-xs text-slate-400 font-bold uppercase mb-1">
-                    Tashkilot / Kassa
-                  </div>
-                  <div className="font-bold text-slate-800">
-                    {detailModal.contract.cashbox?.name || "-"}
-                  </div>
+                  {detailModal.contract.cancelledByName && (
+                    <div>
+                      <div className="text-[11px] text-slate-400 mb-1">Bekor qildi</div>
+                      <div className="text-sm font-medium text-rose-700">
+                        {detailModal.contract.cancelledByName}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {formatDate(detailModal.contract.cancelledAt)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

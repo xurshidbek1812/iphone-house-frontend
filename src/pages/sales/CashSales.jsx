@@ -96,7 +96,8 @@ const CashSales = () => {
   const [filterStatus, setFilterStatus] = useState('ALL');
 
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(20);
+  const [limitInput, setLimitInput] = useState('20');
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
@@ -197,6 +198,16 @@ const CashSales = () => {
     if (e.key === 'Enter') {
       handleSearchSubmit();
     }
+  };
+
+  const commitLimitChange = () => {
+    const parsed = Math.min(100, Math.max(1, Number(limitInput) || 20));
+    setLimitInput(String(parsed));
+    setLimit(parsed);
+  };
+
+  const handleLimitKeyDown = (e) => {
+    if (e.key === 'Enter') commitLimitChange();
   };
 
   const openEditPage = (sale) => {
@@ -364,6 +375,11 @@ const CashSales = () => {
                         <div className="text-[12px] text-slate-400 mt-0.5 font-medium">
                           ID: {sale.id}
                         </div>
+                        {(sale.user?.fullName || sale.user?.username) && (
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            Yaratdi: {sale.user?.fullName || sale.user?.username}
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-4 py-3 align-middle">
@@ -455,9 +471,25 @@ const CashSales = () => {
           </table>
         </div>
 
-        <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
-          <div className="text-sm text-slate-500">
-            Jami: <span className="font-semibold text-slate-800">{total}</span>
+        <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-slate-500">
+              Jami: <span className="font-semibold text-slate-800">{total}</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-slate-500">Sahifada:</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={limitInput}
+                onChange={(e) => setLimitInput(e.target.value)}
+                onBlur={commitLimitChange}
+                onKeyDown={handleLimitKeyDown}
+                className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -506,51 +538,98 @@ const CashSales = () => {
             </div>
 
             <div className="p-5 space-y-5 max-h-[85vh] overflow-auto">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="flex items-center gap-2 text-slate-400 text-[11px] font-black uppercase tracking-widest mb-2">
-                    <Receipt size={14} />
-                    Order
-                  </div>
-                  <div className="text-base font-semibold text-slate-800">
-                    #{detailsModal.sale.orderNumber || detailsModal.sale.id}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="flex items-center gap-2 text-slate-400 text-[11px] font-black uppercase tracking-widest mb-2">
-                    <User size={14} />
-                    Mijoz
-                  </div>
-                  <div className="text-sm font-semibold text-slate-800 leading-6">
-                    {getCustomerName(detailsModal.sale)}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="flex items-center gap-2 text-slate-400 text-[11px] font-black uppercase tracking-widest mb-2">
-                    <Calendar size={14} />
-                    Sana
-                  </div>
-                  <div className="text-sm font-semibold text-slate-800">
-                    {formatDate(detailsModal.sale.createdAt)}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="flex items-center gap-2 text-slate-400 text-[11px] font-black uppercase tracking-widest mb-2">
-                    <Wallet size={14} />
-                    Holat
-                  </div>
+              <div className="rounded-xl border border-slate-200 bg-white px-5 py-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1">
+                      <Receipt size={12} />
+                      Order
+                    </div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      #{detailsModal.sale.orderNumber || detailsModal.sale.id}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1">
+                      <User size={12} />
+                      Mijoz
+                    </div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {getCustomerName(detailsModal.sale)}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1">
+                      <Calendar size={12} />
+                      Sana
+                    </div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {formatDate(detailsModal.sale.createdAt)}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1">
+                      <Wallet size={12} />
+                      Holat
+                    </div>
                     <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${getStatusClasses(
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(
                         detailsModal.sale.status
                       )}`}
                     >
                       {getStatusLabel(detailsModal.sale.status)}
                     </span>
                   </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <div className="text-[11px] text-slate-400 mb-1">Yaratdi</div>
+                    <div className="text-sm font-medium text-slate-700">
+                      {detailsModal.sale.user?.fullName ||
+                        detailsModal.sale.user?.username ||
+                        "Noma'lum"}
+                    </div>
+                  </div>
+
+                  {detailsModal.sale.confirmedByName && (
+                    <div>
+                      <div className="text-[11px] text-slate-400 mb-1">Tasdiqladi</div>
+                      <div className="text-sm font-medium text-blue-700">
+                        {detailsModal.sale.confirmedByName}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {formatDate(detailsModal.sale.confirmedAt)}
+                      </div>
+                    </div>
+                  )}
+
+                  {detailsModal.sale.completedByName && (
+                    <div>
+                      <div className="text-[11px] text-slate-400 mb-1">Yakunladi</div>
+                      <div className="text-sm font-medium text-emerald-700">
+                        {detailsModal.sale.completedByName}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {formatDate(detailsModal.sale.completedAt)}
+                      </div>
+                    </div>
+                  )}
+
+                  {detailsModal.sale.cancelledByName && (
+                    <div>
+                      <div className="text-[11px] text-slate-400 mb-1">Bekor qildi</div>
+                      <div className="text-sm font-medium text-rose-700">
+                        {detailsModal.sale.cancelledByName}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {formatDate(detailsModal.sale.cancelledAt)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -666,6 +745,55 @@ const CashSales = () => {
                     })
                   )}
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
+                  <Wallet size={16} className="text-emerald-600" />
+                  <span className="text-sm font-medium text-slate-800">To'lovlar</span>
+                  <span className="text-xs text-slate-400 ml-1">
+                    ({(detailsModal.sale.payments || []).length} ta)
+                  </span>
+                </div>
+
+                {(detailsModal.sale.payments || []).length === 0 ? (
+                  <div className="p-6 text-sm text-slate-400 text-center">
+                    Hali to'lov olinmagan
+                  </div>
+                ) : (
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50/60 text-[10px] uppercase text-slate-400 tracking-wider border-b border-slate-100">
+                      <tr>
+                        <th className="p-3 pl-4">Sana</th>
+                        <th className="p-3 text-right">Summa</th>
+                        <th className="p-3">Kassa</th>
+                        <th className="p-3">Qabul qildi</th>
+                        <th className="p-3">Izoh</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {detailsModal.sale.payments.map((p, i) => (
+                        <tr key={p.id || i}>
+                          <td className="p-3 pl-4 text-slate-500 whitespace-nowrap">
+                            {formatDate(p.paidAt || p.createdAt)}
+                          </td>
+                          <td className="p-3 text-right font-semibold text-emerald-600 whitespace-nowrap">
+                            {formatMoney(p.amount)}
+                          </td>
+                          <td className="p-3 text-slate-600">
+                            {p.cashbox?.name || p.method || '-'}
+                          </td>
+                          <td className="p-3 text-slate-700 font-medium">
+                            {p.user?.fullName || p.user?.username || "Noma'lum"}
+                          </td>
+                          <td className="p-3 text-slate-400 max-w-[200px] truncate" title={p.note}>
+                            {p.note || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">

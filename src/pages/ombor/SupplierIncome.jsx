@@ -7,12 +7,16 @@ import {
   Loader2,
   DollarSign,
   Package,
-  Lock
+  Lock,
+  Smartphone,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { hasPermission, PERMISSIONS } from '../../utils/permissions';
 import { apiFetch } from '../../utils/api';
+import { fuzzyMatchProduct } from '../../utils/fuzzyMatch';
 
 const SupplierIncome = () => {
   const navigate = useNavigate();
@@ -27,11 +31,13 @@ const SupplierIncome = () => {
 
   const [allProducts, setAllProducts] = useState([]);
   const [suppliersList, setSuppliersList] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [supplierName, setSupplierName] = useState('');
+  const [warehouseId, setWarehouseId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [currencyRate, setCurrencyRate] = useState(
     sessionStorage.getItem('globalExchangeRate') || '12500'
@@ -46,6 +52,9 @@ const SupplierIncome = () => {
   const [inputMarkup, setInputMarkup] = useState('');
   const [inputSalePrice, setInputSalePrice] = useState('');
   const [inputCurrency, setInputCurrency] = useState('UZS');
+  const [wantsImei, setWantsImei] = useState(false);
+  const [imeiInputs, setImeiInputs] = useState([]);
+  const [expandedImeiId, setExpandedImeiId] = useState(null);
 
   useEffect(() => {
     return () => {
@@ -58,18 +67,27 @@ const SupplierIncome = () => {
     try {
       setLoading(true);
 
-      const [productsData, suppliersData] = await Promise.all([
+      const [productsData, suppliersData, warehousesData] = await Promise.all([
         apiFetch('/api/products'),
-        apiFetch('/api/suppliers')
+        apiFetch('/api/suppliers'),
+        apiFetch('/api/warehouses?active=true')
       ]);
 
       setAllProducts(Array.isArray(productsData) ? productsData : []);
       setSuppliersList(Array.isArray(suppliersData) ? suppliersData : []);
+
+      const warehouseList = Array.isArray(warehousesData) ? warehousesData : [];
+      setWarehouses(warehouseList);
+
+      if (warehouseList.length === 1) {
+        setWarehouseId(String(warehouseList[0].id));
+      }
     } catch (error) {
       console.error('Yuklashda xato', error);
       toast.error(error.message || "Ma'lumotlarni yuklashda xatolik yuz berdi");
       setAllProducts([]);
       setSuppliersList([]);
+      setWarehouses([]);
     } finally {
       setLoading(false);
     }
@@ -176,6 +194,43 @@ const SupplierIncome = () => {
     setInputMarkup('');
     setInputSalePrice('');
     setInputCurrency('UZS');
+    setWantsImei(false);
+    setImeiInputs([]);
+  };
+
+  const handleCountChange = (val) => {
+    setInputCount(val);
+
+    if (!wantsImei) return;
+
+    const qty = Math.max(0, Math.floor(Number(val) || 0));
+    setImeiInputs((prev) => {
+      const next = prev.slice(0, qty);
+      while (next.length < qty) next.push({ imei: '', imei2: '' });
+      return next;
+    });
+  };
+
+  const handleToggleImei = () => {
+    if (wantsImei) {
+      setWantsImei(false);
+      setImeiInputs([]);
+      return;
+    }
+
+    const qty = Math.floor(Number(inputCount) || 0);
+    if (!qty || qty <= 0 || !Number.isInteger(Number(inputCount))) {
+      return toast.error("Avval sonini butun musbat son qilib kiriting!");
+    }
+
+    setWantsImei(true);
+    setImeiInputs(Array.from({ length: qty }, () => ({ imei: '', imei2: '' })));
+  };
+
+  const handleImeiInputChange = (index, field, val) => {
+    setImeiInputs((prev) =>
+      prev.map((pair, i) => (i === index ? { ...pair, [field]: val } : pair))
+    );
   };
 
   const handleAddItem = () => {
@@ -220,6 +275,43 @@ const SupplierIncome = () => {
       return toast.error("Sotuv narxini to'g'ri kiriting!");
     }
 
+    let imeis = null;
+
+    if (wantsImei) {
+      const trimmed = imeiInputs.map((pair) => ({
+        imei: pair.imei.trim(),
+        imei2: pair.imei2.trim()
+      }));
+
+      if (trimmed.length !== qty) {
+        return toast.error("Barcha telefonlar uchun IMEI kiritilishi shart!");
+      }
+
+      const flatCodes = trimmed.flatMap((pair) => [pair.imei, pair.imei2]);
+
+      if (flatCodes.some((code) => !code)) {
+        return toast.error("Har bir telefon uchun ikkita IMEI ham kiritilishi shart!");
+      }
+
+      if (new Set(flatCodes).size !== flatCodes.length) {
+        return toast.error("IMEI raqamlari orasida takrorlanish bor!");
+      }
+
+      const usedElsewhere = invoiceItems.some(
+        (item) =>
+          Array.isArray(item.imeis) &&
+          item.imeis.some(
+            (pair) => flatCodes.includes(pair.imei) || flatCodes.includes(pair.imei2)
+          )
+      );
+
+      if (usedElsewhere) {
+        return toast.error("Bu IMEI raqami fakturada boshqa qatorda allaqachon ishlatilgan!");
+      }
+
+      imeis = trimmed;
+    }
+
     const newItem = {
       id: productToAdd.id,
       customId: productToAdd.customId,
@@ -230,7 +322,8 @@ const SupplierIncome = () => {
       markup: canSeeAmount ? Number(inputMarkup) || 0 : 0,
       salePrice: sale,
       currency: inputCurrency || 'UZS',
-      total: canSeeAmount ? qty * price : 0
+      total: canSeeAmount ? qty * price : 0,
+      imeis
     };
 
     setInvoiceItems((prev) => [...prev, newItem]);
@@ -239,9 +332,64 @@ const SupplierIncome = () => {
 
   const removeFromInvoice = (id) => {
     setInvoiceItems((prev) => prev.filter((item) => item.id !== id));
+    setExpandedImeiId((prev) => (prev === id ? null : prev));
   };
 
-  const { grandTotalUZS } = useMemo(() => {
+  const toggleImeiExpand = (id) => {
+    setExpandedImeiId((prev) => (prev === id ? null : id));
+  };
+
+  const updateInvoiceItemImei = (itemId, index, field, value) => {
+    setInvoiceItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              imeis: item.imeis.map((pair, i) =>
+                i === index ? { ...pair, [field]: value } : pair
+              )
+            }
+          : item
+      )
+    );
+  };
+
+  const closeImeiExpand = (item) => {
+    const trimmed = (item.imeis || []).map((pair) => ({
+      imei: pair.imei.trim(),
+      imei2: pair.imei2.trim()
+    }));
+
+    const flatCodes = trimmed.flatMap((pair) => [pair.imei, pair.imei2]);
+
+    if (flatCodes.some((code) => !code)) {
+      return toast.error("Har bir telefon uchun ikkita IMEI ham kiritilishi shart!");
+    }
+
+    if (new Set(flatCodes).size !== flatCodes.length) {
+      return toast.error("IMEI raqamlari orasida takrorlanish bor!");
+    }
+
+    const usedElsewhere = invoiceItems.some(
+      (other) =>
+        other.id !== item.id &&
+        Array.isArray(other.imeis) &&
+        other.imeis.some(
+          (pair) => flatCodes.includes(pair.imei) || flatCodes.includes(pair.imei2)
+        )
+    );
+
+    if (usedElsewhere) {
+      return toast.error("Bu IMEI raqami boshqa qatorda allaqachon ishlatilgan!");
+    }
+
+    setInvoiceItems((prev) =>
+      prev.map((it) => (it.id === item.id ? { ...it, imeis: trimmed } : it))
+    );
+    setExpandedImeiId(null);
+  };
+
+  const { grandTotalUZS, totalUZS, totalUSD } = useMemo(() => {
     let totalUZS = 0;
     let totalUSD = 0;
 
@@ -254,19 +402,13 @@ const SupplierIncome = () => {
     });
 
     const rate = Number(currencyRate) || 12500;
-    return { grandTotalUZS: totalUZS + totalUSD * rate };
+    return { grandTotalUZS: totalUZS + totalUSD * rate, totalUZS, totalUSD };
   }, [invoiceItems, currencyRate]);
 
   const filteredProducts = useMemo(() => {
     if (!searchTerm || selectedProduct) return [];
 
-    const cleanSearch = searchTerm.trim().toLowerCase();
-
-    return allProducts.filter(
-      (p) =>
-        (p.name || '').toLowerCase().includes(cleanSearch) ||
-        (p.customId != null && String(p.customId).includes(cleanSearch))
-    );
+    return allProducts.filter((p) => fuzzyMatchProduct(searchTerm, p));
   }, [allProducts, searchTerm, selectedProduct]);
 
   const handleSave = async () => {
@@ -278,6 +420,10 @@ const SupplierIncome = () => {
 
     if (!cleanSupplier) {
       return toast.error("Ta'minotchi nomini tanlang!");
+    }
+
+    if (!warehouseId) {
+      return toast.error("Omborni tanlang!");
     }
 
     if (invoiceItems.length === 0) {
@@ -318,6 +464,7 @@ const SupplierIncome = () => {
         totalSum: canSeeAmount ? grandTotalUZS : 0,
         status: 'Jarayonda',
         userName: currentUserName,
+        warehouseId: Number(warehouseId),
         items: invoiceItems.map((item) => ({
           id: item.id,
           customId: Number(item.customId) || 0,
@@ -327,7 +474,8 @@ const SupplierIncome = () => {
           markup: canSeeAmount ? Number(item.markup) || 0 : 0,
           salePrice: Number(item.salePrice) || 0,
           currency: item.currency || 'UZS',
-          total: canSeeAmount ? Number(item.total) : 0
+          total: canSeeAmount ? Number(item.total) : 0,
+          imeis: item.imeis || null
         }))
       };
 
@@ -422,7 +570,7 @@ const SupplierIncome = () => {
           <Loader2 size={30} className="animate-spin text-slate-400" />
         </div>
       ) : (
-        <>
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
             <div className="lg:col-span-9 flex flex-col gap-4">
               <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
@@ -430,7 +578,7 @@ const SupplierIncome = () => {
                   Asosiy ma'lumotlar
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
                       Faktura Raqami
@@ -459,6 +607,25 @@ const SupplierIncome = () => {
                       {suppliersList.map((s, i) => (
                         <option key={s.id || i} value={s.name}>
                           {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                      Ombor <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      disabled={isSubmitting}
+                      className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium text-slate-800 transition-all disabled:opacity-50 cursor-pointer"
+                      value={warehouseId}
+                      onChange={(e) => setWarehouseId(e.target.value)}
+                    >
+                      <option value="">Tanlang...</option>
+                      {warehouses.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.name}
                         </option>
                       ))}
                     </select>
@@ -565,26 +732,32 @@ const SupplierIncome = () => {
           disabled={isSubmitting}
           className="w-full p-3 border border-slate-200 rounded-xl"
           value={inputCount}
-          onChange={(e) => setInputCount(e.target.value)}
+          onChange={(e) => handleCountChange(e.target.value)}
         />
       </div>
 
       {canSeeAmount && (
-        <div>
-          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
-            Kirim narx
-          </label>
+  <div>
+    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+      Kirim narx
+    </label>
 
-          <input
-            type="number"
-            min="0"
-            disabled={isSubmitting}
-            className="w-full p-3 border border-slate-200 rounded-xl"
-            value={inputPrice}
-            onChange={(e) => handlePriceChange(e.target.value)}
-          />
-        </div>
-      )}
+    <input
+      type="number"
+      min="0"
+      disabled={isSubmitting}
+      className="w-full p-3 border border-slate-200 rounded-xl"
+      value={inputPrice}
+      onChange={(e) => handlePriceChange(e.target.value)}
+    />
+
+    {inputCurrency === 'USD' && inputPrice && (
+      <div className="text-[11px] font-semibold text-slate-400 mt-1">
+        ≈ {Math.round(getCostInUZS(inputPrice, inputCurrency, currencyRate)).toLocaleString('uz-UZ')} so'm
+      </div>
+    )}
+  </div>
+)}
 
       <div>
         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
@@ -645,6 +818,66 @@ const SupplierIncome = () => {
       </div>
 
     </div>
+
+    {/* IMEI TOGGLE VA INPUTLAR */}
+    <div className="border-t border-slate-100 pt-3">
+      <button
+        type="button"
+        disabled={isSubmitting}
+        onClick={handleToggleImei}
+        className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+          wantsImei
+            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+        }`}
+      >
+        <Smartphone size={16} />
+        IMEI raqamlarini kiritish{wantsImei ? `: ${imeiInputs.length} ta` : '?'}
+      </button>
+
+      {wantsImei && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+          {imeiInputs.map((pair, index) => (
+            <div
+              key={index}
+              className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-2.5"
+            >
+              <div className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2">
+                Telefon #{index + 1}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">
+                    IMEI 1
+                  </label>
+                  <input
+                    type="text"
+                    disabled={isSubmitting}
+                    className="w-full p-2 border border-indigo-200 bg-white rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400"
+                    value={pair.imei}
+                    onChange={(e) => handleImeiInputChange(index, 'imei', e.target.value)}
+                    placeholder="15 raqamli IMEI"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">
+                    IMEI 2
+                  </label>
+                  <input
+                    type="text"
+                    disabled={isSubmitting}
+                    className="w-full p-2 border border-indigo-200 bg-white rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400"
+                    value={pair.imei2}
+                    onChange={(e) => handleImeiInputChange(index, 'imei2', e.target.value)}
+                    placeholder="15 raqamli IMEI"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   </div>
 </div>
             </div>
@@ -658,6 +891,15 @@ const SupplierIncome = () => {
                   {invoiceItems.length}
                   <span className="text-sm text-slate-400 font-semibold ml-1">xil</span>
                 </div>
+
+                <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Jami soni
+                  </span>
+                  <span className="text-sm font-bold text-slate-700">
+                    {invoiceItems.reduce((sum, item) => sum + Number(item.count || 0), 0)} dona
+                  </span>
+                </div>
               </div>
 
               {canSeeAmount && (
@@ -665,6 +907,24 @@ const SupplierIncome = () => {
                   <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">
                     Jami summa
                   </div>
+
+                  {(totalUSD > 0 || totalUZS > 0) && (
+                    <div className="flex flex-col gap-0.5 mb-2 pb-2 border-b border-slate-100">
+                      {totalUSD > 0 && (
+                        <div className="text-base font-bold text-blue-600 truncate">
+                          {totalUSD.toLocaleString('en-US')}
+                          <span className="text-xs text-blue-400 font-semibold ml-1">USD</span>
+                        </div>
+                      )}
+                      {totalUZS > 0 && (
+                        <div className="text-base font-bold text-slate-700 truncate">
+                          {totalUZS.toLocaleString('uz-UZ')}
+                          <span className="text-xs text-slate-400 font-semibold ml-1">UZS</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div
                     className="text-2xl font-black text-emerald-500 truncate"
                     title={`${grandTotalUZS.toLocaleString('uz-UZ')} UZS`}
@@ -677,7 +937,7 @@ const SupplierIncome = () => {
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
               <h3 className="font-semibold text-slate-700 flex items-center gap-2 text-sm">
                 <Package size={16} className="text-blue-500" /> Qo'shilgan tovarlar
@@ -687,16 +947,16 @@ const SupplierIncome = () => {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 p-5">
+            <div className="p-5">
               {invoiceItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400 py-10 border-2 border-dashed border-slate-200 rounded-2xl">
+                <div className="flex flex-col items-center justify-center text-slate-400 py-10 border-2 border-dashed border-slate-200 rounded-2xl">
                   <Package size={42} className="mb-3 text-slate-300" />
                   <p className="font-medium text-sm">
                     Faktura bo'sh. Yuqoridan mahsulot qo'shing.
                   </p>
                 </div>
               ) : (
-                <div className="h-full overflow-auto border border-slate-200 rounded-xl">
+                <div className="max-h-[55vh] overflow-auto border border-slate-200 rounded-xl">
                   <table className="w-full min-w-[880px] text-left whitespace-nowrap">
                     <thead className="sticky top-0 bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-wider border-b border-slate-200">
                       <tr>
@@ -716,11 +976,32 @@ const SupplierIncome = () => {
 
                     <tbody className="divide-y divide-slate-100 text-sm font-semibold">
                       {invoiceItems.map((item) => (
-                        <tr key={item.id} className="hover:bg-blue-50/20 transition-colors">
+                        <React.Fragment key={item.id}>
+                        <tr className="hover:bg-blue-50/20 transition-colors">
                           <td className="p-4 font-mono text-slate-400">
                             #{item.customId ?? '-'}
                           </td>
-                          <td className="p-4 text-slate-800">{item.name}</td>
+                          <td className="p-4 text-slate-800">
+                            {item.name}
+                            {Array.isArray(item.imeis) && item.imeis.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => toggleImeiExpand(item.id)}
+                                title={item.imeis
+                                  .map((pair) => `${pair.imei} / ${pair.imei2}`)
+                                  .join('\n')}
+                                className="inline-flex items-center gap-1 ml-2 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[11px] font-semibold align-middle hover:bg-indigo-100"
+                              >
+                                <Smartphone size={11} />
+                                IMEI: {item.imeis.length} ta
+                                {expandedImeiId === item.id ? (
+                                  <ChevronUp size={11} />
+                                ) : (
+                                  <ChevronDown size={11} />
+                                )}
+                              </button>
+                            )}
+                          </td>
                           <td className="p-4 text-center text-blue-600">
                             {item.count} {item.unit}
                           </td>
@@ -728,6 +1009,13 @@ const SupplierIncome = () => {
                           {canSeeAmount && (
                             <td className="p-4 text-right">
                               {Number(item.price || 0).toLocaleString('uz-UZ')}
+                              {item.currency === 'USD' && (
+                                <div className="text-[11px] font-semibold text-slate-400 mt-0.5">
+                                  ≈ {Math.round(
+                                    getCostInUZS(item.price, item.currency, currencyRate)
+                                  ).toLocaleString('uz-UZ')} so'm
+                                </div>
+                              )}
                             </td>
                           )}
 
@@ -760,6 +1048,77 @@ const SupplierIncome = () => {
                             </button>
                           </td>
                         </tr>
+
+                        {expandedImeiId === item.id && Array.isArray(item.imeis) && (
+                          <tr className="bg-indigo-50/30">
+                            <td colSpan={canSeeAmount ? 9 : 5} className="p-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {item.imeis.map((pair, index) => (
+                                  <div
+                                    key={index}
+                                    className="rounded-xl border border-indigo-200 bg-white p-2.5"
+                                  >
+                                    <div className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2">
+                                      Telefon #{index + 1}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">
+                                          IMEI 1
+                                        </label>
+                                        <input
+                                          type="text"
+                                          disabled={isSubmitting}
+                                          value={pair.imei}
+                                          onChange={(e) =>
+                                            updateInvoiceItemImei(
+                                              item.id,
+                                              index,
+                                              'imei',
+                                              e.target.value
+                                            )
+                                          }
+                                          className="w-full p-2 border border-indigo-200 bg-indigo-50/30 rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">
+                                          IMEI 2
+                                        </label>
+                                        <input
+                                          type="text"
+                                          disabled={isSubmitting}
+                                          value={pair.imei2}
+                                          onChange={(e) =>
+                                            updateInvoiceItemImei(
+                                              item.id,
+                                              index,
+                                              'imei2',
+                                              e.target.value
+                                            )
+                                          }
+                                          className="w-full p-2 border border-indigo-200 bg-indigo-50/30 rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="flex justify-end mt-3">
+                                <button
+                                  type="button"
+                                  disabled={isSubmitting}
+                                  onClick={() => closeImeiExpand(item)}
+                                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                  Saqlash
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>
@@ -767,7 +1126,7 @@ const SupplierIncome = () => {
               )}
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

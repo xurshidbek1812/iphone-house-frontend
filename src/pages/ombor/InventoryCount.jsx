@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { QrCode, RotateCcw, CheckCircle, AlertTriangle, Search, Play, StopCircle, CheckSquare, Square, Layers, Plus, Minus, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../../utils/api';
-import { parseQrCode } from '../../utils/qrParser'; 
+import { parseQrCode } from '../../utils/qrParser';
+import { fuzzyMatchProduct } from '../../utils/fuzzyMatch'; 
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://iphone-house-api.onrender.com';
 
@@ -97,7 +98,8 @@ const InventoryCount = () => {
                     customId: prod.customId,
                     name: prod.name,
                     quantity: batch.quantity,
-                    unit: prod.unit
+                    unit: prod.unit,
+                    units: Array.isArray(batch.units) ? batch.units : []
                 });
                 }
             });
@@ -142,12 +144,8 @@ const InventoryCount = () => {
 
 
   const filteredProducts = useMemo(() => {
-      const search = searchTerm.trim().toLowerCase();
-      if (!search) return products;
-      return products.filter(p => 
-          (p.name || '').toLowerCase().includes(search) || 
-          (p.customId != null && String(p.customId).includes(search))
-      );
+      if (!searchTerm.trim()) return products;
+      return products.filter(p => fuzzyMatchProduct(searchTerm, p));
   }, [products, searchTerm]);
 
   const isAllSelected = filteredProducts.length > 0 && filteredProducts.every(p => selectedIds.includes(p.id));
@@ -174,11 +172,29 @@ const InventoryCount = () => {
     const searchKey = parsed.id;
     let batchKey = parsed.batchId;
     const invoiceKey = parsed.invoiceId;
+    const imeiKey = parsed.imei;
 
     if (!parsed.isValid || !searchKey) {
         toast.error("QR kod noto'g'ri yoki o'qilmadi!");
         playBeep('error');
         return;
+    }
+
+    // 0) Aniq IMEI (unit) QR bo'lsa — tegishli partiyaga yo'naltiramiz
+    if (imeiKey) {
+        const foundBatch = allBatches.find(
+        (b) =>
+          Array.isArray(b.units) &&
+          b.units.some((u) => u.imei === imeiKey || u.imei2 === imeiKey)
+        );
+
+        if (!foundBatch) {
+        toast.error("Bu IMEI bo'yicha tovar topilmadi!");
+        playBeep('error');
+        return;
+        }
+
+        batchKey = String(foundBatch.batchId);
     }
 
     // 1) Tasdiqlangan batch QR bo'lsa
