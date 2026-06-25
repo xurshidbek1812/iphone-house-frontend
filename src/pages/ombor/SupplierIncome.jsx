@@ -339,6 +339,32 @@ const SupplierIncome = () => {
     setExpandedImeiId((prev) => (prev === id ? null : id));
   };
 
+  const updateInvoiceItemField = (itemId, field, rawValue) => {
+    setInvoiceItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+
+        const updated = {
+          ...item,
+          [field]: field === 'currency' ? rawValue : Number(rawValue) || 0
+        };
+
+        const qty = Number(updated.count) || 0;
+        const price = canSeeAmount ? Number(updated.price) || 0 : 0;
+        const sale = Number(updated.salePrice) || 0;
+        const costUZS = getCostInUZS(price, updated.currency, currencyRate);
+
+        updated.total = canSeeAmount ? qty * price : 0;
+        updated.markup =
+          canSeeAmount && costUZS > 0
+            ? Number((((sale - costUZS) / costUZS) * 100).toFixed(2))
+            : 0;
+
+        return updated;
+      })
+    );
+  };
+
   const updateInvoiceItemImei = (itemId, index, field, value) => {
     setInvoiceItems((prev) =>
       prev.map((item) =>
@@ -1003,12 +1029,40 @@ const SupplierIncome = () => {
                             )}
                           </td>
                           <td className="p-4 text-center text-blue-600">
-                            {item.count} {item.unit}
+                            {Array.isArray(item.imeis) && item.imeis.length > 0 ? (
+                              <span title="IMEI biriktirilgan tovarlar uchun soni o'zgartirilmaydi">
+                                {item.count} {item.unit}
+                              </span>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step={item.unit === 'Dona' ? '1' : 'any'}
+                                  disabled={isSubmitting}
+                                  value={item.count}
+                                  onChange={(e) =>
+                                    updateInvoiceItemField(item.id, 'count', e.target.value)
+                                  }
+                                  className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-center text-sm font-semibold text-blue-600 outline-none focus:ring-2 focus:ring-blue-200"
+                                />
+                                <span className="text-[11px] text-slate-400">{item.unit}</span>
+                              </div>
+                            )}
                           </td>
 
                           {canSeeAmount && (
                             <td className="p-4 text-right">
-                              {Number(item.price || 0).toLocaleString('uz-UZ')}
+                              <input
+                                type="number"
+                                min="0"
+                                disabled={isSubmitting}
+                                value={item.price}
+                                onChange={(e) =>
+                                  updateInvoiceItemField(item.id, 'price', e.target.value)
+                                }
+                                className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-200"
+                              />
                               {item.currency === 'USD' && (
                                 <div className="text-[11px] font-semibold text-slate-400 mt-0.5">
                                   ≈ {Math.round(
@@ -1020,7 +1074,19 @@ const SupplierIncome = () => {
                           )}
 
                           {canSeeAmount && (
-                            <td className="p-4 text-center text-slate-400">{item.currency}</td>
+                            <td className="p-4 text-center">
+                              <select
+                                disabled={isSubmitting}
+                                value={item.currency}
+                                onChange={(e) =>
+                                  updateInvoiceItemField(item.id, 'currency', e.target.value)
+                                }
+                                className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-200"
+                              >
+                                <option value="UZS">UZS</option>
+                                <option value="USD">USD</option>
+                              </select>
+                            </td>
                           )}
 
                           {canSeeAmount && (
@@ -1028,7 +1094,16 @@ const SupplierIncome = () => {
                           )}
 
                           <td className="p-4 text-right text-emerald-600">
-                            {Number(item.salePrice || 0).toLocaleString('uz-UZ')}
+                            <input
+                              type="number"
+                              min="0"
+                              disabled={isSubmitting}
+                              value={item.salePrice}
+                              onChange={(e) =>
+                                updateInvoiceItemField(item.id, 'salePrice', e.target.value)
+                              }
+                              className="w-28 rounded-lg border border-emerald-200 bg-emerald-50/40 px-2 py-1.5 text-right text-sm font-semibold text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-200"
+                            />
                           </td>
 
                           {canSeeAmount && (
