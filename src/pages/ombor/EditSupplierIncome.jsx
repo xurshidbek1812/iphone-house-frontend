@@ -279,8 +279,9 @@ const EditSupplierIncome = () => {
   };
 
   const handleImeiInputChange = (index, field, val) => {
+    const sanitized = val.replace(/\D/g, '').slice(0, 15);
     setImeiInputs((prev) =>
-      prev.map((pair, i) => (i === index ? { ...pair, [field]: val } : pair))
+      prev.map((pair, i) => (i === index ? { ...pair, [field]: sanitized } : pair))
     );
   };
 
@@ -342,6 +343,10 @@ const EditSupplierIncome = () => {
 
       if (flatCodes.some((code) => !code)) {
         return toast.error("Har bir telefon uchun ikkita IMEI ham kiritilishi shart!");
+      }
+
+      if (flatCodes.some((code) => !/^\d{15}$/.test(code))) {
+        return toast.error("Har bir IMEI aynan 15 ta raqamdan iborat bo'lishi kerak!");
       }
 
       if (new Set(flatCodes).size !== flatCodes.length) {
@@ -417,13 +422,14 @@ const EditSupplierIncome = () => {
   };
 
   const updateInvoiceItemImei = (itemId, index, field, value) => {
+    const sanitized = value.replace(/\D/g, '').slice(0, 15);
     setInvoiceItems((prev) =>
       prev.map((item) =>
         item.id === itemId
           ? {
               ...item,
               imeis: item.imeis.map((pair, i) =>
-                i === index ? { ...pair, [field]: value } : pair
+                i === index ? { ...pair, [field]: sanitized } : pair
               )
             }
           : item
@@ -441,6 +447,10 @@ const EditSupplierIncome = () => {
 
     if (flatCodes.some((code) => !code)) {
       return toast.error("Har bir telefon uchun ikkita IMEI ham kiritilishi shart!");
+    }
+
+    if (flatCodes.some((code) => !/^\d{15}$/.test(code))) {
+      return toast.error("Har bir IMEI aynan 15 ta raqamdan iborat bo'lishi kerak!");
     }
 
     if (new Set(flatCodes).size !== flatCodes.length) {
@@ -903,6 +913,8 @@ const EditSupplierIncome = () => {
                                 </label>
                                 <input
                                   type="text"
+                                  inputMode="numeric"
+                                  maxLength={15}
                                   disabled={isSubmitting}
                                   className="w-full p-2 border border-indigo-200 bg-white rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400"
                                   value={pair.imei}
@@ -918,6 +930,8 @@ const EditSupplierIncome = () => {
                                 </label>
                                 <input
                                   type="text"
+                                  inputMode="numeric"
+                                  maxLength={15}
                                   disabled={isSubmitting}
                                   className="w-full p-2 border border-indigo-200 bg-white rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400"
                                   value={pair.imei2}
@@ -1172,6 +1186,8 @@ const EditSupplierIncome = () => {
                                           </label>
                                           <input
                                             type="text"
+                                            inputMode="numeric"
+                                            maxLength={15}
                                             disabled={isSubmitting}
                                             value={pair.imei}
                                             onChange={(e) =>
@@ -1191,6 +1207,8 @@ const EditSupplierIncome = () => {
                                           </label>
                                           <input
                                             type="text"
+                                            inputMode="numeric"
+                                            maxLength={15}
                                             disabled={isSubmitting}
                                             value={pair.imei2}
                                             onChange={(e) =>
