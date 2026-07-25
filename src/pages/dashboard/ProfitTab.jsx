@@ -11,21 +11,22 @@ const periodOptions = [
   { key: "monthly", label: "30 kun", days: 30 }
 ];
 
-const SVG_W = 1000;
-const SVG_H = 260;
-const PAD_X = 24;
-const PAD_TOP = 20;
-const PAD_BOT = 8;
+const SVG_W    = 1000;
+const SVG_H    = 290;
+const PAD_X    = 24;
+const PAD_TOP  = 22;
+const PAD_BOT  = 32;   // room for x-axis date ticks
 const USABLE_W = SVG_W - PAD_X * 2;
 const USABLE_H = SVG_H - PAD_TOP - PAD_BOT;
 
 const ProfitTab = () => {
   const token = sessionStorage.getItem("token");
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [data, setData] = useState({ today: 0, week: 0, month: 0, chart: [] });
-  const [period, setPeriod] = useState("weekly");
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState(null);
+  const [data, setData]                 = useState({ today: 0, week: 0, month: 0, chart: [] });
+  const [period, setPeriod]             = useState("weekly");
+  const [hoveredPoint, setHoveredPoint] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -39,8 +40,7 @@ const ProfitTab = () => {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || "Server xatosi");
         }
-        const json = await res.json();
-        setData(json);
+        setData(await res.json());
       } catch (err) {
         setError(err.message || "Ma'lumotlarni yuklashda xatolik");
       } finally {
@@ -53,11 +53,11 @@ const ProfitTab = () => {
   const chartData = useMemo(() => {
     const raw = Array.isArray(data.chart) ? data.chart : [];
     const selected = periodOptions.find((p) => p.key === period);
-    const tail = raw.slice(-(selected?.days || 7));
-    return tail.map((item, i) => {
+    return raw.slice(-(selected?.days || 7)).map((item, i) => {
       const d = new Date(item.date);
       return {
         key: `${period}-${i}`,
+        index: i,
         label: d.toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit" }),
         profit: Number(item.profit || 0)
       };
@@ -72,7 +72,8 @@ const ProfitTab = () => {
         ? SVG_W / 2
         : PAD_X + (USABLE_W * i) / (chartData.length - 1);
 
-    const getY = (p) => PAD_TOP + USABLE_H - (Math.max(0, p) / maxP) * USABLE_H;
+    const getY = (p) =>
+      PAD_TOP + USABLE_H - (Math.max(0, p) / maxP) * USABLE_H;
 
     const pts = chartData.map((d, i) => ({
       ...d,
@@ -85,9 +86,9 @@ const ProfitTab = () => {
     const areaStr =
       pts.length >= 2
         ? [
-            `M ${pts[0].x},${SVG_H}`,
+            `M ${pts[0].x},${PAD_TOP + USABLE_H}`,
             ...pts.map((p) => `L ${p.x},${p.y}`),
-            `L ${pts[pts.length - 1].x},${SVG_H}`,
+            `L ${pts[pts.length - 1].x},${PAD_TOP + USABLE_H}`,
             "Z"
           ].join(" ")
         : "";
@@ -95,10 +96,12 @@ const ProfitTab = () => {
     return { pts, lineStr, areaStr, maxP };
   }, [chartData]);
 
-  const periodTotals = useMemo(() => {
-    if (period === "weekly") return data.week || 0;
-    return data.month || 0;
-  }, [period, data]);
+  // Clear hovered point when period changes
+  useEffect(() => { setHoveredPoint(null); }, [period]);
+
+  const periodTotals = period === "weekly" ? (data.week || 0) : (data.month || 0);
+  const hasData = svgData.maxP > 1;
+  const isMonthly = period === "monthly";
 
   if (loading) {
     return (
@@ -116,8 +119,6 @@ const ProfitTab = () => {
     );
   }
 
-  const hasData = svgData.maxP > 1;
-
   return (
     <div className="space-y-4">
       {/* ── Hero card ── */}
@@ -132,31 +133,23 @@ const ProfitTab = () => {
             </div>
             <div>
               <h2 className="text-lg font-black text-white">Foyda tahlili</h2>
-              <p className="text-xs font-medium text-slate-400">
-                Sotuv narxi − Kirim narxi
-              </p>
+              <p className="text-xs font-medium text-slate-400">Sotuv narxi − Kirim narxi</p>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: "Bugun", value: data.today },
-              { label: "7 kun", value: data.week },
-              { label: "30 kun", value: data.month }
+              { label: "Bugun",  value: data.today },
+              { label: "7 kun",  value: data.week  },
+              { label: "30 kun", value: data.month  }
             ].map(({ label, value }) => (
-              <div
-                key={label}
-                className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3"
-              >
+              <div key={label} className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3">
                 <div className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400">
                   {label}
                 </div>
                 <div
-                  className="text-lg font-black tabular-nums leading-tight"
-                  style={{
-                    color: Number(value) >= 0 ? "#34d399" : "#f87171",
-                    fontVariantNumeric: "tabular-nums"
-                  }}
+                  className="text-lg font-black leading-tight tabular-nums"
+                  style={{ color: Number(value) >= 0 ? "#34d399" : "#f87171" }}
                 >
                   {fmt(value)}
                 </div>
@@ -176,13 +169,12 @@ const ProfitTab = () => {
             <div>
               <h3 className="text-base font-black text-slate-800">Kunlik foyda grafigi</h3>
               <p className="text-xs font-medium text-slate-400">
-                Tanlangan davr bo'yicha foyda
+                Grafik nuqtasiga suring — summani ko'rasiz
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Period total badge */}
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-1.5">
               <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">
                 Jami:&nbsp;
@@ -192,7 +184,6 @@ const ProfitTab = () => {
               </span>
             </div>
 
-            {/* Period toggle */}
             <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
               {periodOptions.map((opt) => (
                 <button
@@ -219,80 +210,157 @@ const ProfitTab = () => {
               Bu davr uchun foyda ma'lumoti topilmadi
             </div>
           ) : (
-            <>
-              <div className="h-[260px] w-full">
-                <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} className="h-full w-full">
-                  <defs>
-                    <linearGradient id="profitAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
-                      <stop offset="85%" stopColor="#10b981" stopOpacity="0.03" />
-                      <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-                    </linearGradient>
-                    <linearGradient id="profitLineGrad" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#059669" />
-                      <stop offset="100%" stopColor="#34d399" />
-                    </linearGradient>
-                  </defs>
-
-                  {/* Grid lines */}
-                  {[0, 1, 2, 3, 4].map((i) => {
-                    const y = PAD_TOP + (USABLE_H / 4) * i;
-                    return (
-                      <line
-                        key={i}
-                        x1={PAD_X}
-                        x2={SVG_W - PAD_X}
-                        y1={y}
-                        y2={y}
-                        stroke="#e2e8f0"
-                        strokeWidth="1"
-                        strokeDasharray="4 4"
-                      />
-                    );
-                  })}
-
-                  {/* Area fill */}
-                  {svgData.areaStr && (
-                    <path d={svgData.areaStr} fill="url(#profitAreaGrad)" />
-                  )}
-
-                  {/* Line */}
-                  <polyline
-                    fill="none"
-                    stroke="url(#profitLineGrad)"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    points={svgData.lineStr}
-                  />
-
-                  {/* Dots */}
-                  {svgData.pts.map((pt) => (
-                    <g key={pt.key}>
-                      <circle cx={pt.x} cy={pt.y} r={5} fill="#fff" />
-                      <circle cx={pt.x} cy={pt.y} r={3} fill="#10b981" />
-                    </g>
-                  ))}
-                </svg>
-              </div>
-
-              {/* X-axis labels */}
-              <div
-                className="mt-3 grid gap-1 text-center"
-                style={{
-                  gridTemplateColumns: `repeat(${chartData.length}, minmax(0, 1fr))`
-                }}
+            <div className="h-[300px] w-full">
+              <svg
+                viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+                className="h-full w-full"
+                onMouseLeave={() => setHoveredPoint(null)}
               >
-                {chartData.map((item) => (
-                  <div key={item.key}>
-                    <div className="text-[11px] font-black text-slate-700">{item.label}</div>
-                    <div className="mt-0.5 text-[9px] font-bold text-slate-400">
-                      {fmt(item.profit)}
-                    </div>
-                  </div>
+                <defs>
+                  <linearGradient id="profitAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor="#10b981" stopOpacity="0.28" />
+                    <stop offset="85%"  stopColor="#10b981" stopOpacity="0.03" />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity="0"    />
+                  </linearGradient>
+                  <linearGradient id="profitLineGrad" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%"   stopColor="#059669" />
+                    <stop offset="100%" stopColor="#34d399" />
+                  </linearGradient>
+                </defs>
+
+                {/* Horizontal grid lines */}
+                {[0, 1, 2, 3, 4].map((i) => {
+                  const y = PAD_TOP + (USABLE_H / 4) * i;
+                  return (
+                    <line
+                      key={i}
+                      x1={PAD_X} x2={SVG_W - PAD_X}
+                      y1={y}     y2={y}
+                      stroke="#e2e8f0"
+                      strokeWidth="1"
+                      strokeDasharray="4 4"
+                    />
+                  );
+                })}
+
+                {/* Area fill */}
+                {svgData.areaStr && (
+                  <path d={svgData.areaStr} fill="url(#profitAreaGrad)" />
+                )}
+
+                {/* Line */}
+                <polyline
+                  fill="none"
+                  stroke="url(#profitLineGrad)"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  points={svgData.lineStr}
+                />
+
+                {/* X-axis date ticks — inside SVG, sparse for 30d */}
+                {svgData.pts.map((pt, i) => {
+                  const total = svgData.pts.length;
+                  const show = total <= 7
+                    ? true
+                    : i % 5 === 0 || i === total - 1;
+                  if (!show) return null;
+                  return (
+                    <text
+                      key={`tick-${pt.key}`}
+                      x={pt.x}
+                      y={SVG_H - 8}
+                      textAnchor="middle"
+                      fill="#94a3b8"
+                      fontSize="11"
+                      fontFamily="system-ui,sans-serif"
+                    >
+                      {pt.label}
+                    </text>
+                  );
+                })}
+
+                {/* Visible dots */}
+                {svgData.pts.map((pt) => (
+                  <g key={`dot-${pt.key}`}>
+                    <circle cx={pt.x} cy={pt.y} r={5} fill="#fff" />
+                    <circle
+                      cx={pt.x} cy={pt.y} r={3}
+                      fill={hoveredPoint?.key === pt.key ? "#059669" : "#10b981"}
+                    />
+                  </g>
                 ))}
-              </div>
-            </>
+
+                {/* Invisible hit targets */}
+                {svgData.pts.map((pt) => (
+                  <circle
+                    key={`hit-${pt.key}`}
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={isMonthly ? 18 : 22}
+                    fill="transparent"
+                    style={{ cursor: "crosshair" }}
+                    onMouseEnter={() => setHoveredPoint(pt)}
+                  />
+                ))}
+
+                {/* Hover tooltip */}
+                {hoveredPoint && (() => {
+                  const TW = 200;
+                  const TH = 46;
+                  const showAbove = hoveredPoint.y > PAD_TOP + TH + 12;
+                  const ty = showAbove
+                    ? hoveredPoint.y - TH - 10
+                    : hoveredPoint.y + 10;
+                  const tx = Math.max(
+                    TW / 2 + PAD_X,
+                    Math.min(SVG_W - TW / 2 - PAD_X, hoveredPoint.x)
+                  );
+                  return (
+                    <g style={{ pointerEvents: "none" }}>
+                      {/* Vertical guide line */}
+                      <line
+                        x1={hoveredPoint.x} x2={hoveredPoint.x}
+                        y1={PAD_TOP}       y2={PAD_TOP + USABLE_H}
+                        stroke="#10b981"
+                        strokeWidth="1"
+                        strokeDasharray="3 3"
+                        opacity="0.4"
+                      />
+                      {/* Tooltip box */}
+                      <rect
+                        x={tx - TW / 2} y={ty}
+                        width={TW}       height={TH}
+                        rx={10}
+                        fill="#0f172a"
+                        opacity={0.93}
+                      />
+                      {/* Date */}
+                      <text
+                        x={tx} y={ty + 17}
+                        fill="#94a3b8"
+                        fontSize="11"
+                        textAnchor="middle"
+                        fontFamily="system-ui,sans-serif"
+                      >
+                        {hoveredPoint.label}
+                      </text>
+                      {/* Profit */}
+                      <text
+                        x={tx} y={ty + 35}
+                        fill="#34d399"
+                        fontSize="14"
+                        fontWeight="700"
+                        textAnchor="middle"
+                        fontFamily="system-ui,sans-serif"
+                      >
+                        {fmt(hoveredPoint.profit)} UZS
+                      </text>
+                    </g>
+                  );
+                })()}
+              </svg>
+            </div>
           )}
         </div>
 
