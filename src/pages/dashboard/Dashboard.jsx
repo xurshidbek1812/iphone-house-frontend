@@ -5,18 +5,22 @@ import {
   Wallet,
   Package,
   Receipt,
-  HandCoins
+  HandCoins,
+  TrendingUp
 } from 'lucide-react';
 
 import NotificationsTab from './NotificationsTab';
 import SalesTab from './SalesTab';
 import CashTab from './CashTab';
 import WarehouseTab from './WarehouseTab';
-import ExpensesTab from './ExpensesTab'
-import CollectionTab from './CollectionTab'
+import ExpensesTab from './ExpensesTab';
+import CollectionTab from './CollectionTab';
+import ProfitTab from './ProfitTab';
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('notifications');
+  const userRole = (sessionStorage.getItem('userRole') || '').toLowerCase();
+  const isDirector = userRole === 'director';
 
   const tabs = [
     { key: 'notifications', label: 'Xabarlar', icon: Bell },
@@ -24,7 +28,8 @@ const Dashboard = () => {
     { key: 'cash', label: 'Kassa', icon: Wallet },
     { key: 'warehouse', label: 'Ombor', icon: Package },
     { key: 'expenses', label: 'Xarajatlar', icon: Receipt },
-    { key: 'collection', label: 'Undiruv', icon: HandCoins }
+    { key: 'collection', label: 'Undiruv', icon: HandCoins },
+    ...(isDirector ? [{ key: 'profit', label: 'Foyda', icon: TrendingUp }] : [])
   ];
 
   const renderContent = () => {
@@ -37,10 +42,12 @@ const Dashboard = () => {
         return <CashTab />;
       case 'warehouse':
         return <WarehouseTab />;
-      case "expenses":
-        return <ExpensesTab/>
-      case "collection":
-        return <CollectionTab/>
+      case 'expenses':
+        return <ExpensesTab />;
+      case 'collection':
+        return <CollectionTab />;
+      case 'profit':
+        return isDirector ? <ProfitTab /> : <NotificationsTab />;
       default:
         return <NotificationsTab />;
     }
