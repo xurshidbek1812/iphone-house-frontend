@@ -74,10 +74,13 @@ const DateRangePicker = ({ startDate, endDate, onChange }) => {
     const rect = buttonRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    setPosition({
-      top: rect.bottom + 8,
-      left: rect.left
-    });
+    const panelH = 310;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow >= panelH
+      ? rect.bottom + 8
+      : Math.max(8, rect.top - panelH - 8);
+
+    setPosition({ top, left: rect.left });
   };
 
   useEffect(() => {
@@ -198,6 +201,7 @@ const DateRangePicker = ({ startDate, endDate, onChange }) => {
                 if (!date) return <div key={`empty-${index}`} />;
 
                 const iso = toIso(date);
+                const isFuture = iso > todayIso;
                 const isStart = iso === startDate;
                 const isEnd = iso === endDate;
                 const inRange = startDate && endDate && iso > startDate && iso < endDate;
@@ -208,9 +212,12 @@ const DateRangePicker = ({ startDate, endDate, onChange }) => {
                   <button
                     key={iso}
                     type="button"
+                    disabled={isFuture}
                     onClick={() => handleDayClick(date)}
                     className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition ${
-                      isEdge
+                      isFuture
+                        ? 'cursor-not-allowed text-slate-300'
+                        : isEdge
                         ? 'bg-blue-600 text-white'
                         : inRange
                         ? 'bg-blue-50 text-blue-700'

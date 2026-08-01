@@ -7,8 +7,9 @@ const fmt = (v) =>
   Number(v || 0).toLocaleString("uz-UZ", { maximumFractionDigits: 0 });
 
 const periodOptions = [
-  { key: "weekly", label: "7 kun", days: 7 },
-  { key: "monthly", label: "30 kun", days: 30 }
+  { key: "weekly",    label: "7 kun",      days: 7  },
+  { key: "monthly",   label: "30 kun",     days: 30 },
+  { key: "lastmonth", label: "O'tgan oy"            }
 ];
 
 const SVG_W    = 1000;
@@ -51,6 +52,18 @@ const ProfitTab = () => {
   }, [token]);
 
   const chartData = useMemo(() => {
+    if (period === "lastmonth") {
+      const raw = Array.isArray(data.lastMonthChart) ? data.lastMonthChart : [];
+      return raw.map((item, i) => {
+        const d = new Date(item.date);
+        return {
+          key: `lastmonth-${i}`,
+          index: i,
+          label: d.toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit" }),
+          profit: Number(item.profit || 0)
+        };
+      });
+    }
     const raw = Array.isArray(data.chart) ? data.chart : [];
     const selected = periodOptions.find((p) => p.key === period);
     return raw.slice(-(selected?.days || 7)).map((item, i) => {
@@ -62,7 +75,7 @@ const ProfitTab = () => {
         profit: Number(item.profit || 0)
       };
     });
-  }, [data.chart, period]);
+  }, [data.chart, data.lastMonthChart, period]);
 
   const svgData = useMemo(() => {
     const maxP = Math.max(...chartData.map((d) => d.profit), 1);
@@ -99,7 +112,10 @@ const ProfitTab = () => {
   // Clear hovered point when period changes
   useEffect(() => { setHoveredPoint(null); }, [period]);
 
-  const periodTotals = period === "weekly" ? (data.week || 0) : (data.month || 0);
+  const periodTotals =
+    period === "weekly"    ? (data.week      || 0) :
+    period === "monthly"   ? (data.month     || 0) :
+                             (data.lastMonth || 0);
   const hasData = svgData.maxP > 1;
   const isMonthly = period === "monthly";
 
