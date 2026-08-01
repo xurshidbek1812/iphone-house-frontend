@@ -137,11 +137,12 @@ const ProfitTab = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
-              { label: "Bugun",  value: data.today },
-              { label: "7 kun",  value: data.week  },
-              { label: "30 kun", value: data.month  }
+              { label: "Bugun",     value: data.today     },
+              { label: "7 kun",     value: data.week      },
+              { label: "30 kun",    value: data.month     },
+              { label: "O'tgan oy", value: data.lastMonth }
             ].map(({ label, value }) => (
               <div key={label} className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3">
                 <div className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400">

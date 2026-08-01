@@ -25,6 +25,8 @@ const ReportsList = () => {
   const [reportDate, setReportDate] = useState(todayIso);
   const [incomeRange, setIncomeRange] = useState({ start: todayIso, end: todayIso });
   const [expenseRange, setExpenseRange] = useState({ start: todayIso, end: todayIso });
+  const [soldItemsRange, setSoldItemsRange] = useState({ start: todayIso, end: todayIso });
+  const [salesRange, setSalesRange] = useState({ start: todayIso, end: todayIso });
   const [downloadingReportId, setDownloadingReportId] = useState(null);
 
   const tabs = [
@@ -79,11 +81,18 @@ const ReportsList = () => {
       ],
       Savdo: [
         {
-          id: 'R0401',
-          title: 'Savdo hisobotlari',
-          description: 'Tez orada qo‘shiladi.',
-          requiresDate: false,
-          enabled: false
+          id: "R0004",
+          title: "R0004 - Savdolar",
+          description: "Tanlangan davrdagi naqd savdo to’lovlarini (mijoz, summa, to’lov turi, kassir) Excel formatida yuklab oladi.",
+          requiresDateRange: true,
+          enabled: true
+        },
+        {
+          id: "R0009",
+          title: "R0009 - Chiqim bo’lgan tovarlar",
+          description: "Tanlangan davrdagi sotilgan tovarlarni taminotchi, mahsulot, mijoz va kirim/sotuv narxlari bilan Excel formatida yuklab oladi.",
+          requiresDateRange: true,
+          enabled: true
         }
       ],
       'Naqdsiz pullar': [
@@ -201,6 +210,36 @@ const ReportsList = () => {
     }
   };
 
+  const handleDownloadSales = async () => {
+    if (!salesRange.start || !salesRange.end) { toast.error('Sanani tanlang'); return; }
+    setDownloadingReportId('R0004');
+    try {
+      await downloadReportFile(
+        `${API_URL}/api/reports/sales?from=${salesRange.start}&to=${salesRange.end}&format=xlsx`,
+        `R0004-${salesRange.start}-${salesRange.end}.xlsx`
+      );
+    } catch (err) {
+      toast.error(err.message || "Hisobotni yuklashda xatolik yuz berdi");
+    } finally {
+      setDownloadingReportId(null);
+    }
+  };
+
+  const handleDownloadSoldItems = async () => {
+    if (!soldItemsRange.start || !soldItemsRange.end) { toast.error('Sanani tanlang'); return; }
+    setDownloadingReportId('R0009');
+    try {
+      await downloadReportFile(
+        `${API_URL}/api/reports/sold-items?from=${soldItemsRange.start}&to=${soldItemsRange.end}&format=xlsx`,
+        `R0009-${soldItemsRange.start}-${soldItemsRange.end}.xlsx`
+      );
+    } catch (err) {
+      toast.error(err.message || "Hisobotni yuklashda xatolik yuz berdi");
+    } finally {
+      setDownloadingReportId(null);
+    }
+  };
+
   const handleDownload = async (report) => {
     if (!report.enabled) {
       toast('Bu hisobot hali tayyor emas');
@@ -213,6 +252,10 @@ const ReportsList = () => {
       await handleDownloadCashIncome();
     } else if (report.id === 'R0003') {
       await handleDownloadExpenses();
+    } else if (report.id === 'R0004') {
+      await handleDownloadSales();
+    } else if (report.id === 'R0009') {
+      await handleDownloadSoldItems();
     }
   };
 
@@ -312,15 +355,22 @@ const ReportsList = () => {
                     {report.requiresDateRange && (
                       <DateRangePicker
                         startDate={
-                          report.id === 'R0002' ? incomeRange.start : expenseRange.start
+                          report.id === 'R0002' ? incomeRange.start
+                          : report.id === 'R0003' ? expenseRange.start
+                          : report.id === 'R0004' ? salesRange.start
+                          : soldItemsRange.start
                         }
-                        endDate={report.id === 'R0002' ? incomeRange.end : expenseRange.end}
+                        endDate={
+                          report.id === 'R0002' ? incomeRange.end
+                          : report.id === 'R0003' ? expenseRange.end
+                          : report.id === 'R0004' ? salesRange.end
+                          : soldItemsRange.end
+                        }
                         onChange={(start, end) => {
-                          if (report.id === 'R0002') {
-                            setIncomeRange({ start, end });
-                          } else {
-                            setExpenseRange({ start, end });
-                          }
+                          if (report.id === 'R0002') setIncomeRange({ start, end });
+                          else if (report.id === 'R0003') setExpenseRange({ start, end });
+                          else if (report.id === 'R0004') setSalesRange({ start, end });
+                          else setSoldItemsRange({ start, end });
                         }}
                       />
                     )}

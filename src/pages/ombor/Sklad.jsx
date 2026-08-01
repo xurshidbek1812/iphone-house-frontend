@@ -37,6 +37,7 @@ const Sklad = () => {
 
   const canViewAmounts = can(PERMISSIONS.INVENTORY_VIEW_AMOUNTS);
   const canManageProducts = can(PERMISSIONS.PRODUCT_MANAGE);
+  const isDirector = (sessionStorage.getItem('userRole') || '').toLowerCase() === 'director';
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -67,6 +68,13 @@ const Sklad = () => {
   });
 
   const [editBatch, setEditBatch] = useState({ id: null, salePrice: '' });
+  const [revealedIds, setRevealedIds] = useState(new Set());
+  const toggleReveal = (id) =>
+    setRevealedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [printProduct, setPrintProduct] = useState(null);
@@ -802,9 +810,6 @@ const Sklad = () => {
                 <th className="p-5">Nomi</th>
                 <th className="p-5 text-center">Kategoriya</th>
                 <th className="p-5 text-center">Birlik</th>
-                {canViewAmounts && (
-                  <th className="p-5 text-right bg-amber-50/50 text-amber-700">Kirim Narxi</th>
-                )}
                 <th className="p-5 text-right text-emerald-700">Sotuv Narxi</th>
                 <th className="p-5 text-center">Ombor (Qoldiq)</th>
                 <th className="p-5 text-center">Amallar</th>
@@ -814,7 +819,7 @@ const Sklad = () => {
             <tbody className="divide-y divide-slate-50 text-sm font-bold">
               {loading ? (
                 <tr>
-                  <td colSpan={canViewAmounts ? 8 : 7} className="p-20 text-center text-slate-400">
+                  <td colSpan={7} className="p-20 text-center text-slate-400">
                     <Loader2 className="animate-spin mx-auto" size={32} />
                   </td>
                 </tr>
@@ -831,13 +836,6 @@ const Sklad = () => {
                     </td>
 
                     <td className="p-5 text-center text-slate-400">{p.unit}</td>
-
-                    {canViewAmounts && (
-                      <td className="p-5 text-right text-slate-600 bg-amber-50/20">
-                        {formatMoney(p.buyPrice || 0)}{' '}
-                        <span className="text-[10px] text-slate-400">{p.buyCurrency}</span>
-                      </td>
-                    )}
 
                     <td className="p-5 text-right text-emerald-600">
                       {formatMoney(p.salePrice || 0)}{' '}
@@ -898,6 +896,20 @@ const Sklad = () => {
                           </>
                         )}
 
+                        {isDirector && (
+                          <button
+                            onClick={() => toggleReveal(p.id)}
+                            className={`p-2 rounded-xl transition-all text-xs font-black leading-none ${
+                              revealedIds.has(p.id)
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-amber-50 text-amber-500 hover:bg-amber-500 hover:text-white'
+                            }`}
+                            title="Kirim narxini ko'rish"
+                          >
+                            !
+                          </button>
+                        )}
+
                         <button
                           onClick={() => {
                             setSelectedProduct(p);
@@ -909,13 +921,18 @@ const Sklad = () => {
                           <Info size={16} />
                         </button>
                       </div>
+                      {isDirector && revealedIds.has(p.id) && (
+                        <div className="mt-1.5 text-center text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 whitespace-nowrap">
+                          {formatMoney(p.buyPrice || 0)} {p.buyCurrency}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td
-                    colSpan={canViewAmounts ? 8 : 7}
+                    colSpan={7}
                     className="p-20 text-center text-slate-300 font-bold uppercase tracking-widest text-sm"
                   >
                     Mahsulot topilmadi
