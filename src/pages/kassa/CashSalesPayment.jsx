@@ -121,7 +121,7 @@ const CashSalesPayment = () => {
         setLoading(true);
 
         const [ordersResult, cashboxesResult] = await Promise.allSettled([
-          fetch(`${API_URL}/api/orders`, {
+          fetch(`${API_URL}/api/orders?status=PAYMENT_PENDING&limit=500`, {
             headers: getAuthHeaders(),
             signal
           }),
